@@ -1,0 +1,5 @@
+{
+  "_comment": "Manual store-product -> inventory_item mappings. Keys are NORMALIZED store product names (lowercase, umlauts ae/oe/ue/ss, leading BRAND caps + punctuation stripped, as Normalizer.key produces). Values are inventory_item_id. Add lines from data/stores/unmatched_aldi.tsv when the matcher misses something obvious. Grows over time; starts empty.",
+  "exact": {
+  }
+}

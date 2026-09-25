@@ -1,0 +1,37 @@
+# Build output
+target/
+out/
+*.jar
+*.class
+
+# IntelliJ / IDE
+.idea/
+*.iml
+
+# Local database (contains pulled store data + imported recipes — not distributed)
+data/*.db
+data/stores/
+
+# Bulk recipe import drafts (large, generated locally)
+scripts/recipes/_drafts/
+
+# Scraped recipe content kept out of the public repo (verbatim third-party text).
+# The curated originals in scripts/recipes/samples/ ARE committed.
+scripts/recipes/*.sql
+scripts/importer/recipe_urls*.txt
+
+# Local store config (holds a personal store id / postal code)
+config/stores.properties
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS cruft
+Thumbs.db
+.DS_Store
+
+# Internal working log (kept local, not part of the public repo)
+HANDOFF.md

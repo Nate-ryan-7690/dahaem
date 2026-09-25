@@ -1,0 +1,12 @@
+# Store importer settings. Copy this file to stores.properties and fill in your own values.
+# stores.properties is gitignored because it holds a personal store id / postal code.
+
+# Penny store id ("wwIdent"); its price region decides which offers you see.
+# Look yours up in https://www.penny.de/.rest/market
+penny.market=YOUR_PENNY_STORE_ID
+
+# Pause after every web request, in milliseconds. Keeps the imports polite to the store websites.
+http.delay.ms=1000
+
+# Postal code for regional aggregator chains (e.g. famila): aktionspreis.de shows no offers until a PLZ is set.
+aggregator.plz=YOUR_POSTAL_CODE
