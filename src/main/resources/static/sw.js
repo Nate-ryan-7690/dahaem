@@ -4,7 +4,7 @@
 //   list you opened at home is still there in the shop's dead zone. Fallback answers
 //   carry an X-Dahaem-Cached header with the time they were saved.
 // Bump CACHE_VERSION whenever a shell file changes so clients pick up the new files.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE = `dahaem-shell-${CACHE_VERSION}`;
 const API_CACHE = 'dahaem-api';
 
