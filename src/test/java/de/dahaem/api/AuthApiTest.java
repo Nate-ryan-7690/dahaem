@@ -87,6 +87,10 @@ class AuthApiTest {
                 .andExpect(status().isUnauthorized());
         mvc.perform(get("/api/recipes/1"))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/suggestions/by-savings"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/suggestions/by-expiring"))
+                .andExpect(status().isUnauthorized());
         // A valid CSRF token alone does not get a write through.
         mvc.perform(post("/api/meal-plans").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)

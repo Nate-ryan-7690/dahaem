@@ -13,6 +13,8 @@ import de.dahaem.mealplanner.RecipeService;
 import de.dahaem.shopping.ShoppingListRepository;
 import de.dahaem.shopping.ShoppingListService;
 import de.dahaem.stores.StoreRepository;
+import de.dahaem.suggestions.SuggestionRepository;
+import de.dahaem.suggestions.SuggestionService;
 import de.dahaem.tags.TagRepository;
 import de.dahaem.tags.TagService;
 import org.springframework.context.annotation.Bean;
@@ -103,5 +105,15 @@ public class ServiceConfig {
     @Bean
     public AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) {
         return new AccountService(accountRepository, passwordEncoder);
+    }
+
+    @Bean
+    public SuggestionRepository suggestionRepository() {
+        return new SuggestionRepository();
+    }
+
+    @Bean
+    public SuggestionService suggestionService(SuggestionRepository suggestionRepository) {
+        return new SuggestionService(suggestionRepository);
     }
 }

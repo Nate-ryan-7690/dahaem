@@ -20,6 +20,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.hamcrest.Matchers.everyItem;
@@ -301,6 +302,46 @@ class ApiSmokeTest {
                                 + " \"pricePaid\": 1.0, \"expirationDate\": \"2031-03-01\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message", notNullValue()));
+    }
+
+    @Test
+    void suggestionsSurfaceRecipesBySavingsAndByExpiring() throws Exception {
+        // Klassische Rinder-Bolognese uses onion (40) and olive oil (1022), both under a
+        // current-window discount in demo_data.sql, so it must be surfaced by-savings.
+        int discountedRecipeId = recipeId("Klassische Rinder-Bolognese");
+
+        mvc.perform(get("/api/suggestions/by-savings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()", greaterThan(0)))
+                .andExpect(jsonPath("$[*].recipeId", hasItem(discountedRecipeId)))
+                .andExpect(jsonPath("$[*].score", everyItem(greaterThan(0))))
+                .andExpect(jsonPath("$[0].score", greaterThan(0)));
+
+        setEarliestExpDate(40, LocalDate.now().plusDays(2));
+        try {
+            mvc.perform(get("/api/suggestions/by-expiring").param("days", "7"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[*].recipeId", hasItem(discountedRecipeId)))
+                    .andExpect(jsonPath("$[*].matchingItemIds[*]", hasItem(40)));
+
+            mvc.perform(get("/api/suggestions/by-expiring").param("days", "-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+            mvc.perform(get("/api/suggestions/by-expiring").param("days", "0"))
+                    .andExpect(status().isBadRequest());
+        } finally {
+            setEarliestExpDate(40, null);
+        }
+    }
+
+    private static void setEarliestExpDate(int inventoryItemId, LocalDate date) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "UPDATE inventory_item SET inventory_item_earliest_exp_date = ? WHERE inventory_item_id = ?")) {
+            ps.setString(1, date == null ? null : date.toString());
+            ps.setInt(2, inventoryItemId);
+            ps.executeUpdate();
+        }
     }
 
     private static int recipeId(String name) throws SQLException {
