@@ -87,7 +87,7 @@ CREATE TABLE "shopping_list" ( "shopping_list_id" INTEGER,
 
 CREATE TABLE "shopping_list_item"("shopping_list_item_id" INTEGER,
 	"shopping_list_id" INTEGER NOT NULL,
-	"shopping_list_item_store_item_id" INTEGER NOT NULL,
+	"shopping_list_item_store_item_id" INTEGER,
 	"shopping_list_item_store_section" TEXT,
 	"shopping_list_item_quantity_needed" INTEGER NOT NULL,
 	"shopping_list_item_is_discounted" BOOLEAN,

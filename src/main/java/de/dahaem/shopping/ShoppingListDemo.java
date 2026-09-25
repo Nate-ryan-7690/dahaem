@@ -17,19 +17,20 @@ public class ShoppingListDemo {
         for (ShoppingListItem item : list.items()) {
             System.out.printf("  %.0f %s %s (from recipes %s)%n",
                     item.totalQuantity(), item.unit(), item.nameDeutsch(), item.sourceRecipeIds());
-            StoreOption best = item.bestOption();
-            if (best == null) {
+            if (item.storeOptions().isEmpty()) {
                 System.out.println("      no store option found");
                 continue;
             }
-            String priceInfo = best.onSale()
-                    ? String.format("SALE %.2f EUR (normal %s)", best.salePrice(),
-                            best.normalPrice() == null ? "unknown" : String.format("%.2f EUR", best.normalPrice()))
-                    : String.format("%.2f EUR", best.normalPrice());
-            System.out.printf("      best: %s, %s, %d %s, %s, till price %.2f EUR%s%n",
-                    best.storeName(), best.brandName(), best.packageSize(), best.packageUnit(),
-                    priceInfo, best.tillPrice(),
-                    best.validUntil() != null ? " (valid until " + best.validUntil() + ")" : "");
+            for (StoreOption option : item.storeOptions()) {
+                String priceInfo = option.onSale()
+                        ? String.format("SALE %.2f EUR (normal %s)", option.salePrice(),
+                                option.normalPrice() == null ? "unknown" : String.format("%.2f EUR", option.normalPrice()))
+                        : String.format("%.2f EUR", option.normalPrice());
+                System.out.printf("      option: %s, %s, %d %s, %s, till price %.2f EUR%s%n",
+                        option.storeName(), option.brandName(), option.packageSize(), option.packageUnit(),
+                        priceInfo, option.tillPrice(),
+                        option.validUntil() != null ? " (valid until " + option.validUntil() + ")" : "");
+            }
         }
     }
 }
