@@ -85,11 +85,19 @@ review of the codebase's strengths and known issues.
 
 ## Getting started
 
-Requires Java 17+ and Maven.
+Requires Java 17+, Maven, and Python 3.
 
 ```bash
 mvn package
+python setup_db.py
 ```
+
+`setup_db.py` builds `data/kitchen_organizer.db` (the default path `Database` opens) from
+`schema.sql`, `seed/inventory_catalog.sql`, the sample recipes, and `seed/demo_data.sql`, so a
+fresh clone has something to run against without any manual DB setup. It refuses to overwrite
+an existing database unless you pass `--force`, and takes `--db <path>` to build elsewhere. The
+store/brand/price/discount rows in `seed/demo_data.sql` are entirely fabricated for the demo —
+see the note at the top of that file — not real pulled store data.
 
 Run the console entry point from your IDE (`de.dahaem.Main`), or a store importer from the command line:
 
