@@ -18,6 +18,20 @@ The column layout below is reverse-engineered from the SQL in the repositories
 (`InventoryRepository`, `RecipeRepository`, `StoreRepository`,
 `ShoppingListRepository`), not from a canonical schema file, since none exists.
 
+## Identity tables (`household`, `app_user`, `household_member`)
+
+Created by `schema.sql`, or by `migrations/0002_add_household_and_app_user.sql`
+on an older database. All SQL for them is in `de.dahaem.auth.AccountRepository`.
+
+| Table | Columns | Notes |
+|-------|---------|-------|
+| `household` | `household_id` PK, `household_name`, `created_date` | one row today (single shared household) |
+| `app_user` | `user_id` PK, `user_email` UNIQUE, `user_display_name`, `user_password_hash`, `user_created_date` | email stored trimmed + lower-cased; the hash is BCrypt, never plaintext. Not named `user` (reserved in some engines) |
+| `household_member` | `household_member_id` PK, `household_id` → household, `user_id` → app_user, `role` | `role` is `ADMIN` or `MEMBER`; `UNIQUE(household_id, user_id)` |
+
+No other table references `household` yet: scoping inventory, recipes, meal
+plans, shopping lists and purchases per household is a later migration.
+
 ## Tables the code assumes already exist
 
 ### `inventory_item` — the catalog (food + non-food)

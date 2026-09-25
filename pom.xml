@@ -47,6 +47,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Session-based login for the REST API (de.dahaem.api.SecurityConfig). Brings
+             spring-security-crypto, whose BCryptPasswordEncoder hashes the stored passwords;
+             de.dahaem.auth uses only that encoder, so the service layer stays free of web code. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
         <!-- JUnit 5 for tests that exercise repositories against a real (temporary) SQLite file.
              Version comes from the Spring Boot BOM so it matches spring-boot-starter-test's JUnit platform. -->
         <dependency>
@@ -58,6 +65,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- @WithMockUser, csrf() and friends for the MockMvc tests. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

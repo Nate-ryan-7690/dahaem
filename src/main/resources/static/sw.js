@@ -2,9 +2,10 @@
 // - App shell (HTML, CSS, JS, icons): cache first, so the app opens without a network.
 // - GET /api/*: network first, falling back to the last good answer, so the shopping
 //   list you opened at home is still there in the shop's dead zone. Fallback answers
-//   carry an X-Dahaem-Cached header with the time they were saved.
+//   carry an X-Dahaem-Cached header with the time they were saved. /api/auth/* is never
+//   cached, and the app deletes the API cache on logout.
 // Bump CACHE_VERSION whenever a shell file changes so clients pick up the new files.
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE = `dahaem-shell-${CACHE_VERSION}`;
 const API_CACHE = 'dahaem-api';
 
@@ -45,6 +46,8 @@ self.addEventListener('fetch', event => {
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
 
+    // Login state and CSRF tokens must always come from the server, never from a saved copy.
+    if (url.pathname.startsWith('/api/auth/')) return;
     if (url.pathname.startsWith('/api/')) {
         event.respondWith(networkFirst(request));
     } else if (request.mode === 'navigate') {

@@ -33,6 +33,8 @@ per-connection, since SQLite does not enforce foreign keys otherwise.
 ```
 src/main/java/de/dahaem/
   shared/       Database — the one place that opens a JDBC connection
+  auth/         logins + households (AppUser, Household, AccountRepository, AccountService, UserAdminRunner)
+  api/          thin Spring controllers + SecurityConfig (session login, CSRF) over the services
   inventory/    catalog + pantry (Item, InventoryRepository, InventoryService)
   mealplanner/  recipes, ingredients, instructions (Recipe*, RecipeRepository, RecipeService)
   stores/       importers + raw/verified store data model (see below)
@@ -40,6 +42,13 @@ src/main/java/de/dahaem/
   finance/      purchases (planned — currently empty stub classes only)
 ```
 
+- **`auth`** — the identity model: `household`, `app_user` and
+  `household_member`. `AccountService` creates accounts (the first one creates
+  the household as `ADMIN`, later ones join as `MEMBER`) and only ever hands
+  BCrypt hashes to the repository. `UserAdminRunner` is the operator's CLI for
+  it; there is no public sign-up. Spring Security itself is configured in
+  `api/SecurityConfig`, which looks users up through `AccountService`, so the
+  auth package stays free of web code. Existing data is not household-scoped yet.
 - **`inventory`** — read/update access to `inventory_item`: the generic
   household-item catalog (food and non-food) that recipes, shopping lists and
   store products all reference by id.
