@@ -123,7 +123,8 @@ It is a thin layer over the existing services (no JPA; the services still use `D
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
 | POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |
-| GET | `/api/shopping-list?recipeIds=1,2` | build (not save) a shopping list |
+| GET | `/api/shopping-list?recipeIds=1,2` | build (not save) a shopping list; each line carries every current store option (cheapest till price first), never a pre-picked one |
+| PUT | `/api/shopping-lists/{listId}/items/{itemId}/store-item` | set the store product the user picked for a persisted line, `{"storeItemId": 5}`; `null` clears it |
 | GET / POST | `/api/purchases` | list / record `{"storeItemId", "quantityPurchased", "pricePaid", "expirationDate", ...}` |
 | GET | `/api/analytics/spending[?from=&to=]` | total spent, optionally in a date range |
 

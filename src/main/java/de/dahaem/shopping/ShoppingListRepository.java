@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -175,11 +176,11 @@ public class ShoppingListRepository {
     }
 
     /**
-     * Inserts one shopping_list_item row, on the caller's transaction. store_item_id is a required
-     * (NOT NULL, FK to store_item) column, so this is only called for items a current store option
-     * was found for.
+     * Inserts one shopping_list_item row, on the caller's transaction. storeItemId is nullable
+     * (shopping_list_item_store_item_id): null means the line is still awaiting the user's choice
+     * of store product.
      */
-    public void insertShoppingListItem(Connection con, int shoppingListId, int storeItemId, String storeSection,
+    public void insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, String storeSection,
                                         int quantityNeeded, Boolean isDiscounted, boolean purchaseStatus,
                                         boolean isManual) throws SQLException {
         String sql = "INSERT INTO shopping_list_item (shopping_list_id, shopping_list_item_store_item_id, "
@@ -188,13 +189,42 @@ public class ShoppingListRepository {
                 + "shopping_list_item_is_manual) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, shoppingListId);
-            ps.setInt(2, storeItemId);
+            ps.setObject(2, storeItemId);
             ps.setString(3, storeSection);
             ps.setInt(4, quantityNeeded);
             ps.setObject(5, isDiscounted);
             ps.setBoolean(6, purchaseStatus);
             ps.setBoolean(7, isManual);
             ps.executeUpdate();
+        }
+    }
+
+    /** The shopping_list_id a shopping_list_item belongs to, or empty if no such item exists. */
+    public Optional<Integer> findShoppingListIdForItem(int shoppingListItemId) {
+        String sql = "SELECT shopping_list_id FROM shopping_list_item WHERE shopping_list_item_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(rs.getInt(1)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not look up shopping list for item " + shoppingListItemId, e);
+        }
+    }
+
+    /** Sets (or, with null, clears) the store_item the user chose for this line. */
+    public void setChosenStoreItem(int shoppingListItemId, Integer storeItemId) {
+        String sql = "UPDATE shopping_list_item SET shopping_list_item_store_item_id = ? "
+                + "WHERE shopping_list_item_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setObject(1, storeItemId);
+            ps.setInt(2, shoppingListItemId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not set chosen store item for shopping list item "
+                    + shoppingListItemId, e);
         }
     }
 }

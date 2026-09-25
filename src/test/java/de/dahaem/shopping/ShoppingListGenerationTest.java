@@ -19,6 +19,7 @@ import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -67,8 +68,9 @@ class ShoppingListGenerationTest {
         assertEquals(1, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId));
         assertEquals(150, singleInt("SELECT shopping_list_item_quantity_needed FROM shopping_list_item "
                 + "WHERE shopping_list_id = " + shoppingListId));
-        assertEquals(1, singleInt("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
-                + "WHERE shopping_list_id = " + shoppingListId));
+        assertNull(singleObject("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
+                        + "WHERE shopping_list_id = " + shoppingListId),
+                "no store item is auto-picked at generation time; the user chooses later");
     }
 
     @Test
@@ -91,8 +93,9 @@ class ShoppingListGenerationTest {
 
         assertEquals(1, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId),
                 "onion is fully in stock (500 >= 250) and must be dropped; only pasta remains");
-        assertEquals(2, singleInt("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
-                + "WHERE shopping_list_id = " + shoppingListId));
+        assertNull(singleObject("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
+                        + "WHERE shopping_list_id = " + shoppingListId),
+                "no store item is auto-picked at generation time; the user chooses later");
         assertEquals(400, singleInt("SELECT shopping_list_item_quantity_needed FROM shopping_list_item "
                 + "WHERE shopping_list_id = " + shoppingListId));
     }
@@ -122,12 +125,40 @@ class ShoppingListGenerationTest {
         assertEquals(1, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId));
         assertEquals(400, singleInt("SELECT shopping_list_item_quantity_needed FROM shopping_list_item "
                 + "WHERE shopping_list_id = " + shoppingListId));
-        assertTrue(singleBoolean("SELECT shopping_list_item_is_discounted FROM shopping_list_item "
-                + "WHERE shopping_list_id = " + shoppingListId), "the seeded store_discount is current, so this line was on sale");
+        assertNull(singleObject("SELECT shopping_list_item_is_discounted FROM shopping_list_item "
+                        + "WHERE shopping_list_id = " + shoppingListId),
+                "no store option is chosen yet at generation time, so whether it's on sale is unknown");
         assertFalse(singleBoolean("SELECT shopping_list_item_purchase_status FROM shopping_list_item "
                 + "WHERE shopping_list_id = " + shoppingListId), "a freshly generated item is still pending");
         assertFalse(singleBoolean("SELECT shopping_list_item_is_manual FROM shopping_list_item "
                 + "WHERE shopping_list_id = " + shoppingListId));
+    }
+
+    @Test
+    void selectingAStoreItemPersistsTheChoiceAndClearingItPersistsToo() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+
+        exec("INSERT INTO store VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+        int itemId = singleInt("SELECT shopping_list_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_id = " + shoppingListId);
+
+        assertEquals(shoppingListId, service.findShoppingListIdForItem(itemId).orElseThrow());
+
+        service.selectStoreItem(itemId, 3);
+        assertEquals(3, singleInt("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_item_id = " + itemId));
+
+        service.selectStoreItem(itemId, null);
+        assertNull(singleObject("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_item_id = " + itemId), "passing null clears the selection");
     }
 
     private int createPlan(LocalDate weekStart) throws SQLException {
@@ -174,6 +205,15 @@ class ShoppingListGenerationTest {
              ResultSet rs = st.executeQuery(sql)) {
             rs.next();
             return rs.getString(1);
+        }
+    }
+
+    private Object singleObject(String sql) throws SQLException {
+        try (Connection con = Database.getConnection();
+             Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getObject(1);
         }
     }
 
@@ -269,7 +309,7 @@ class ShoppingListGenerationTest {
 
             st.execute("CREATE TABLE \"shopping_list_item\"(\"shopping_list_item_id\" INTEGER, " +
                     "\"shopping_list_id\" INTEGER NOT NULL, " +
-                    "\"shopping_list_item_store_item_id\" INTEGER NOT NULL, " +
+                    "\"shopping_list_item_store_item_id\" INTEGER, " +
                     "\"shopping_list_item_store_section\" TEXT, " +
                     "\"shopping_list_item_quantity_needed\" INTEGER NOT NULL, " +
                     "\"shopping_list_item_is_discounted\" BOOLEAN, " +
