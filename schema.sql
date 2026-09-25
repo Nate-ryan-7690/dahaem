@@ -88,6 +88,7 @@ CREATE TABLE "shopping_list" ( "shopping_list_id" INTEGER,
 CREATE TABLE "shopping_list_item"("shopping_list_item_id" INTEGER,
 	"shopping_list_id" INTEGER NOT NULL,
 	"shopping_list_item_store_item_id" INTEGER,
+	"shopping_list_item_inventory_item_id" INTEGER,
 	"shopping_list_item_store_section" TEXT,
 	"shopping_list_item_quantity_needed" INTEGER NOT NULL,
 	"shopping_list_item_is_discounted" BOOLEAN,
@@ -95,7 +96,8 @@ CREATE TABLE "shopping_list_item"("shopping_list_item_id" INTEGER,
 	"shopping_list_item_is_manual" BOOLEAN NOT NULL,
 	PRIMARY KEY("shopping_list_item_id" AUTOINCREMENT),
 	FOREIGN KEY("shopping_list_id") REFERENCES "shopping_list"("shopping_list_id"),
-	FOREIGN KEY("shopping_list_item_store_item_id") REFERENCES "store_item"("store_item_id"));
+	FOREIGN KEY("shopping_list_item_store_item_id") REFERENCES "store_item"("store_item_id"),
+	FOREIGN KEY("shopping_list_item_inventory_item_id") REFERENCES "inventory_item"("inventory_item_id"));
 
 CREATE TABLE "store" ( "store_id" INTEGER, 
 	"store_name" TEXT NOT NULL UNIQUE, 

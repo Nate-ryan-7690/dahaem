@@ -20,6 +20,7 @@ import java.time.LocalDate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -125,6 +126,9 @@ class ShoppingListGenerationTest {
         assertEquals(1, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId));
         assertEquals(400, singleInt("SELECT shopping_list_item_quantity_needed FROM shopping_list_item "
                 + "WHERE shopping_list_id = " + shoppingListId));
+        assertEquals(1, singleInt("SELECT shopping_list_item_inventory_item_id FROM shopping_list_item "
+                        + "WHERE shopping_list_id = " + shoppingListId),
+                "the persisted line must record which inventory item it is for");
         assertNull(singleObject("SELECT shopping_list_item_is_discounted FROM shopping_list_item "
                         + "WHERE shopping_list_id = " + shoppingListId),
                 "no store option is chosen yet at generation time, so whether it's on sale is unknown");
@@ -159,6 +163,101 @@ class ShoppingListGenerationTest {
         service.selectStoreItem(itemId, null);
         assertNull(singleObject("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
                 + "WHERE shopping_list_item_id = " + itemId), "passing null clears the selection");
+    }
+
+    @Test
+    void dropsAnItemNoStoreCurrentlySells() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (1, 'Saffron', 'Safran', 0, 'g', 'Gewürze', NULL, NULL)");
+        exec("INSERT INTO recipe VALUES (1, 'Paella')");
+        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 5)");
+        // deliberately no store/brand/store_item: nothing currently sells this item
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+
+        assertEquals(0, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId),
+                "nothing currently sells the item, so there is nothing meaningful to persist");
+    }
+
+    @Test
+    void rollsBackTheWholeListOnFailure() throws SQLException {
+        int bogusMealPlanId = 999_999; // violates shopping_list_meal_plan_id's foreign key
+
+        assertThrows(RuntimeException.class,
+                () -> service.generateFromMealPlan(bogusMealPlanId, LocalDate.of(2026, 9, 25)));
+
+        assertEquals(0, countRows("shopping_list WHERE shopping_list_meal_plan_id = " + bogusMealPlanId),
+                "the failed generation must not leave a partially-committed shopping_list row behind");
+    }
+
+    @Test
+    void loadPersistedListReturnsNamesOptionsAndReflectsAPriorSelection() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+
+        exec("INSERT INTO store VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+        exec("INSERT INTO store VALUES (3, 'Aldi')");
+        exec("INSERT INTO brand VALUES (3, 'Combino')");
+        exec("INSERT INTO store_item VALUES (4, 3, 3, 1, 'g', 500, 1.19, 1, NULL, NULL, NULL)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+        int itemId = singleInt("SELECT shopping_list_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_id = " + shoppingListId);
+
+        service.selectStoreItem(itemId, 4);
+
+        PersistedShoppingList persisted = service.loadPersistedList(shoppingListId, LocalDate.of(2026, 9, 25))
+                .orElseThrow();
+
+        assertEquals(shoppingListId, persisted.id());
+        assertEquals(planId, persisted.mealPlanId());
+        assertEquals(1, persisted.items().size());
+
+        PersistedShoppingListItem item = persisted.items().get(0);
+        assertEquals(itemId, item.shoppingListItemId());
+        assertEquals(1, item.inventoryItemId());
+        assertEquals("Nudeln", item.nameDeutsch());
+        assertEquals("Pasta", item.nameEnglish());
+        assertEquals(500, item.quantityNeeded());
+        assertEquals(2, item.storeOptions().size(), "both current store options must be surfaced");
+        assertEquals(4, item.selectedStoreItemId(), "reload must reflect the prior selection");
+
+        assertTrue(service.loadPersistedList(999_999).isEmpty(), "an unknown list id must come back empty");
+    }
+
+    @Test
+    void selectStoreItemRejectsAStoreItemThatIsNotACandidateForTheLine() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO inventory_item VALUES (2, 'Milk', 'Milch', 0, 'ml', 'Milchprodukte', NULL, NULL)");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+
+        exec("INSERT INTO store VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)"); // pasta's own option
+        exec("INSERT INTO store_item VALUES (4, 2, 2, 2, 'ml', 500, 0.89, 1, NULL, NULL, NULL)"); // a different item
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+        int itemId = singleInt("SELECT shopping_list_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_id = " + shoppingListId);
+
+        assertThrows(IllegalArgumentException.class, () -> service.selectStoreItem(itemId, 4),
+                "store_item 4 sells milk, not pasta -- must not be accepted for this line");
+        assertNull(singleObject("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_item_id = " + itemId), "the rejected pick must not be persisted");
+
+        service.selectStoreItem(itemId, 3); // the actually-matching option still works
+        assertEquals(3, singleInt("SELECT shopping_list_item_store_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_item_id = " + itemId));
     }
 
     private int createPlan(LocalDate weekStart) throws SQLException {
@@ -310,6 +409,7 @@ class ShoppingListGenerationTest {
             st.execute("CREATE TABLE \"shopping_list_item\"(\"shopping_list_item_id\" INTEGER, " +
                     "\"shopping_list_id\" INTEGER NOT NULL, " +
                     "\"shopping_list_item_store_item_id\" INTEGER, " +
+                    "\"shopping_list_item_inventory_item_id\" INTEGER, " +
                     "\"shopping_list_item_store_section\" TEXT, " +
                     "\"shopping_list_item_quantity_needed\" INTEGER NOT NULL, " +
                     "\"shopping_list_item_is_discounted\" BOOLEAN, " +
@@ -317,7 +417,9 @@ class ShoppingListGenerationTest {
                     "\"shopping_list_item_is_manual\" BOOLEAN NOT NULL, " +
                     "PRIMARY KEY(\"shopping_list_item_id\" AUTOINCREMENT), " +
                     "FOREIGN KEY(\"shopping_list_id\") REFERENCES \"shopping_list\"(\"shopping_list_id\"), " +
-                    "FOREIGN KEY(\"shopping_list_item_store_item_id\") REFERENCES \"store_item\"(\"store_item_id\"))");
+                    "FOREIGN KEY(\"shopping_list_item_store_item_id\") REFERENCES \"store_item\"(\"store_item_id\"), " +
+                    "FOREIGN KEY(\"shopping_list_item_inventory_item_id\") " +
+                    "REFERENCES \"inventory_item\"(\"inventory_item_id\"))");
         }
     }
 }

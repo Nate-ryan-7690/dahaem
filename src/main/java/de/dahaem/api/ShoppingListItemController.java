@@ -1,6 +1,7 @@
 package de.dahaem.api;
 
 import de.dahaem.shopping.ShoppingListService;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -15,6 +16,14 @@ public class ShoppingListItemController {
 
     public ShoppingListItemController(ShoppingListService shoppingListService) {
         this.shoppingListService = shoppingListService;
+    }
+
+    /** Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. */
+    @GetMapping("/{listId}")
+    public PersistedShoppingListDto get(@PathVariable("listId") int listId) {
+        return shoppingListService.loadPersistedList(listId)
+                .map(PersistedShoppingListDto::from)
+                .orElseThrow(() -> new NotFoundException("No shopping list with id " + listId));
     }
 
     /**

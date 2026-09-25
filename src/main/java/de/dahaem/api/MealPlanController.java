@@ -3,6 +3,7 @@ package de.dahaem.api;
 import de.dahaem.mealplanner.MealPlan;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.RecipeService;
+import de.dahaem.shopping.ShoppingListService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,10 +21,13 @@ public class MealPlanController {
 
     private final MealPlanService mealPlanService;
     private final RecipeService recipeService;
+    private final ShoppingListService shoppingListService;
 
-    public MealPlanController(MealPlanService mealPlanService, RecipeService recipeService) {
+    public MealPlanController(MealPlanService mealPlanService, RecipeService recipeService,
+                               ShoppingListService shoppingListService) {
         this.mealPlanService = mealPlanService;
         this.recipeService = recipeService;
+        this.shoppingListService = shoppingListService;
     }
 
     @GetMapping
@@ -61,5 +65,21 @@ public class MealPlanController {
         RecipeController.findRecipe(recipeService, request.recipeId());
         mealPlanService.addRecipe(id, request.recipeId(), request.mealTime().trim());
         return MealPlanDto.from(plan, mealPlanService.recipesForPlan(id));
+    }
+
+    /**
+     * Builds and persists a shopping list from a plan's recipes (see
+     * {@link ShoppingListService#generateFromMealPlan(int)}): one line per item still missing after
+     * subtracting inventory, no store item pre-chosen. Returns the new list's id.
+     */
+    @PostMapping("/{id}/shopping-list")
+    @ResponseStatus(HttpStatus.CREATED)
+    public GeneratedShoppingListDto generateShoppingList(@PathVariable("id") int id) {
+        mealPlanService.allPlans().stream()
+                .filter(p -> p.getId() == id)
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("No meal plan with id " + id));
+        int shoppingListId = shoppingListService.generateFromMealPlan(id);
+        return new GeneratedShoppingListDto(shoppingListId);
     }
 }
