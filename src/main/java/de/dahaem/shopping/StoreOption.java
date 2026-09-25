@@ -8,6 +8,7 @@ import java.time.LocalDate;
  * price where one applies, plus deposit).
  */
 public record StoreOption(
+        int storeItemId,
         String storeName,
         String brandName,
         String packageUnit,

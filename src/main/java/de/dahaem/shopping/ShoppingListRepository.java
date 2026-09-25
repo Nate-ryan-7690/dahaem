@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -15,8 +16,9 @@ import java.util.stream.Collectors;
 
 /**
  * All SQL for building a shopping list lives here: summing recipe_ingredient across recipes,
- * and finding store_item candidates (with brand/store and any current store_discount) for one
- * inventory item. The rest of the shopping slice never writes SQL; it calls these methods.
+ * finding store_item candidates (with brand/store and any current store_discount) for one
+ * inventory item, and persisting a generated list to shopping_list/shopping_list_item. The
+ * rest of the shopping slice never writes SQL; it calls these methods.
  */
 public class ShoppingListRepository {
 
@@ -142,5 +144,57 @@ public class ShoppingListRepository {
     private Boolean getNullableBoolean(ResultSet rs, String column) throws SQLException {
         boolean value = rs.getBoolean(column);
         return rs.wasNull() ? null : value;
+    }
+
+    /** Opens a connection with auto-commit off, for a caller that needs to combine several writes atomically. */
+    public Connection openTransaction() {
+        try {
+            Connection con = Database.getConnection();
+            con.setAutoCommit(false);
+            return con;
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not open transaction", e);
+        }
+    }
+
+    /** Inserts a new shopping_list row, on the caller's transaction. Returns its generated id. */
+    public int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, boolean status)
+            throws SQLException {
+        String sql = "INSERT INTO shopping_list (shopping_list_meal_plan_id, shopping_list_created_date, "
+                + "shopping_list_status) VALUES (?, ?, ?)";
+        try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setObject(1, mealPlanId);
+            ps.setString(2, createdDate.toString());
+            ps.setBoolean(3, status);
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                keys.next();
+                return keys.getInt(1);
+            }
+        }
+    }
+
+    /**
+     * Inserts one shopping_list_item row, on the caller's transaction. store_item_id is a required
+     * (NOT NULL, FK to store_item) column, so this is only called for items a current store option
+     * was found for.
+     */
+    public void insertShoppingListItem(Connection con, int shoppingListId, int storeItemId, String storeSection,
+                                        int quantityNeeded, Boolean isDiscounted, boolean purchaseStatus,
+                                        boolean isManual) throws SQLException {
+        String sql = "INSERT INTO shopping_list_item (shopping_list_id, shopping_list_item_store_item_id, "
+                + "shopping_list_item_store_section, shopping_list_item_quantity_needed, "
+                + "shopping_list_item_is_discounted, shopping_list_item_purchase_status, "
+                + "shopping_list_item_is_manual) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListId);
+            ps.setInt(2, storeItemId);
+            ps.setString(3, storeSection);
+            ps.setInt(4, quantityNeeded);
+            ps.setObject(5, isDiscounted);
+            ps.setBoolean(6, purchaseStatus);
+            ps.setBoolean(7, isManual);
+            ps.executeUpdate();
+        }
     }
 }
