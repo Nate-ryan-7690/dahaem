@@ -93,8 +93,10 @@ public class ShoppingListService {
                 if (item.storeOptions().isEmpty()) {
                     continue; // nothing currently sells it; nothing meaningful to persist
                 }
+                // TODO: shopping_list_item_quantity_needed is INTEGER; fractional needs (kg, L) are
+                // rounded up until that column is widened to a real number type.
                 int quantityNeeded = (int) Math.ceil(missing);
-                repository.insertShoppingListItem(con, shoppingListId, null, null,
+                repository.insertShoppingListItem(con, shoppingListId, null, item.inventoryItemId(), null,
                         quantityNeeded, null, false, false);
             }
 
@@ -127,16 +129,56 @@ public class ShoppingListService {
 
     /**
      * Records the store_item the user picked for a persisted shopping_list_item line, or clears the
-     * choice when {@code storeItemId} is null. An unknown storeItemId violates the store_item foreign
-     * key; the caller sees that as a constraint-violation failure.
+     * choice when {@code storeItemId} is null. Rejected when storeItemId is not actually a current
+     * option for the line's inventory item (an {@link IllegalArgumentException}, for the caller to
+     * turn into 400) — checked here defensively, since the DAHÄM "surface, don't decide" rule means
+     * only the user's own pick may ever be stored. An unknown storeItemId also violates the
+     * store_item foreign key regardless, which the caller sees as a constraint-violation failure.
      */
     public void selectStoreItem(int shoppingListItemId, Integer storeItemId) {
+        if (storeItemId != null) {
+            repository.findInventoryItemIdForItem(shoppingListItemId).ifPresent(inventoryItemId -> {
+                boolean isCandidate = repository.loadStoreCandidates(inventoryItemId, LocalDate.now()).stream()
+                        .anyMatch(candidate -> candidate.storeItemId() == storeItemId);
+                if (!isCandidate) {
+                    throw new IllegalArgumentException("store_item " + storeItemId
+                            + " is not a current option for shopping list item " + shoppingListItemId);
+                }
+            });
+        }
         repository.setChosenStoreItem(shoppingListItemId, storeItemId);
     }
 
     /** The shopping_list a persisted shopping_list_item belongs to, or empty if the item doesn't exist. */
     public Optional<Integer> findShoppingListIdForItem(int shoppingListItemId) {
         return repository.findShoppingListIdForItem(shoppingListItemId);
+    }
+
+    public Optional<PersistedShoppingList> loadPersistedList(int shoppingListId) {
+        return loadPersistedList(shoppingListId, LocalDate.now());
+    }
+
+    /**
+     * Reloads a persisted shopping_list by id with its items, or empty if no such list exists. Each
+     * item comes back with the same store options a freshly built line would show (cheapest
+     * till-price first, none pre-chosen) so a reloaded line surfaces exactly the same candidates as a
+     * newly generated one — plus the store_item the user selected already, if any.
+     */
+    public Optional<PersistedShoppingList> loadPersistedList(int shoppingListId, LocalDate today) {
+        return repository.findShoppingListById(shoppingListId).map(row -> {
+            List<PersistedShoppingListItem> items = repository.findItemsForShoppingList(shoppingListId).stream()
+                    .map(itemRow -> toPersistedItem(itemRow, today))
+                    .toList();
+            return new PersistedShoppingList(row.id(), row.mealPlanId(), row.createdDate(), row.status(), items);
+        });
+    }
+
+    private PersistedShoppingListItem toPersistedItem(ShoppingListItemRow row, LocalDate today) {
+        List<StoreOption> options = row.inventoryItemId() == null
+                ? List.of()
+                : buildStoreOptions(repository.loadStoreCandidates(row.inventoryItemId(), today));
+        return new PersistedShoppingListItem(row.itemId(), row.inventoryItemId(), row.nameDeutsch(),
+                row.nameEnglish(), row.quantityNeeded(), row.isManual(), options, row.selectedStoreItemId());
     }
 
     /**

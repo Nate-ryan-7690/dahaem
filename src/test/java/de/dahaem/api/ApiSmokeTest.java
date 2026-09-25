@@ -29,6 +29,7 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -207,6 +208,55 @@ class ApiSmokeTest {
     }
 
     @Test
+    void shoppingListCanBeGeneratedPersistedReloadedAndSelectedFrom() throws Exception {
+        int mealPlanId = 1; // seeded by demo_data.sql, with recipes attached
+
+        String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shoppingListId").isNumber())
+                .andReturn().getResponse().getContentAsString();
+        int shoppingListId = Integer.parseInt(created.replaceAll(".*\"shoppingListId\":(\\d+).*", "$1"));
+
+        mvc.perform(get("/api/shopping-lists/{id}", shoppingListId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(shoppingListId))
+                .andExpect(jsonPath("$.mealPlanId").value(mealPlanId))
+                .andExpect(jsonPath("$.items.length()", greaterThan(0)))
+                .andExpect(jsonPath("$.items[0].shoppingListItemId").isNumber())
+                .andExpect(jsonPath("$.items[0].inventoryItemId").isNumber())
+                .andExpect(jsonPath("$.items[0].nameDeutsch").exists())
+                .andExpect(jsonPath("$.items[0].nameEnglish").exists())
+                .andExpect(jsonPath("$.items[0].quantityNeeded").isNumber())
+                .andExpect(jsonPath("$.items[0].storeOptions").isArray())
+                .andExpect(jsonPath("$.items[0].selectedStoreItemId").doesNotExist());
+
+        int itemId = itemIdOnList(shoppingListId, 0);
+        int inventoryItemId = inventoryItemIdForItem(itemId);
+        int matchingStoreItemId = anyStoreItemIdForInventoryItem(inventoryItemId);
+        int mismatchedStoreItemId = anyStoreItemIdForADifferentInventoryItem(inventoryItemId);
+
+        mvc.perform(put("/api/shopping-lists/{listId}/items/{itemId}/store-item", shoppingListId, itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"storeItemId\": " + mismatchedStoreItemId + "}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(put("/api/shopping-lists/{listId}/items/{itemId}/store-item", shoppingListId, itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"storeItemId\": " + matchingStoreItemId + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storeItemId").value(matchingStoreItemId));
+
+        mvc.perform(get("/api/shopping-lists/{id}", shoppingListId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].selectedStoreItemId").value(matchingStoreItemId));
+
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999_999))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/shopping-lists/{id}", 999_999))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void purchasesCanBeRecordedAndSpendingIsTotalled() throws Exception {
         int storeItemId = anyStoreItemId();
 
@@ -266,6 +316,55 @@ class ApiSmokeTest {
              ResultSet rs = st.executeQuery("SELECT MIN(store_item_id) FROM store_item")) {
             rs.next();
             return rs.getInt(1);
+        }
+    }
+
+    private static int itemIdOnList(int shoppingListId, int index) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT shopping_list_item_id FROM shopping_list_item "
+                     + "WHERE shopping_list_id = ? ORDER BY shopping_list_item_id LIMIT 1 OFFSET ?")) {
+            ps.setInt(1, shoppingListId);
+            ps.setInt(2, index);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private static int inventoryItemIdForItem(int shoppingListItemId) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT shopping_list_item_inventory_item_id "
+                     + "FROM shopping_list_item WHERE shopping_list_item_id = ?")) {
+            ps.setInt(1, shoppingListItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private static int anyStoreItemIdForInventoryItem(int inventoryItemId) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "SELECT MIN(store_item_id) FROM store_item WHERE store_item_item_id = ?")) {
+            ps.setInt(1, inventoryItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private static int anyStoreItemIdForADifferentInventoryItem(int inventoryItemId) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "SELECT MIN(store_item_id) FROM store_item WHERE store_item_item_id != ?")) {
+            ps.setInt(1, inventoryItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 }

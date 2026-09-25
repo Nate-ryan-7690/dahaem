@@ -178,24 +178,104 @@ public class ShoppingListRepository {
     /**
      * Inserts one shopping_list_item row, on the caller's transaction. storeItemId is nullable
      * (shopping_list_item_store_item_id): null means the line is still awaiting the user's choice
-     * of store product.
+     * of store product. inventoryItemId (shopping_list_item_inventory_item_id) is nullable at the
+     * table level for a purely manual free-text line, but every generated line must set it — it is
+     * the only way to know which store_items are candidates for the line once it is reloaded.
      */
-    public void insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, String storeSection,
-                                        int quantityNeeded, Boolean isDiscounted, boolean purchaseStatus,
-                                        boolean isManual) throws SQLException {
+    public void insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId,
+                                        Integer inventoryItemId, String storeSection, int quantityNeeded,
+                                        Boolean isDiscounted, boolean purchaseStatus, boolean isManual)
+            throws SQLException {
         String sql = "INSERT INTO shopping_list_item (shopping_list_id, shopping_list_item_store_item_id, "
-                + "shopping_list_item_store_section, shopping_list_item_quantity_needed, "
-                + "shopping_list_item_is_discounted, shopping_list_item_purchase_status, "
-                + "shopping_list_item_is_manual) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                + "shopping_list_item_inventory_item_id, shopping_list_item_store_section, "
+                + "shopping_list_item_quantity_needed, shopping_list_item_is_discounted, "
+                + "shopping_list_item_purchase_status, shopping_list_item_is_manual) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, shoppingListId);
             ps.setObject(2, storeItemId);
-            ps.setString(3, storeSection);
-            ps.setInt(4, quantityNeeded);
-            ps.setObject(5, isDiscounted);
-            ps.setBoolean(6, purchaseStatus);
-            ps.setBoolean(7, isManual);
+            ps.setObject(3, inventoryItemId);
+            ps.setString(4, storeSection);
+            ps.setInt(5, quantityNeeded);
+            ps.setObject(6, isDiscounted);
+            ps.setBoolean(7, purchaseStatus);
+            ps.setBoolean(8, isManual);
             ps.executeUpdate();
+        }
+    }
+
+    /** The shopping_list row for a persisted list, or empty if no such list exists. */
+    public Optional<ShoppingListRow> findShoppingListById(int shoppingListId) {
+        String sql = "SELECT shopping_list_id, shopping_list_meal_plan_id, shopping_list_created_date, "
+                + "shopping_list_status FROM shopping_list WHERE shopping_list_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new ShoppingListRow(
+                        rs.getInt("shopping_list_id"),
+                        (Integer) rs.getObject("shopping_list_meal_plan_id"),
+                        LocalDate.parse(rs.getString("shopping_list_created_date")),
+                        rs.getBoolean("shopping_list_status")));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load shopping list " + shoppingListId, e);
+        }
+    }
+
+    /**
+     * Every shopping_list_item on a persisted list, joined to its inventory_item's names (both
+     * null for a manual line with no catalog match), ordered by insertion.
+     */
+    public List<ShoppingListItemRow> findItemsForShoppingList(int shoppingListId) {
+        String sql = "SELECT sli.shopping_list_item_id, sli.shopping_list_item_inventory_item_id, "
+                + "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, "
+                + "sli.shopping_list_item_quantity_needed, sli.shopping_list_item_store_item_id, "
+                + "sli.shopping_list_item_is_manual "
+                + "FROM shopping_list_item sli "
+                + "LEFT JOIN inventory_item ii ON ii.inventory_item_id = sli.shopping_list_item_inventory_item_id "
+                + "WHERE sli.shopping_list_id = ? "
+                + "ORDER BY sli.shopping_list_item_id";
+        List<ShoppingListItemRow> out = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new ShoppingListItemRow(
+                            rs.getInt("shopping_list_item_id"),
+                            (Integer) rs.getObject("shopping_list_item_inventory_item_id"),
+                            rs.getString("inventory_item_name_deutsch"),
+                            rs.getString("inventory_item_name_english"),
+                            rs.getInt("shopping_list_item_quantity_needed"),
+                            (Integer) rs.getObject("shopping_list_item_store_item_id"),
+                            rs.getBoolean("shopping_list_item_is_manual")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load items for shopping list " + shoppingListId, e);
+        }
+        return out;
+    }
+
+    /**
+     * The inventory_item_id a shopping_list_item is for, or empty if the item doesn't exist or
+     * has no catalog link (a manual line).
+     */
+    public Optional<Integer> findInventoryItemIdForItem(int shoppingListItemId) {
+        String sql = "SELECT shopping_list_item_inventory_item_id FROM shopping_list_item "
+                + "WHERE shopping_list_item_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.ofNullable((Integer) rs.getObject(1)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load inventory item for shopping list item "
+                    + shoppingListItemId, e);
         }
     }
 
