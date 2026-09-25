@@ -21,6 +21,12 @@ import java.util.Map;
  *   offers penny   Penny offers for the store in config/stores.properties
  *   offers all     both offer imports (one failing doesn't stop the other)
  *   match aldi     link ALDI store_product rows to inventory_item; unmatched -> data/stores/unmatched_aldi.tsv
+ *   refresh weekly   orchestrator: offers all -> offers aggregator all -> discounts
+ *   refresh monthly  orchestrator: range aldi -> match aldi -> promote -> discounts
+ *
+ * The refresh jobs just chain the existing steps above in dependency order for a
+ * scheduler (see docs/refresh.md); each step still runs independently of the
+ * others' success, same as "offers all" already does.
  *
  * Exit code: 0 = all OK, 1 = something failed or was only partial, 2 = bad arguments.
  */
@@ -31,7 +37,8 @@ public class StoreImportRunner {
 
     public static void main(String[] args) {
         String job = String.join(" ", args).trim().toLowerCase();
-        boolean fixedJob = List.of("range aldi", "offers aldi", "offers penny", "offers all", "match aldi", "promote", "discounts").contains(job);
+        boolean fixedJob = List.of("range aldi", "offers aldi", "offers penny", "offers all", "match aldi", "promote", "discounts",
+                "refresh weekly", "refresh monthly").contains(job);
         boolean aggregatorJob = job.startsWith("offers aggregator ");
         if (!fixedJob && !aggregatorJob) {
             printUsage();
@@ -73,6 +80,27 @@ public class StoreImportRunner {
             case "discounts" -> jobs.add(() -> results.add(
                     new StoreDiscountService(repository, loadOverrides())
                             .promoteOffers(null, DATA_DIR.resolve("unmatched_offers.tsv"))));
+            case "refresh weekly" -> {                     // offers all -> offers aggregator all -> discounts
+                jobs.add(() -> results.add(service.importAldiOffers()));
+                jobs.add(() -> results.add(service.importPennyOffers()));
+                for (String s : AggregatorClient.STORES.keySet()) {
+                    jobs.add(() -> results.add(service.importAggregatorOffers(s)));
+                }
+                jobs.add(() -> results.add(
+                        new StoreDiscountService(repository, loadOverrides())
+                                .promoteOffers(null, DATA_DIR.resolve("unmatched_offers.tsv"))));
+            }
+            case "refresh monthly" -> {                    // range aldi -> match aldi -> promote -> discounts
+                jobs.add(() -> results.add(service.importAldiRange()));
+                jobs.add(() -> {
+                    StoreMatchService matcher = new StoreMatchService(repository, loadOverrides());
+                    results.add(matcher.matchStore(StoreImportService.ALDI, DATA_DIR.resolve("unmatched_aldi.tsv")));
+                });
+                jobs.add(() -> results.add(new StorePromotionService(repository).promote()));
+                jobs.add(() -> results.add(
+                        new StoreDiscountService(repository, loadOverrides())
+                                .promoteOffers(null, DATA_DIR.resolve("unmatched_offers.tsv"))));
+            }
             default -> {                                   // "offers all"
                 jobs.add(() -> results.add(service.importAldiOffers()));
                 jobs.add(() -> results.add(service.importPennyOffers()));
@@ -137,6 +165,9 @@ public class StoreImportRunner {
                   offers aggregator <store>   aktionspreis.de offers (SECONDARY); store: netto|edeka|rewe|lidl|famila|aldi, or 'all'
                   match aldi     link ALDI store products to catalog items; unmatched -> data/stores/unmatched_aldi.tsv
                   promote        turn matched+complete store_products into verified store_item rows
-                  discounts      turn matched flyer offers into store_item + store_discount; unmatched -> data/stores/unmatched_offers.tsv""");
+                  discounts      turn matched flyer offers into store_item + store_discount; unmatched -> data/stores/unmatched_offers.tsv
+                  refresh weekly    orchestrator: offers all -> offers aggregator all -> discounts
+                  refresh monthly   orchestrator: range aldi -> match aldi -> promote -> discounts
+                                    (see docs/refresh.md for the full pipeline and schedule)""");
     }
 }
