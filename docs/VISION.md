@@ -71,5 +71,8 @@ swappable behind the existing provenance layer:
 1. Core household app: inventory, recipes, meal planning, shopping lists.
 2. Price and discount intelligence: offers, comparison, price history.
 3. Receipts and automation: OCR, review UI, inventory updates from receipts.
-4. Smart suggestions: recipes using expiring items, cheapest meal plans.
+4. Smart suggestions: surface recipe and meal-plan options ranked by what is in
+   stock, what is expiring, current discounts, nutrition, and household
+   preferences. DAHÄM informs the choice; the user always decides. It never
+   auto-picks the cheapest plan.
 5. Collaboration and polish: household sharing, PWA/offline, notifications.
