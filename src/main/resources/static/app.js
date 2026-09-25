@@ -59,7 +59,12 @@ function store(key, value) {
 
 // ---- API ----
 
-class ApiError extends Error {}
+class ApiError extends Error {
+    constructor(message, status) {
+        super(message);
+        this.status = status;
+    }
+}
 
 // Thrown on a 401 from the API: the session is missing or expired, so the router shows the login screen.
 class LoginRequired extends Error {}
@@ -105,6 +110,37 @@ async function fetchJson(path) {
 
 // Set when an answer came from the service worker's cache instead of the server.
 let staleSince = null;
+
+// POSTs or PUTs JSON to the API, with the session's CSRF header attached. Writes aren't served
+// from the service worker's cache, so a failed fetch here means the request never reached the
+// server, not a stale-but-usable answer.
+async function apiWrite(path, method, body) {
+    let headers;
+    try {
+        headers = { ...(await csrfHeaders()), Accept: 'application/json' };
+    } catch (e) {
+        if (e instanceof LoginRequired) throw e;
+        setOffline(true);
+        throw new ApiError("Can't save while offline. Check your connection and try again.");
+    }
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+    let res;
+    try {
+        res = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    } catch (e) {
+        setOffline(true);
+        throw new ApiError("Can't save while offline. Check your connection and try again.");
+    }
+    if (res.status === 401) throw new LoginRequired();
+    let payload = null;
+    try { payload = await res.json(); } catch (e) { /* no body */ }
+    if (!res.ok) {
+        const message = payload && payload.message ? payload.message : `The server answered ${res.status}.`;
+        throw new ApiError(message, res.status);
+    }
+    return payload;
+}
 
 // ---- State views ----
 
@@ -195,7 +231,11 @@ async function renderShopping(planIdParam) {
     const toolbar = `<div class="toolbar">
         <select id="plan-select" aria-label="Meal plan">${options}</select>
         <button class="btn" type="button" data-action="reset" title="Uncheck everything">Reset</button>
-    </div>`;
+    </div>
+    <div class="toolbar">
+        <button class="btn btn-primary" type="button" data-action="save-list" style="flex:1">Save this list</button>
+    </div>
+    <p class="save-status small" id="save-status" hidden></p>`;
 
     const recipeIds = [...new Set(plan.recipes.map(r => r.recipeId))];
     if (recipeIds.length === 0) {
@@ -291,6 +331,111 @@ function wireShoppingToolbar(plan, onReset) {
     });
     const reset = view.querySelector('[data-action="reset"]');
     if (onReset) reset.addEventListener('click', onReset); else reset.disabled = true;
+
+    const token = routeToken;
+    const saveBtn = view.querySelector('[data-action="save-list"]');
+    const statusEl = view.querySelector('#save-status');
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        statusEl.hidden = true;
+        try {
+            const result = await apiWrite(`/api/meal-plans/${plan.id}/shopping-list`, 'POST');
+            if (token !== routeToken) return;
+            location.hash = `#/shopping-list/${result.shoppingListId}`;
+        } catch (err) {
+            if (token !== routeToken) return;
+            if (err instanceof LoginRequired) { requireLogin(); return; }
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save this list';
+            statusEl.hidden = false;
+            statusEl.textContent = err.message;
+        }
+    });
+}
+
+// ---- Persisted shopping list ----
+
+function persistedLineHtml(item) {
+    const name = label(item.nameDeutsch || item.nameEnglish);
+    const groupName = `opt-${item.shoppingListItemId}`;
+    const optionInput = (value, checked) =>
+        `<input type="radio" name="${esc(groupName)}" value="${esc(value)}" data-item-id="${item.shoppingListItemId}"${checked ? ' checked' : ''}>`;
+    const rows = [`<label class="option-row">
+            ${optionInput('', item.selectedStoreItemId == null)}
+            <span class="option-main"><span class="option-store muted">Not decided yet</span></span>
+        </label>`]
+        .concat(item.storeOptions.map(o => {
+            const details = optionDetails(o);
+            return `<label class="option-row">
+                ${optionInput(String(o.storeItemId), item.selectedStoreItemId === o.storeItemId)}
+                <span class="option-main">
+                    <span class="option-store">${esc(o.storeName)}</span>
+                    ${details ? `<span class="option-detail muted small">${esc(details)}</span>` : ''}
+                </span>
+                <span class="option-end">${priceHtml(o)}</span>
+            </label>`;
+        }))
+        .join('');
+    return `<li class="persisted-item" data-item-id="${item.shoppingListItemId}">
+        <div class="row-main">
+            <div class="row-title">${esc(name)}</div>
+            <div class="row-sub">Need ${esc(qty(item.quantityNeeded))}</div>
+        </div>
+        <p class="option-error small" hidden></p>
+        <div class="option-list" role="radiogroup" aria-label="Store option for ${esc(name)}">${rows}</div>
+    </li>`;
+}
+
+async function renderPersistedShoppingList(listIdParam) {
+    titleEl.textContent = 'Shopping list';
+    showLoading();
+    const listId = Number(listIdParam);
+    const list = await api(`/api/shopping-lists/${encodeURIComponent(listId)}`);
+    const backHref = list.mealPlanId != null ? `#/shopping/${list.mealPlanId}` : '#/shopping';
+
+    if (list.items.length === 0) {
+        view.innerHTML = staleNotice() + `<a class="back" href="${backHref}">‹ Build a list</a>` +
+            stateHtml('Nothing to buy', 'Everything needed for this list is already in the pantry.');
+        return;
+    }
+
+    view.innerHTML = staleNotice() + `<a class="back" href="${backHref}">‹ Build a list</a>
+        <ul class="list persisted-list">${list.items.map(persistedLineHtml).join('')}</ul>`;
+
+    // Tracks the last known-good selection per line, so a rejected PUT can revert to it.
+    const selections = new Map(list.items.map(i => [i.shoppingListItemId, i.selectedStoreItemId]));
+    const token = routeToken;
+
+    view.addEventListener('change', async e => {
+        const input = e.target.closest('input[type="radio"][data-item-id]');
+        if (!input) return;
+        const itemId = Number(input.dataset.itemId);
+        const li = input.closest('.persisted-item');
+        const errorEl = li.querySelector('.option-error');
+        const newValue = input.value === '' ? null : Number(input.value);
+        const previous = selections.get(itemId);
+        const radios = li.querySelectorAll('input[type="radio"]');
+
+        errorEl.hidden = true;
+        radios.forEach(r => r.disabled = true);
+        try {
+            await apiWrite(`/api/shopping-lists/${listId}/items/${itemId}/store-item`, 'PUT', { storeItemId: newValue });
+            if (token !== routeToken) return;
+            selections.set(itemId, newValue);
+        } catch (err) {
+            if (token !== routeToken) return;
+            if (err instanceof LoginRequired) { requireLogin(); return; }
+            if (err.status === 404) { showError(err); return; }
+            const revertValue = previous == null ? '' : String(previous);
+            const revertInput = [...radios].find(r => r.value === revertValue);
+            if (revertInput) revertInput.checked = true;
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+        } finally {
+            if (token === routeToken) radios.forEach(r => r.disabled = false);
+        }
+    });
 }
 
 // ---- Inventory ----
@@ -495,6 +640,14 @@ async function csrfHeaders() {
     return { [csrf.headerName]: csrf.token };
 }
 
+// Sends the user to the login screen, remembering the current one so a successful login returns
+// here. Used both by the router (a LoginRequired from a screen's own load) and by write actions
+// outside the router's try/catch, such as a click or change handler's own apiWrite call.
+function requireLogin() {
+    store('dahaem.afterLogin', location.hash);
+    location.hash = '#/login';
+}
+
 async function renderLogin() {
     titleEl.textContent = 'DAHÄM';
     view.innerHTML = `<form class="login-form" id="login-form" novalidate>
@@ -546,6 +699,7 @@ async function logout() {
 
 const routes = {
     shopping: renderShopping,
+    'shopping-list': renderPersistedShoppingList,
     inventory: renderInventory,
     recipes: (id) => (id ? renderRecipe(id) : renderRecipes()),
     plans: renderPlans,
@@ -558,8 +712,10 @@ async function route() {
     const onLogin = section === 'login';
     tabbarEl.hidden = onLogin;
     logoutEl.hidden = onLogin;
+    // A saved list is still part of the shopping flow, so it keeps that tab highlighted.
+    const activeTab = section === 'shopping-list' ? 'shopping' : (routes[section] ? section : 'shopping');
     document.querySelectorAll('.tabbar a').forEach(a => {
-        if (a.dataset.tab === (routes[section] ? section : 'shopping')) a.setAttribute('aria-current', 'page');
+        if (a.dataset.tab === activeTab) a.setAttribute('aria-current', 'page');
         else a.removeAttribute('aria-current');
     });
 
@@ -576,10 +732,7 @@ async function route() {
         if (err instanceof Superseded) return;
         if (err instanceof LoginRequired) {
             // Come back to this screen once logged in.
-            if (token === routeToken) {
-                store('dahaem.afterLogin', location.hash);
-                location.hash = '#/login';
-            }
+            if (token === routeToken) requireLogin();
             return;
         }
         if (token === routeToken) showError(err);
