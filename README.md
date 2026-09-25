@@ -76,6 +76,12 @@ scripts/recipes/samples/   15 original sample recipes (SQL)
 config/                    importer settings templates
 ```
 
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the layering rule and the
+store data pipeline in detail, [`docs/DATABASE.md`](docs/DATABASE.md) for the
+schema (and its current gaps), [`docs/refresh.md`](docs/refresh.md) for the
+scheduled import jobs, and [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and
+conventions.
+
 ## Getting started
 
 Requires Java 17+ and Maven.
