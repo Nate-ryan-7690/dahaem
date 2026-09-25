@@ -11,8 +11,22 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <junit.jupiter.version>5.10.2</junit.jupiter.version>
+        <spring-boot.version>3.5.16</spring-boot.version>
     </properties>
+
+    <!-- Spring Boot's BOM pins Spring, Jackson, JUnit and friends to versions that work together.
+         Imported as a BOM rather than used as the parent so the rest of this pom stays as it was. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- SQLite JDBC driver. IntelliJ downloads this automatically when the project is imported. -->
@@ -21,17 +35,29 @@
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.45.3.0</version>
         </dependency>
-        <!-- JSON parsing for the store importers (Spring Boot uses Jackson too, so this carries over). -->
+        <!-- JSON parsing for the store importers. Version comes from the Spring Boot BOM, so the
+             importers and the REST API share one Jackson. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.18.9</version>
         </dependency>
-        <!-- JUnit 5 for tests that exercise repositories against a real (temporary) SQLite file. -->
+        <!-- Thin REST API (de.dahaem.api) over the existing services. No Spring Data/JPA:
+             the services keep using de.dahaem.shared.Database (raw JDBC). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- JUnit 5 for tests that exercise repositories against a real (temporary) SQLite file.
+             Version comes from the Spring Boot BOM so it matches spring-boot-starter-test's JUnit platform. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- MockMvc + Spring test context for the API smoke test. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -39,11 +65,25 @@
     <build>
         <plugins>
             <!-- `mvn package` builds target/dahaem-1.0-SNAPSHOT.jar with all dependencies inside,
-                 so the server only needs Java and that one jar. -->
+                 so the server only needs Java and that one jar.
+
+                 Shade (not spring-boot-maven-plugin repackage) on purpose: a flat jar keeps
+                 `java -cp dahaem-1.0-SNAPSHOT.jar de.dahaem.stores.StoreImportRunner ...` working for
+                 the cron/systemd importers, while `java -jar dahaem-1.0-SNAPSHOT.jar` starts the REST
+                 API (Main-Class = de.dahaem.api.DahaemApplication). The transformers merge Spring's
+                 META-INF registration files, which would otherwise overwrite each other when flattened. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.6.0</version>
+                <!-- Provides PropertiesMergingTransformer for META-INF/spring.factories. -->
+                <dependencies>
+                    <dependency>
+                        <groupId>org.springframework.boot</groupId>
+                        <artifactId>spring-boot-maven-plugin</artifactId>
+                        <version>${spring-boot.version}</version>
+                    </dependency>
+                </dependencies>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -52,6 +92,39 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.handlers</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring.schemas</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/spring/aot.factories</resource>
+                                </transformer>
+                                <transformer implementation="org.springframework.boot.maven.PropertiesMergingResourceTransformer">
+                                    <resource>META-INF/spring.factories</resource>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>de.dahaem.api.DahaemApplication</mainClass>
+                                </transformer>
+                            </transformers>
                         </configuration>
                     </execution>
                 </executions>

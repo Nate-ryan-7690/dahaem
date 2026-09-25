@@ -39,7 +39,7 @@ Importers are plain Java (`java.net.http`), meant to run on the server on a sche
 
 ## Architecture
 
-Java 17, Maven, SQLite via `sqlite-jdbc`, Jackson for JSON. `mvn package` builds one runnable jar with the maven-shade plugin, so the server needs only Java and that jar.
+Java 17, Maven, SQLite via `sqlite-jdbc`, Jackson for JSON, Spring Boot (web only) for the REST API. `mvn package` builds one runnable jar with the maven-shade plugin, so the server needs only Java and that jar. Shade rather than Spring Boot's repackaged jar keeps the jar flat, so `java -cp` can still start the importers while `java -jar` starts the API.
 
 **SQLite instead of a client/server database** because the design target is a single self-hosted box for two users, not multi-tenant scale.
 
@@ -104,6 +104,30 @@ Run the console entry point from your IDE (`de.dahaem.Main`), or a store importe
 ```bash
 java --enable-native-access=ALL-UNNAMED -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.stores.StoreImportRunner offers all
 ```
+
+Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) with:
+
+```bash
+java -Ddahaem.db.path=data/kitchen_organizer.db -jar target/dahaem-1.0-SNAPSHOT.jar
+```
+
+It is a thin layer over the existing services (no JPA; the services still use `Database`), on port 8080 by default (`--server.port=...` to change it):
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/inventory` | all items |
+| GET | `/api/inventory/expiring?days=7` | items expiring within N days |
+| GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
+| GET | `/api/recipes` | recipe list |
+| GET | `/api/recipes/{id}` | recipe with nutrition, ingredients, instructions; 404 if unknown |
+| GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` |
+| GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
+| POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |
+| GET | `/api/shopping-list?recipeIds=1,2` | build (not save) a shopping list |
+| GET / POST | `/api/purchases` | list / record `{"storeItemId", "quantityPurchased", "pricePaid", "expirationDate", ...}` |
+| GET | `/api/analytics/spending[?from=&to=]` | total spent, optionally in a date range |
+
+Errors come back as `{"status", "error", "message"}`: 400 for invalid input, 404 for an unknown id, 409 when a write violates a database constraint (duplicate week, recipe already on the plan, unknown store item).
 
 The application uses a local SQLite database that is not committed to the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
 
