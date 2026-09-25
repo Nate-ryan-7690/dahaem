@@ -1,5 +1,8 @@
 package de.dahaem.finance;
 
+import de.dahaem.inventory.InventoryRepository;
+import de.dahaem.stores.StoreRepository;
+
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -13,9 +16,18 @@ import java.util.List;
 public class PurchaseService {
 
     private final PurchaseRepository repository;
+    private final StoreRepository storeRepository;
+    private final InventoryRepository inventoryRepository;
 
     public PurchaseService(PurchaseRepository repository) {
+        this(repository, new StoreRepository(), new InventoryRepository());
+    }
+
+    public PurchaseService(PurchaseRepository repository, StoreRepository storeRepository,
+                            InventoryRepository inventoryRepository) {
         this.repository = repository;
+        this.storeRepository = storeRepository;
+        this.inventoryRepository = inventoryRepository;
     }
 
     public List<Purchase> allPurchases() {
@@ -60,6 +72,49 @@ public class PurchaseService {
         } finally {
             close(con);
         }
+    }
+
+    /**
+     * Records a purchase of a product that isn't in the catalog yet — an off-list buy, e.g. from a
+     * receipt, with no shopping_list_item behind it. Finds or creates the store and brand, resolves
+     * the inventory_item (an existing one, or a new generic one with quantity 0 and no expiry), finds
+     * or creates the matching store_item for (store, brand, item, unit, size), and then delegates to
+     * {@link #recordPurchase} so the purchase row and inventory update stay atomic. Returns the new
+     * purchase's id.
+     *
+     * <p>Exactly one of {@code existingInventoryItemId} or the {@code newItem*} fields must be used:
+     * pass an id to reuse a known item, or leave it null and pass name/category to create a generic one.
+     */
+    public int recordNewProductPurchase(String storeName, String brandName, Integer existingInventoryItemId,
+                                         String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory,
+                                         String packageUnit, int packageSize, Double normalPrice,
+                                         int quantityPurchased, double pricePaid, LocalDate purchaseDate,
+                                         LocalDate expirationDate) {
+        int storeId = storeRepository.findOrCreateStore(storeName);
+
+        int storeItemId;
+        Connection con = repository.openTransaction();
+        try {
+            int brandId = storeRepository.findOrCreateBrand(con, brandName);
+            int inventoryItemId = existingInventoryItemId != null
+                    ? existingInventoryItemId
+                    : inventoryRepository.findOrCreateGenericItem(con, newItemNameEnglish, newItemNameDeutsch,
+                            newItemCategory, packageUnit);
+            storeItemId = storeRepository.findOrCreateStoreItem(con, storeId, brandId, inventoryItemId,
+                    packageUnit, packageSize, normalPrice);
+
+            con.commit();
+        } catch (SQLException e) {
+            rollback(con);
+            throw new RuntimeException("Could not set up catalog entries for a new product purchase at " + storeName, e);
+        } catch (RuntimeException e) {
+            rollback(con);
+            throw e;
+        } finally {
+            close(con);
+        }
+
+        return recordPurchase(storeItemId, null, false, purchaseDate, quantityPurchased, pricePaid, expirationDate);
     }
 
     private static void rollback(Connection con) {

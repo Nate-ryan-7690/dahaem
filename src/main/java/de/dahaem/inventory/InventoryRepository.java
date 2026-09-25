@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +60,40 @@ public class InventoryRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not load inventory item " + id, e);
+        }
+    }
+
+    /**
+     * Find-or-create a generic inventory_item by (name_english, category), on the caller's transaction
+     * (see PurchaseRepository.openTransaction()/StoreRepository.openTransaction()). A newly created item
+     * starts with zero quantity and no known expiry; the caller (e.g. a purchase being recorded) is
+     * responsible for adding the purchased quantity and expiry afterwards. Returns the item's id.
+     */
+    public int findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category,
+                                        String unit) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT inventory_item_id FROM inventory_item "
+                + "WHERE inventory_item_name_english = ? AND inventory_item_category = ?")) {
+            ps.setString(1, nameEnglish);
+            ps.setString(2, category);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        String sql = "INSERT INTO inventory_item (inventory_item_name_english, inventory_item_name_deutsch, " +
+                "inventory_item_category, inventory_item_unit, inventory_item_quantity) VALUES (?, ?, ?, ?, 0)";
+        try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, nameEnglish);
+            ps.setString(2, nameDeutsch);
+            ps.setString(3, category);
+            ps.setString(4, unit);
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                keys.next();
+                return keys.getInt(1);
+            }
         }
     }
 
