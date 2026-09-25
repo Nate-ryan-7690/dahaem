@@ -1,5 +1,7 @@
 # DAHÄM
 
+[![CI](https://github.com/Nate-ryan-7690/dahaem/actions/workflows/ci.yml/badge.svg)](https://github.com/Nate-ryan-7690/dahaem/actions/workflows/ci.yml)
+
 A self-hosted household organizer that keeps inventory, meal plans, shopping lists, store prices and discounts, and purchases for a two-person household in one Java application on one SQLite database.
 
 DAHÄM is Kurpfälzisch (the Mannheim-area dialect) for *daheim*, "at home." The name says where the software belongs rather than what any single feature does.
