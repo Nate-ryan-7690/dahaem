@@ -12,15 +12,17 @@ import java.sql.SQLException;
 public final class Database {
 
     // Path is relative to the project root (the working directory when run from IntelliJ).
-    private static final String DB_PATH = "data/kitchen_organizer.db";
-    private static final String URL = "jdbc:sqlite:" + DB_PATH;
+    private static final String DEFAULT_DB_PATH = "data/kitchen_organizer.db";
+    // System property so tests can point at a temporary file instead of the real database.
+    private static final String DB_PATH_PROPERTY = "dahaem.db.path";
 
     private Database() {
         // Utility class, no instances.
     }
 
     public static Connection getConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection(URL);
+        String path = System.getProperty(DB_PATH_PROPERTY, DEFAULT_DB_PATH);
+        Connection connection = DriverManager.getConnection("jdbc:sqlite:" + path);
         // SQLite does not enforce foreign keys unless you switch them on per connection.
         connection.createStatement().execute("PRAGMA foreign_keys = ON");
         return connection;
