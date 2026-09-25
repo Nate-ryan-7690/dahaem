@@ -657,6 +657,26 @@ public class StoreRepository {
             }
             return existing;
         }
+        // No offer row yet: reuse an existing store_item for the same product (same store, generic item,
+        // brand, pack) if one exists — typically an ALDI range item, since ALDI's flyer and range are the
+        // same source. This hangs the discount on the real product instead of creating a parallel offer row.
+        // A range-sourced row (store_product_id set) wins over a prior offer-sourced one; the reused row's
+        // normal price is left untouched (the range price is the real one).
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT store_item_id FROM store_item WHERE store_item_store_id = ? AND store_item_item_id = ? "
+                + "AND store_item_brand_id = ? AND store_item_package_unit = ? AND store_item_package_size = ? "
+                + "ORDER BY (store_item_store_product_id IS NOT NULL) DESC, store_item_id ASC LIMIT 1")) {
+            ps.setInt(1, storeId);
+            ps.setInt(2, itemId);
+            ps.setInt(3, brandId);
+            ps.setString(4, unit);
+            ps.setInt(5, size);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
         try (PreparedStatement ins = con.prepareStatement("INSERT INTO store_item (store_item_brand_id, "
                 + "store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, "
                 + "store_item_price, store_item_is_available, store_item_deposit, store_item_external_id) "
