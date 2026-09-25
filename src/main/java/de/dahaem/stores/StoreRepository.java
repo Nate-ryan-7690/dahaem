@@ -531,6 +531,46 @@ public class StoreRepository {
         }
     }
 
+    /**
+     * Find-or-create a store_item for a manual/receipt purchase, keyed by (store, brand, inventory item,
+     * package unit, package size) — the natural key for a product with no store_product or offer external_id.
+     * A newly inserted row is available with the given normal price (or null if it isn't known yet).
+     * Returns the store_item id.
+     */
+    public int findOrCreateStoreItem(Connection con, int storeId, int brandId, int itemId, String unit, int size,
+                                     Double normalPrice) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT store_item_id FROM store_item WHERE store_item_store_id = ? AND store_item_brand_id = ? "
+                + "AND store_item_item_id = ? AND store_item_package_unit = ? AND store_item_package_size = ?")) {
+            ps.setInt(1, storeId);
+            ps.setInt(2, brandId);
+            ps.setInt(3, itemId);
+            ps.setString(4, unit);
+            ps.setInt(5, size);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        }
+        try (PreparedStatement ins = con.prepareStatement("INSERT INTO store_item (store_item_brand_id, "
+                + "store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, "
+                + "store_item_price, store_item_is_available) VALUES (?, ?, ?, ?, ?, ?, 1)",
+                Statement.RETURN_GENERATED_KEYS)) {
+            ins.setInt(1, brandId);
+            ins.setInt(2, storeId);
+            ins.setInt(3, itemId);
+            ins.setString(4, unit);
+            ins.setInt(5, size);
+            ins.setObject(6, normalPrice);
+            ins.executeUpdate();
+            try (ResultSet keys = ins.getGeneratedKeys()) {
+                keys.next();
+                return keys.getInt(1);
+            }
+        }
+    }
+
     /** Removes promotion rows made before per-product keying existed (store_product_id IS NULL). One-time self-heal. */
     public int deleteLegacyStoreItems(Connection con) throws SQLException {
         try (Statement st = con.createStatement()) {
