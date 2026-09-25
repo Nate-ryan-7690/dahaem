@@ -151,19 +151,17 @@ class Catalog:
             return subs[0][0], "like-multi", "; ".join(f"#{i} {en}" for i, en in subs[:4])
         return None, "none", "NO MATCH -> add to catalog or overrides.json"
 
-# pantry staples ("Nicht in Deiner Lieferung enthalten") we never store as recipe ingredients
+# Only WATER is used-but-never-bought, so only it is dropped. Salt, pepper, oil, sugar,
+# flour, vinegar etc. ARE tracked ingredients in this app: users own and re-buy them, so
+# they belong in the pantry and on the shopping list. (A meal-kit omits them because they
+# are not shipped in the box — a logistics reason we deliberately do NOT inherit.)
+# Staples are matched to catalog items via overrides.json (salz -> speisesalz, etc.).
 # NB: keys must be spelled the way normalize() emits them (umlauts asciified: ö -> oe).
-PANTRY = {"salz", "pfeffer", "wasser", "zucker", "mehl", "oel", "olivenoel", "sonnenblumenoel",
-          "pflanzenoel", "essig", "weissweinessig", "balsamicoessig", "apfelessig", "rotweinessig", "honig"}
+PANTRY = {"wasser"}
 
 def is_pantry(raw, name):
-    rn = normalize(raw)
-    if "nach geschmack" in rn or "essloeffel" in rn or "teeloeffel" in rn:
-        return True
-    # Some HelloFresh lines have no leading number ("g Pfeffer", "Salz und Pfeffer"),
-    # so parse_ingredient leaves unit/quantity noise glued to the name. Match staples
-    # on whole-word tokens: "g pfeffer" -> {g, pfeffer} hits "pfeffer". Compound foods
-    # stay one token ("paniermehl" != "mehl", "salzkartoffeln" != "salz") so they pass.
+    # Whole-word token match so "wasser" is dropped but compound foods ("rosenwasser",
+    # "wasserkastanie") are kept.
     return any(tok in PANTRY for tok in normalize(name).split())
 
 def strip_lead_unit(name):
