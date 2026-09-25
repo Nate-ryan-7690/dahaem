@@ -150,7 +150,9 @@ public class StoreImportRunner {
             JsonNode exact = new ObjectMapper().readTree(file.toFile()).path("exact");
             exact.fields().forEachRemaining(e -> map.put(e.getKey(), e.getValue().asInt()));
         } catch (Exception e) {
-            System.err.println("could not read store_overrides.json: " + e.getMessage());
+            // A present-but-malformed file must fail loudly: silently continuing with no overrides
+            // would quietly degrade match quality (everything lands in the unmatched review file).
+            throw new RuntimeException("Malformed config/store_overrides.json (fix or remove it): " + e.getMessage(), e);
         }
         return map;
     }
