@@ -2,7 +2,7 @@
 """Build the DAHÄM demo SQLite database from the repo's schema and seed SQL files.
 
 Loads, in order, with foreign keys enforced:
-  1. schema.sql                                  - the 21-table schema
+  1. schema.sql                                  - the 24-table schema
   2. seed/inventory_catalog.sql                   - the generic inventory_item catalog
   3. scripts/recipes/samples/sample_recipes.sql   - 15 sample recipes + ingredients + instructions
   4. seed/demo_data.sql                           - fabricated demo data (stores, meal plan, tags, shopping list)

@@ -1,5 +1,7 @@
 package de.dahaem.api;
 
+import de.dahaem.auth.AccountRepository;
+import de.dahaem.auth.AccountService;
 import de.dahaem.finance.PurchaseRepository;
 import de.dahaem.finance.PurchaseService;
 import de.dahaem.inventory.InventoryRepository;
@@ -15,6 +17,7 @@ import de.dahaem.tags.TagRepository;
 import de.dahaem.tags.TagService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * Wires the existing plain-Java repositories and services as Spring beans.
@@ -90,5 +93,15 @@ public class ServiceConfig {
     public PurchaseService purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository,
                                            InventoryRepository inventoryRepository) {
         return new PurchaseService(purchaseRepository, storeRepository, inventoryRepository);
+    }
+
+    @Bean
+    public AccountRepository accountRepository() {
+        return new AccountRepository();
+    }
+
+    @Bean
+    public AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) {
+        return new AccountService(accountRepository, passwordEncoder);
     }
 }

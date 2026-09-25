@@ -1,9 +1,12 @@
 # Security Policy
 
 DAHÄM is a self-hosted, single/two-user household application. It is not a
-multi-tenant service and does not currently ship an authenticated network-facing
-component (see [Project status](README.md#project-status)) — most exposure today
-is on the machine running the console app and the store-import jobs.
+multi-tenant service. Its REST API requires a login (Spring Security session
+login with CSRF protection, BCrypt password hashes, operator-created accounts,
+no public sign-up) and binds to `127.0.0.1` by default; exposing it is only
+supported behind a TLS-terminating reverse proxy (see
+[docs/VISION.md](docs/VISION.md#running-it-on-the-network)). All logged-in users
+currently share one pool of data: per-household scoping is not implemented yet.
 
 ## Supported versions
 
@@ -30,6 +33,9 @@ expect an acknowledgement within a few days and a fix on a best-effort basis.
 - `config/stores.properties` holds a personal store id and postal code, not a
   credential; it's gitignored because it's personal data, not because it's a
   secret. There are no API keys or passwords in this repo's config.
+- Authentication (`de.dahaem.api.SecurityConfig`, `de.dahaem.auth`): a way to
+  reach `/api/**` without a session, to forge a state-changing request without
+  the CSRF token, or to recover a password from what is stored, is a valid report.
 - All SQL in the repository layer is expected to be parameterized
   (`PreparedStatement` with `?` placeholders). A finding of string-concatenated
   SQL built from external input is a valid report.

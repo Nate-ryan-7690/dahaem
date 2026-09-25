@@ -39,7 +39,7 @@ Importers are plain Java (`java.net.http`), meant to run on the server on a sche
 
 ## Architecture
 
-Java 17, Maven, SQLite via `sqlite-jdbc`, Jackson for JSON, Spring Boot (web only) for the REST API. `mvn package` builds one runnable jar with the maven-shade plugin, so the server needs only Java and that jar. Shade rather than Spring Boot's repackaged jar keeps the jar flat, so `java -cp` can still start the importers while `java -jar` starts the API.
+Java 17, Maven, SQLite via `sqlite-jdbc`, Jackson for JSON, Spring Boot (web + security) for the REST API and its login. `mvn package` builds one runnable jar with the maven-shade plugin, so the server needs only Java and that jar. Shade rather than Spring Boot's repackaged jar keeps the jar flat, so `java -cp` can still start the importers while `java -jar` starts the API.
 
 **SQLite instead of a client/server database** because the design target is a single self-hosted box for two users, not multi-tenant scale.
 
@@ -111,7 +111,33 @@ Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) w
 java -Ddahaem.db.path=data/kitchen_organizer.db -jar target/dahaem-1.0-SNAPSHOT.jar
 ```
 
-It is a thin layer over the existing services (no JPA; the services still use `Database`), on port 8080 by default (`--server.port=...` to change it):
+It is a thin layer over the existing services (no JPA; the services still use `Database`), on port 8080 by default (`--server.port=...` to change it).
+
+### Logging in
+
+Every `/api/**` endpoint requires a login; the PWA shows a login screen and the static files stay public. There is no sign-up page: the operator creates the accounts on the server with `UserAdminRunner`, against the same database the API uses (on an existing database, apply `migrations/0002_add_household_and_app_user.sql` first):
+
+```bash
+java -Ddahaem.db.path=data/kitchen_organizer.db -cp target/dahaem-1.0-SNAPSHOT.jar \
+     de.dahaem.auth.UserAdminRunner create-user anna@example.de Anna "Familie M"
+java -Ddahaem.db.path=data/kitchen_organizer.db -cp target/dahaem-1.0-SNAPSHOT.jar \
+     de.dahaem.auth.UserAdminRunner set-password anna@example.de
+```
+
+The password is prompted for twice (at least 10 characters), or read from `DAHAEM_PASSWORD` for scripted setups; it is never a command-line argument. The first user creates the household and becomes its `ADMIN`; everyone after joins that household as `MEMBER`. Passwords are stored only as BCrypt hashes.
+
+Login is a normal session cookie. State-changing requests need the session's CSRF token: `GET /api/auth/csrf` returns `{"headerName", "token"}`, send the token in that header.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/auth/csrf` | CSRF token for the next POST/PUT (public) |
+| POST | `/api/auth/login` | form fields `email`, `password`; 204, or 401 on wrong credentials |
+| POST | `/api/auth/logout` | ends the session; 204 |
+| GET | `/api/auth/me` | the logged-in user and their household |
+
+The API binds to `127.0.0.1` by default. To use it from phones on the network, put it behind a TLS reverse proxy; see [docs/VISION.md](docs/VISION.md#running-it-on-the-network).
+
+### Endpoints
 
 | Method | Path | Notes |
 |--------|------|-------|
@@ -128,7 +154,7 @@ It is a thin layer over the existing services (no JPA; the services still use `D
 | GET / POST | `/api/purchases` | list / record `{"storeItemId", "quantityPurchased", "pricePaid", "expirationDate", ...}` |
 | GET | `/api/analytics/spending[?from=&to=]` | total spent, optionally in a date range |
 
-Errors come back as `{"status", "error", "message"}`: 400 for invalid input, 404 for an unknown id, 409 when a write violates a database constraint (duplicate week, recipe already on the plan, unknown store item).
+Errors come back as `{"status", "error", "message"}`: 401 when not logged in, 403 for a missing CSRF token, 400 for invalid input, 404 for an unknown id, 409 when a write violates a database constraint (duplicate week, recipe already on the plan, unknown store item).
 
 The application uses a local SQLite database that is not committed to the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
 

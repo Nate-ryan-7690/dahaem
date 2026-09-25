@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.IOException;
@@ -27,6 +28,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -39,9 +41,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * SQLite file built the same way setup_db.py builds the demo database (schema.sql, then the
  * inventory catalog, the sample recipes and the demo data). Nothing is mocked: only Database's
  * target file is swapped out via the dahaem.db.path system property.
+ *
+ * <p>Every request runs as a logged-in user ({@code @WithMockUser}) and every write carries a CSRF
+ * token, as the real frontend's would; the login itself is covered by AuthApiTest.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@WithMockUser
 class ApiSmokeTest {
 
     private static final List<Path> SCRIPTS = List.of(
@@ -123,7 +129,7 @@ class ApiSmokeTest {
     void tagsCanBeAddedAndListed() throws Exception {
         int recipeId = recipeId("Klassische Rinder-Bolognese");
 
-        mvc.perform(post("/api/recipes/{id}/tags", recipeId)
+        mvc.perform(post("/api/recipes/{id}/tags", recipeId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\": \"api-smoke-tag\", \"category\": \"test\"}"))
                 .andExpect(status().isCreated())
@@ -134,7 +140,7 @@ class ApiSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].name", hasItem("api-smoke-tag")));
 
-        mvc.perform(post("/api/recipes/{id}/tags", recipeId)
+        mvc.perform(post("/api/recipes/{id}/tags", recipeId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"category\": \"test\"}"))
                 .andExpect(status().isBadRequest());
@@ -152,7 +158,7 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$[0].weekStartDate").isString())
                 .andExpect(jsonPath("$[0].recipes").isArray());
 
-        String created = mvc.perform(post("/api/meal-plans")
+        String created = mvc.perform(post("/api/meal-plans").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekStartDate\": \"2031-01-06\"}"))
                 .andExpect(status().isCreated())
@@ -161,7 +167,7 @@ class ApiSmokeTest {
                 .andReturn().getResponse().getContentAsString();
         int planId = Integer.parseInt(created.replaceAll(".*\"id\":(\\d+).*", "$1"));
 
-        mvc.perform(post("/api/meal-plans/{id}/recipes", planId)
+        mvc.perform(post("/api/meal-plans/{id}/recipes", planId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"recipeId\": " + recipeId + ", \"mealTime\": \"Abendessen\"}"))
                 .andExpect(status().isCreated())
@@ -170,20 +176,20 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.recipes[0].mealTime").value("Abendessen"));
 
         // Same week again violates meal_plan's UNIQUE week start; same recipe again violates the PK.
-        mvc.perform(post("/api/meal-plans")
+        mvc.perform(post("/api/meal-plans").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekStartDate\": \"2031-01-06\"}"))
                 .andExpect(status().isConflict());
-        mvc.perform(post("/api/meal-plans/{id}/recipes", planId)
+        mvc.perform(post("/api/meal-plans/{id}/recipes", planId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"recipeId\": " + recipeId + ", \"mealTime\": \"Abendessen\"}"))
                 .andExpect(status().isConflict());
 
-        mvc.perform(post("/api/meal-plans/{id}/recipes", 999_999)
+        mvc.perform(post("/api/meal-plans/{id}/recipes", 999_999).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"recipeId\": " + recipeId + ", \"mealTime\": \"Abendessen\"}"))
                 .andExpect(status().isNotFound());
-        mvc.perform(post("/api/meal-plans")
+        mvc.perform(post("/api/meal-plans").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekStartDate\": \"not-a-date\"}"))
                 .andExpect(status().isBadRequest());
@@ -211,7 +217,7 @@ class ApiSmokeTest {
     void shoppingListCanBeGeneratedPersistedReloadedAndSelectedFrom() throws Exception {
         int mealPlanId = 1; // seeded by demo_data.sql, with recipes attached
 
-        String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId))
+        String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId).with(csrf()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.shoppingListId").isNumber())
                 .andReturn().getResponse().getContentAsString();
@@ -235,12 +241,12 @@ class ApiSmokeTest {
         int matchingStoreItemId = anyStoreItemIdForInventoryItem(inventoryItemId);
         int mismatchedStoreItemId = anyStoreItemIdForADifferentInventoryItem(inventoryItemId);
 
-        mvc.perform(put("/api/shopping-lists/{listId}/items/{itemId}/store-item", shoppingListId, itemId)
+        mvc.perform(put("/api/shopping-lists/{listId}/items/{itemId}/store-item", shoppingListId, itemId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"storeItemId\": " + mismatchedStoreItemId + "}"))
                 .andExpect(status().isBadRequest());
 
-        mvc.perform(put("/api/shopping-lists/{listId}/items/{itemId}/store-item", shoppingListId, itemId)
+        mvc.perform(put("/api/shopping-lists/{listId}/items/{itemId}/store-item", shoppingListId, itemId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"storeItemId\": " + matchingStoreItemId + "}"))
                 .andExpect(status().isOk())
@@ -250,7 +256,7 @@ class ApiSmokeTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].selectedStoreItemId").value(matchingStoreItemId));
 
-        mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999_999))
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999_999).with(csrf()))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/shopping-lists/{id}", 999_999))
                 .andExpect(status().isNotFound());
@@ -260,7 +266,7 @@ class ApiSmokeTest {
     void purchasesCanBeRecordedAndSpendingIsTotalled() throws Exception {
         int storeItemId = anyStoreItemId();
 
-        mvc.perform(post("/api/purchases")
+        mvc.perform(post("/api/purchases").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"storeItemId\": " + storeItemId + ", \"purchaseDate\": \"2031-02-03\","
                                 + " \"quantityPurchased\": 2, \"pricePaid\": 3.50, \"expirationDate\": \"2031-03-01\"}"))
@@ -284,12 +290,12 @@ class ApiSmokeTest {
         mvc.perform(get("/api/analytics/spending").param("from", "2031-02-01"))
                 .andExpect(status().isBadRequest());
 
-        mvc.perform(post("/api/purchases")
+        mvc.perform(post("/api/purchases").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"storeItemId\": " + storeItemId + ", \"quantityPurchased\": 0,"
                                 + " \"pricePaid\": 1.0, \"expirationDate\": \"2031-03-01\"}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(post("/api/purchases")
+        mvc.perform(post("/api/purchases").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"storeItemId\": 999999, \"quantityPurchased\": 1,"
                                 + " \"pricePaid\": 1.0, \"expirationDate\": \"2031-03-01\"}"))

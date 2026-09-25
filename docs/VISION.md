@@ -66,6 +66,34 @@ swappable behind the existing provenance layer:
 - **Later:** a responsive web UI, then optionally a Kotlin/Android app over the
   same backend/API. A commercial version only with the licensed data sources above.
 
+## Running it on the network
+
+The REST API requires a login (session cookie + CSRF, passwords stored as
+BCrypt hashes, accounts created by the operator with
+`de.dahaem.auth.UserAdminRunner`; there is no public sign-up). The default in
+`application.properties` is still `server.address=127.0.0.1`, so a fresh install
+is never reachable from the network by accident.
+
+To use the PWA from phones and tablets (and later the Android client), the
+operator may expose it, but **only behind a reverse proxy that terminates TLS**
+(Caddy or nginx): the login form sends the password and every request carries
+the session cookie, neither of which may travel over plain HTTP. Either keep
+`127.0.0.1` with the proxy on the same host (preferred), or bind `0.0.0.0` if
+the proxy runs elsewhere, and override:
+
+```
+server.address=127.0.0.1                # or 0.0.0.0 for a proxy on another host
+server.forward-headers-strategy=native  # trust the proxy's X-Forwarded-Proto
+server.servlet.session.cookie.secure=true
+```
+
+A minimal Caddyfile: `dahaem.example.de { reverse_proxy 127.0.0.1:8080 }`.
+
+What the login does *not* do yet: all data is still one shared pool. The
+`household` / `household_member` tables exist, but inventory, recipes, meal
+plans, shopping lists and purchases are not yet scoped per household, which is
+fine for the single household this runs for today.
+
 ## Roadmap
 
 1. Core household app: inventory, recipes, meal planning, shopping lists.

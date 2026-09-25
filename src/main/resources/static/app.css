@@ -107,7 +107,7 @@ main {
 .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .toolbar select, .toolbar input[type="search"] { flex: 1; min-width: 0; }
 
-select, input[type="search"] {
+select, input[type="search"], input[type="email"], input[type="password"] {
     height: 44px;
     padding: 0 12px;
     border: 1px solid var(--border);
@@ -127,6 +127,7 @@ select, input[type="search"] {
 }
 .btn-primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
 .btn:disabled { opacity: 0.5; cursor: default; }
+.btn-small { height: 36px; padding: 0 10px; font-size: 0.875rem; }
 
 .list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .list > li + li { border-top: 1px solid var(--border); }
@@ -220,3 +221,11 @@ select, input[type="search"] {
 .nutrition { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); }
 .nutrition div { background: var(--surface); padding: 10px; text-align: center; }
 .nutrition strong { display: block; font-size: 1.05rem; }
+
+/* ---- Login ---- */
+
+.login-form { display: grid; gap: 14px; max-width: 360px; margin: 32px auto 0; }
+.login-form h2 { font-size: 1.35rem; }
+.login-form label { display: grid; gap: 6px; font-size: 0.875rem; font-weight: 600; }
+.login-form input { width: 100%; }
+.form-error { margin: 0; color: var(--sale); font-size: 0.9rem; }

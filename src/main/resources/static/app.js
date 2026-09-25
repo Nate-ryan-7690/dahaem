@@ -5,6 +5,8 @@
 let view = document.getElementById('view');
 const titleEl = document.getElementById('title');
 const offlineEl = document.getElementById('offline');
+const tabbarEl = document.querySelector('.tabbar');
+const logoutEl = document.getElementById('logout');
 
 // ---- Small helpers ----
 
@@ -59,6 +61,9 @@ function store(key, value) {
 
 class ApiError extends Error {}
 
+// Thrown on a 401 from the API: the session is missing or expired, so the router shows the login screen.
+class LoginRequired extends Error {}
+
 // Thrown when the user navigated away while a request was in flight, so the old
 // screen's render stops instead of drawing over the new one.
 class Superseded extends Error {}
@@ -82,6 +87,7 @@ async function fetchJson(path) {
         setOffline(true);
         throw new ApiError('Could not reach the DAHÄM server. Check your connection and try again.');
     }
+    if (res.status === 401) throw new LoginRequired();
     if (!res.ok) {
         let message = `The server answered ${res.status}.`;
         try {
@@ -481,18 +487,77 @@ async function renderPlans(planIdParam) {
     });
 }
 
+// ---- Login ----
+
+// Every POST needs the session's CSRF token in the header the server names.
+async function csrfHeaders() {
+    const csrf = await fetchJson('/api/auth/csrf');
+    return { [csrf.headerName]: csrf.token };
+}
+
+async function renderLogin() {
+    titleEl.textContent = 'DAHÄM';
+    view.innerHTML = `<form class="login-form" id="login-form" novalidate>
+        <h2>Log in</h2>
+        <label>Email<input type="email" name="email" autocomplete="username" required autofocus></label>
+        <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+        <p class="form-error" id="login-error" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit">Log in</button>
+    </form>`;
+    const form = view.querySelector('#login-form');
+    const errorEl = view.querySelector('#login-error');
+    const showLoginError = text => { errorEl.textContent = text; errorEl.hidden = false; };
+
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const button = form.querySelector('button');
+        button.disabled = true;
+        errorEl.hidden = true;
+        try {
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { ...(await csrfHeaders()), Accept: 'application/json' },
+                body: new URLSearchParams({ email: form.email.value, password: form.password.value })
+            });
+            if (res.ok) {
+                const next = store('dahaem.afterLogin');
+                store('dahaem.afterLogin', null);
+                location.hash = next && next !== '#/login' ? next : '#/shopping';
+                return;
+            }
+            showLoginError(res.status === 401 ? 'Wrong email or password.' : `The server answered ${res.status}. Please try again.`);
+        } catch (err) {
+            showLoginError(err instanceof ApiError ? err.message : 'Could not reach the DAHÄM server. Check your connection and try again.');
+        }
+        button.disabled = false;
+    });
+}
+
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST', headers: await csrfHeaders() });
+    } catch (e) { /* offline: still forget the saved answers below */ }
+    // The service worker's saved API answers belong to this login; don't leave them behind.
+    if ('caches' in window) await caches.delete('dahaem-api').catch(() => {});
+    location.hash = '#/login';
+}
+
 // ---- Router ----
 
 const routes = {
     shopping: renderShopping,
     inventory: renderInventory,
     recipes: (id) => (id ? renderRecipe(id) : renderRecipes()),
-    plans: renderPlans
+    plans: renderPlans,
+    login: renderLogin
 };
 
 async function route() {
     const [, section = 'shopping', param] = location.hash.replace(/^#\/?/, '/').split('/');
     const render = routes[section] || routes.shopping;
+    const onLogin = section === 'login';
+    tabbarEl.hidden = onLogin;
+    logoutEl.hidden = onLogin;
     document.querySelectorAll('.tabbar a').forEach(a => {
         if (a.dataset.tab === (routes[section] ? section : 'shopping')) a.setAttribute('aria-current', 'page');
         else a.removeAttribute('aria-current');
@@ -509,6 +574,14 @@ async function route() {
         await render(param ? decodeURIComponent(param) : undefined);
     } catch (err) {
         if (err instanceof Superseded) return;
+        if (err instanceof LoginRequired) {
+            // Come back to this screen once logged in.
+            if (token === routeToken) {
+                store('dahaem.afterLogin', location.hash);
+                location.hash = '#/login';
+            }
+            return;
+        }
         if (token === routeToken) showError(err);
     }
     if (token === routeToken) window.scrollTo(0, 0);
@@ -523,5 +596,6 @@ function setOffline(offline) {
 // Each screen starts at the top; the browser's restore would land mid-list after a reload.
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 window.addEventListener('hashchange', route);
+logoutEl.addEventListener('click', logout);
 window.addEventListener('online', () => { if (!offlineEl.hidden) route(); });
 route();
