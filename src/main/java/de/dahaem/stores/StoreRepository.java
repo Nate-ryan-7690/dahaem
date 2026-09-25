@@ -223,23 +223,21 @@ public class StoreRepository {
 
     /** Id of a row in the existing `store` table, creating it if the chain isn't there yet. */
     public int findOrCreateStore(String name) {
+        // Atomic upsert instead of check-then-act: store_name is UNIQUE, so ON CONFLICT DO NOTHING
+        // makes the insert a no-op when the store already exists, and the SELECT then returns its id.
+        // This removes the race where two callers both pass the SELECT and both INSERT a duplicate.
+        String upsert = "INSERT INTO store (store_name) VALUES (?) ON CONFLICT(store_name) DO NOTHING";
         String select = "SELECT store_id FROM store WHERE store_name = ?";
-        String insert = "INSERT INTO store (store_name) VALUES (?)";
         try (Connection con = Database.getConnection()) {
+            try (PreparedStatement ps = con.prepareStatement(upsert)) {
+                ps.setString(1, name);
+                ps.executeUpdate();
+            }
             try (PreparedStatement ps = con.prepareStatement(select)) {
                 ps.setString(1, name);
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        return rs.getInt(1);
-                    }
-                }
-            }
-            try (PreparedStatement ps = con.prepareStatement(insert, Statement.RETURN_GENERATED_KEYS)) {
-                ps.setString(1, name);
-                ps.executeUpdate();
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    keys.next();
-                    return keys.getInt(1);
+                    rs.next();
+                    return rs.getInt(1);
                 }
             }
         } catch (SQLException e) {

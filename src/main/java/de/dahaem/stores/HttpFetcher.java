@@ -59,7 +59,9 @@ public class HttpFetcher {
                 throw e;                              // missing page: retrying won't help
             } catch (IOException e) {
                 last = e;
-                pause(Duration.ofSeconds(3L * attempt));
+                if (attempt < ATTEMPTS) {                 // don't sleep after the final attempt
+                    pause(Duration.ofSeconds(3L * attempt));
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted while fetching " + url, e);
@@ -91,7 +93,9 @@ public class HttpFetcher {
                 return response.body();
             } catch (IOException e) {
                 last = e;
-                pause(Duration.ofSeconds(3L * attempt));
+                if (attempt < ATTEMPTS) {                 // don't sleep after the final attempt
+                    pause(Duration.ofSeconds(3L * attempt));
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new IOException("Interrupted while posting " + url, e);

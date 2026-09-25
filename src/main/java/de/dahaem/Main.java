@@ -35,12 +35,18 @@ public class Main {
 
         System.out.println("\nRecipes in database: " + recipes.totalRecipeCount());
         System.out.println("Recipe list:");
-        for (Recipe r : recipes.allRecipes()) {
+        List<Recipe> allRecipes = recipes.allRecipes();
+        for (Recipe r : allRecipes) {
             System.out.println("  " + r.getName() + " (" + r.getCalories() + " kcal, " + r.getCookTime() + " min)");
         }
 
         // ===== Recipe ingredients: prove the JOIN works =====
-        int sampleRecipeId = 10;
+        // Use the first real recipe id, not a hardcoded one, so the demo works on any database.
+        if (allRecipes.isEmpty()) {
+            System.out.println("\nNo recipes in the database yet.");
+            return;
+        }
+        int sampleRecipeId = allRecipes.get(0).getId();
         System.out.println("\nIngredients for recipe " + sampleRecipeId + ":");
         for (RecipeIngredient ing : recipes.findAllIngredients(sampleRecipeId)) {
             System.out.println("  " + ing.getQuantityNeeded() + " " + ing.getUnit()
