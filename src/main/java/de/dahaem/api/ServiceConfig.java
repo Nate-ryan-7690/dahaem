@@ -70,8 +70,10 @@ public class ServiceConfig {
     }
 
     @Bean
-    public ShoppingListService shoppingListService(ShoppingListRepository shoppingListRepository) {
-        return new ShoppingListService(shoppingListRepository);
+    public ShoppingListService shoppingListService(ShoppingListRepository shoppingListRepository,
+                                                     MealPlanRepository mealPlanRepository,
+                                                     InventoryRepository inventoryRepository) {
+        return new ShoppingListService(shoppingListRepository, mealPlanRepository, inventoryRepository);
     }
 
     @Bean

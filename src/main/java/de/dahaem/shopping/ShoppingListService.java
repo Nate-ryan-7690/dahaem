@@ -1,5 +1,12 @@
 package de.dahaem.shopping;
 
+import de.dahaem.inventory.InventoryRepository;
+import de.dahaem.inventory.Item;
+import de.dahaem.mealplanner.MealPlanRecipe;
+import de.dahaem.mealplanner.MealPlanRepository;
+
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -13,9 +20,18 @@ import java.util.Map;
 public class ShoppingListService {
 
     private final ShoppingListRepository repository;
+    private final MealPlanRepository mealPlanRepository;
+    private final InventoryRepository inventoryRepository;
 
     public ShoppingListService(ShoppingListRepository repository) {
+        this(repository, new MealPlanRepository(), new InventoryRepository());
+    }
+
+    public ShoppingListService(ShoppingListRepository repository, MealPlanRepository mealPlanRepository,
+                                InventoryRepository inventoryRepository) {
         this.repository = repository;
+        this.mealPlanRepository = mealPlanRepository;
+        this.inventoryRepository = inventoryRepository;
     }
 
     public ShoppingList buildFromRecipes(List<Integer> recipeIds) {
@@ -38,6 +54,72 @@ public class ShoppingListService {
                     bestOption));
         }
         return new ShoppingList(items);
+    }
+
+    public int generateFromMealPlan(int mealPlanId) {
+        return generateFromMealPlan(mealPlanId, LocalDate.now());
+    }
+
+    /**
+     * Builds a shopping list from a meal plan's recipes, subtracts what is already in inventory, and
+     * persists it: a shopping_list row linked to the plan, plus one shopping_list_item per item still
+     * missing (an item already fully in stock is dropped). Aggregation and store matching are the same
+     * as {@link #buildFromRecipes}; only items a current store option was found for get a persisted
+     * line, since shopping_list_item_store_item_id is a required (NOT NULL) reference to store_item.
+     * Runs as one transaction: either the whole list is saved or none of it is. Returns the new
+     * shopping_list's id.
+     */
+    public int generateFromMealPlan(int mealPlanId, LocalDate today) {
+        List<MealPlanRecipe> planRecipes = mealPlanRepository.findRecipesForPlan(mealPlanId);
+        List<Integer> recipeIds = planRecipes.stream().map(MealPlanRecipe::getRecipeId).distinct().toList();
+        ShoppingList list = buildFromRecipes(recipeIds, today);
+
+        Connection con = repository.openTransaction();
+        try {
+            int shoppingListId = repository.insertShoppingList(con, mealPlanId, today, false);
+
+            for (ShoppingListItem item : list.items()) {
+                int inStock = inventoryRepository.findById(item.inventoryItemId())
+                        .map(Item::getQuantity)
+                        .orElse(0);
+                double missing = item.totalQuantity() - inStock;
+                if (missing <= 0) {
+                    continue; // already fully covered by inventory
+                }
+                StoreOption bestOption = item.bestOption();
+                if (bestOption == null) {
+                    continue; // no current store option to reference; nothing we can persist
+                }
+                int quantityNeeded = (int) Math.ceil(missing);
+                repository.insertShoppingListItem(con, shoppingListId, bestOption.storeItemId(), null,
+                        quantityNeeded, bestOption.onSale(), false, false);
+            }
+
+            con.commit();
+            return shoppingListId;
+        } catch (SQLException e) {
+            rollback(con);
+            throw new RuntimeException("Could not generate shopping list for meal plan " + mealPlanId, e);
+        } catch (RuntimeException e) {
+            rollback(con);
+            throw e;
+        } finally {
+            close(con);
+        }
+    }
+
+    private static void rollback(Connection con) {
+        try {
+            con.rollback();
+        } catch (SQLException ignored) {
+        }
+    }
+
+    private static void close(Connection con) {
+        try {
+            con.close();
+        } catch (SQLException ignored) {
+        }
     }
 
     /**
@@ -106,6 +188,7 @@ public class ShoppingListService {
         Double tillPrice = effectivePrice == null ? null : effectivePrice + (deposit != null ? deposit : 0.0);
 
         return new StoreOption(
+                candidate.storeItemId(),
                 candidate.storeName(),
                 candidate.brandName(),
                 candidate.packageUnit(),
