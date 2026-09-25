@@ -1,0 +1,98 @@
+english	deutsch	category	subcategory
+laundry detergent	Waschmittel	cleaning	laundry
+liquid laundry detergent	Flüssigwaschmittel	cleaning	laundry
+laundry detergent pods	Waschmittelkapseln	cleaning	laundry
+fabric softener	Weichspüler	cleaning	laundry
+stain remover	Fleckentferner	cleaning	laundry
+color catcher sheets	Colortücher	cleaning	laundry
+dishwashing liquid	Spülmittel	cleaning	kitchen
+dishwasher tablets	Spülmaschinentabs	cleaning	kitchen
+dishwasher salt	Spülmaschinensalz	cleaning	kitchen
+dishwasher rinse aid	Klarspüler	cleaning	kitchen
+dish sponge	Spülschwamm	cleaning	kitchen
+dish brush	Spülbürste	cleaning	kitchen
+all-purpose cleaner	Allzweckreiniger	cleaning	general
+bathroom cleaner	Badreiniger	cleaning	bathroom
+glass cleaner	Glasreiniger	cleaning	general
+toilet cleaner	WC-Reiniger	cleaning	bathroom
+toilet block	WC-Stein	cleaning	bathroom
+limescale remover	Entkalker	cleaning	general
+oven cleaner	Backofenreiniger	cleaning	kitchen
+floor cleaner	Bodenreiniger	cleaning	floor
+wood floor cleaner	Holzbodenreiniger	cleaning	floor
+carpet cleaner	Teppichreiniger	cleaning	floor
+window cleaner wipes	Fenstertücher	cleaning	general
+microfiber cloth	Mikrofasertuch	cleaning	general
+cleaning cloth	Putzlappen	cleaning	general
+disinfectant spray	Desinfektionsspray	cleaning	general
+mold remover	Schimmelentferner	cleaning	bathroom
+drain cleaner	Rohrreiniger	cleaning	bathroom
+rubber gloves	Gummihandschuhe	cleaning	general
+mop	Wischmop	cleaning	floor
+broom	Besen	cleaning	floor
+dustpan	Kehrschaufel	cleaning	floor
+shower gel	Duschgel	personal care	bathing
+shampoo	Shampoo	personal care	hair
+conditioner	Spülung	personal care	hair
+hair mask	Haarkur	personal care	hair
+soap bar	Seife	personal care	bathing
+liquid hand soap	Flüssigseife	personal care	bathing
+toothpaste	Zahnpasta	personal care	dental
+toothbrush	Zahnbürste	personal care	dental
+mouthwash	Mundspülung	personal care	dental
+dental floss	Zahnseide	personal care	dental
+deodorant	Deodorant	personal care	general
+antiperspirant	Antitranspirant	personal care	general
+hand cream	Handcreme	personal care	skin care
+body lotion	Bodylotion	personal care	skin care
+face cream	Gesichtscreme	personal care	skin care
+sunscreen	Sonnencreme	personal care	skin care
+lip balm	Lippenpflege	personal care	skin care
+shaving foam	Rasierschaum	personal care	shaving
+shaving gel	Rasiergel	personal care	shaving
+razor blades	Rasierklingen	personal care	shaving
+aftershave	Aftershave	personal care	shaving
+cotton swabs	Wattestäbchen	personal care	general
+cotton pads	Wattepads	personal care	general
+hairbrush	Haarbürste	personal care	hair
+hair comb	Kamm	personal care	hair
+nail clippers	Nagelknipser	personal care	general
+hair gel	Haargel	personal care	hair
+hairspray	Haarspray	personal care	hair
+toilet paper	Toilettenpapier	paper goods	tissue
+kitchen roll	Küchenrolle	paper goods	tissue
+paper tissues	Taschentücher	paper goods	tissue
+paper napkins	Servietten	paper goods	tissue
+baking paper	Backpapier	household supplies	kitchen
+aluminum foil	Alufolie	household supplies	kitchen
+cling film	Frischhaltefolie	household supplies	kitchen
+freezer bags	Gefrierbeutel	household supplies	kitchen
+sandwich bags	Frischhaltebeutel	household supplies	kitchen
+trash bags	Müllbeutel	household supplies	general
+bin liners small	Müllbeutel klein	household supplies	general
+batteries AA	Batterien AA	household supplies	general
+batteries AAA	Batterien AAA	household supplies	general
+candles	Kerzen	household supplies	general
+matches	Streichhölzer	household supplies	general
+lighter	Feuerzeug	household supplies	general
+light bulbs	Glühbirnen	household supplies	general
+storage containers	Aufbewahrungsboxen	household supplies	kitchen
+tampons	Tampons	hygiene	feminine care
+sanitary pads	Binden	hygiene	feminine care
+panty liners	Slipeinlagen	hygiene	feminine care
+menstrual cup	Menstruationstasse	hygiene	feminine care
+diapers	Windeln	hygiene	baby care
+baby wipes	Feuchttücher	hygiene	baby care
+wet wipes	Feuchttücher universal	hygiene	general
+face masks	Gesichtsmasken	hygiene	general
+hand sanitizer	Desinfektionsmittel	hygiene	general
+plasters	Pflaster	hygiene	first aid
+first aid kit	Erste-Hilfe-Set	hygiene	first aid
+cat food dry	Katzentrockenfutter	pet	cat
+cat food wet	Katzennassfutter	pet	cat
+cat litter	Katzenstreu	pet	cat
+cat treats	Katzenleckerlis	pet	cat
+dog food dry	Hundetrockenfutter	pet	dog
+dog food wet	Hundenassfutter	pet	dog
+dog treats	Hundeleckerlis	pet	dog
+dog poop bags	Hundekotbeutel	pet	dog
