@@ -15,7 +15,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -62,11 +61,12 @@ class ShoppingListServiceTest {
         assertEquals("g", item.unit());
         assertTrue(item.sourceRecipeIds().containsAll(List.of(1, 2)));
         assertEquals(2, item.sourceRecipeIds().size());
-        assertNull(item.bestOption(), "no store_item was seeded, so there is no best option");
+        assertTrue(item.storeOptions().isEmpty(), "no store_item was seeded, so there are no options");
+        assertNull(item.selectedStoreItemId(), "a freshly built line has no user selection yet");
     }
 
     @Test
-    void picksMostRecentlySeenAvailableListingOverACheaperStaleOne() throws SQLException {
+    void collapsesDuplicateListingsOfTheSameProductByRecencyButKeepsOtherStoresSeparate() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (2, 'Milch', 'Milk', 'Milchprodukte')");
         exec("INSERT INTO recipe VALUES (3, 'Pfannkuchen')");
         exec("INSERT INTO recipe_ingredient VALUES (3, 2, 'ml', 500)");
@@ -74,7 +74,7 @@ class ShoppingListServiceTest {
         exec("INSERT INTO store VALUES (1, 'Aldi')");
         exec("INSERT INTO brand VALUES (1, 'MilchMarke')");
 
-        // A stale, no-longer-available relisting that happens to look cheaper.
+        // A stale, no-longer-available relisting of the SAME product at the SAME store — must collapse away.
         exec("INSERT INTO store_product VALUES (1, 1, 'ext-old', '2026-01-01', 0)");
         exec("INSERT INTO store_item VALUES (1, 1, 1, 2, 'ml', 500, 0.89, 1, NULL, 1, NULL)");
 
@@ -82,15 +82,26 @@ class ShoppingListServiceTest {
         exec("INSERT INTO store_product VALUES (2, 1, 'ext-new', '2026-09-20', 1)");
         exec("INSERT INTO store_item VALUES (2, 1, 1, 2, 'ml', 500, 1.29, 1, NULL, 2, NULL)");
 
+        // A genuinely different store's option for the same item — must NOT be collapsed away.
+        exec("INSERT INTO store VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand VALUES (2, 'AndereMarke')");
+        exec("INSERT INTO store_item VALUES (3, 2, 2, 2, 'ml', 500, 0.79, 1, NULL, NULL, NULL)");
+
         ShoppingList list = service.buildFromRecipes(List.of(3), LocalDate.of(2026, 9, 25));
 
         assertEquals(1, list.items().size());
-        StoreOption best = list.items().get(0).bestOption();
-        assertNotNull(best);
-        assertEquals("Aldi", best.storeName());
-        assertEquals("MilchMarke", best.brandName());
-        assertEquals(1.29, best.tillPrice(), 0.001, "must pick the current listing, not the cheaper stale one");
-        assertTrue(!best.onSale());
+        List<StoreOption> options = list.items().get(0).storeOptions();
+        assertEquals(2, options.size(), "the stale Aldi relisting is deduped, but Rewe's option is kept alongside it");
+        assertNull(list.items().get(0).selectedStoreItemId(), "surfacing options must not auto-select one");
+
+        // Cheapest till price first, but that is a display order, not a pre-made choice.
+        assertEquals("Rewe", options.get(0).storeName());
+        assertEquals(0.79, options.get(0).tillPrice(), 0.001);
+
+        StoreOption aldiOption = options.stream().filter(o -> o.storeName().equals("Aldi")).findFirst().orElseThrow();
+        assertEquals("MilchMarke", aldiOption.brandName());
+        assertEquals(1.29, aldiOption.tillPrice(), 0.001, "must keep the current listing, not the cheaper stale one");
+        assertTrue(!aldiOption.onSale());
     }
 
     @Test
@@ -106,12 +117,13 @@ class ShoppingListServiceTest {
 
         ShoppingList list = service.buildFromRecipes(List.of(4), LocalDate.of(2026, 9, 25));
 
-        StoreOption best = list.items().get(0).bestOption();
-        assertNotNull(best);
-        assertTrue(best.onSale());
-        assertEquals(0.99, best.salePrice(), 0.001);
-        assertEquals(2026, best.validUntil().getYear());
-        assertEquals(0.90, best.tillPrice(), 0.001, "deal price 1.80 for 2 => 0.90 per unit, no deposit");
+        List<StoreOption> options = list.items().get(0).storeOptions();
+        assertEquals(1, options.size());
+        StoreOption option = options.get(0);
+        assertTrue(option.onSale());
+        assertEquals(0.99, option.salePrice(), 0.001);
+        assertEquals(2026, option.validUntil().getYear());
+        assertEquals(0.90, option.tillPrice(), 0.001, "deal price 1.80 for 2 => 0.90 per unit, no deposit");
     }
 
     private void exec(String sql) throws SQLException {

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>DAHÄM</title>
+    <meta name="description" content="Shopping list, pantry, recipes and meal plans for the household.">
+    <meta name="theme-color" content="#1f6f5c" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#14201c" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="DAHÄM">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+    <h1 id="title">DAHÄM</h1>
+    <span id="offline" class="pill pill-warn" hidden>Offline</span>
+</header>
+
+<main id="view" tabindex="-1" aria-live="polite"></main>
+
+<nav class="tabbar" aria-label="Sections">
+    <a href="#/shopping" data-tab="shopping">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.4 11.2a1.5 1.5 0 0 0 1.5 1.2h8.7a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2"/><circle cx="9.5" cy="20" r="1.3"/><circle cx="17.5" cy="20" r="1.3"/></svg>
+        <span>Shopping</span>
+    </a>
+    <a href="#/inventory" data-tab="inventory">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 10h16M4 16h16"/></svg>
+        <span>Pantry</span>
+    </a>
+    <a href="#/recipes" data-tab="recipes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11M9 8h6"/></svg>
+        <span>Recipes</span>
+    </a>
+    <a href="#/plans" data-tab="plans">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+        <span>Meal plan</span>
+    </a>
+</nav>
+
+<script src="app.js"></script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker not registered', err));
+        });
+    }
+</script>
+</body>
+</html>
