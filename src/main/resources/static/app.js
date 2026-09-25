@@ -632,6 +632,45 @@ async function renderPlans(planIdParam) {
     });
 }
 
+// ---- Savings ----
+
+function suggestionRowHtml(s, whyText) {
+    return `<li><a class="row row-link" href="#/recipes/${s.recipeId}">
+        <div class="row-main"><div class="row-title">${esc(s.recipeName)}</div>
+        <div class="row-sub">${esc(whyText(s.score))}</div></div></a></li>`;
+}
+
+function onSaleWhy(score) {
+    return `${score} ingredient${score === 1 ? '' : 's'} on sale`;
+}
+
+function expiringSoonWhy(score) {
+    return `${score} ingredient${score === 1 ? '' : 's'} expiring soon`;
+}
+
+// Surfaces recipes ranked by current signals (on-sale ingredients, soon-to-expire pantry
+// items); the user still picks what to cook, this view only ranks and presents.
+async function renderSavings() {
+    titleEl.textContent = 'Savings';
+    showLoading();
+    const [savings, expiring] = await Promise.all([
+        api('/api/suggestions/by-savings'),
+        api('/api/suggestions/by-expiring?days=7')
+    ]);
+
+    let html = staleNotice() + '<h2 class="section-title">On sale now</h2>';
+    html += savings.length === 0
+        ? stateHtml('No savings-based suggestions right now', 'No recipe ingredients are currently on sale.')
+        : `<ul class="list">${savings.map(s => suggestionRowHtml(s, onSaleWhy)).join('')}</ul>`;
+
+    html += '<h2 class="section-title">Use it up</h2>';
+    html += expiring.length === 0
+        ? stateHtml('Nothing expiring soon', 'No pantry items are expiring within the next 7 days.')
+        : `<ul class="list">${expiring.map(s => suggestionRowHtml(s, expiringSoonWhy)).join('')}</ul>`;
+
+    view.innerHTML = html;
+}
+
 // ---- Login ----
 
 // Every POST needs the session's CSRF token in the header the server names.
@@ -703,6 +742,7 @@ const routes = {
     inventory: renderInventory,
     recipes: (id) => (id ? renderRecipe(id) : renderRecipes()),
     plans: renderPlans,
+    savings: renderSavings,
     login: renderLogin
 };
 
