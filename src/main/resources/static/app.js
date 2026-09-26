@@ -266,86 +266,105 @@ function condenseByItem(items) {
 
 // Renders the body of a shopping list (store-grouped rows, running total, weekly budget, check-off)
 // into `view`, on top of the caller's headerHtml. Shared by the picked list and the meal-plan list.
+// A row's checkbox means "bought"; its ✕ button means "already have it / don't need it" and drops
+// the item from the list (and every total) entirely — the two are tracked in separate storage sets
+// so removing something never checks it, and checking something never removes it.
 function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHtml = '' }) {
-    const items = condenseByItem(list.items);
+    const allItems = condenseByItem(list.items);
     const keyOf = it => 'i' + it.inventoryItemId;
-    const groups = new Map();
-    for (const it of items) {
-        const s = it.bestOption?.storeName || '';
-        if (!groups.has(s)) groups.set(s, []);
-        groups.get(s).push(it);
-    }
-    const storeNames = [...groups.keys()].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'));
+    const removedKey = checkedKey + '.removed';
     const checked = new Set(store(checkedKey) || []);
+    const removed = new Set(store(removedKey) || []);
     const savedBudget = store(BUDGET_KEY);
+    let updateSummary = () => {};
 
-    let html = staleNotice() + headerHtml + `<div class="summary" id="summary"></div>
-        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
-        <div class="budget"><label for="budget-input">Weekly budget €</label>
-        <input type="number" id="budget-input" min="0" step="5" inputmode="decimal" placeholder="e.g. 100" value="${savedBudget != null ? savedBudget : ''}"></div>
-        <div class="budget-bar" id="budget-bar"></div>`;
-    for (const s of storeNames) {
-        const rows = groups.get(s).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
-        html += `<h2 class="section-title">${esc(s || 'No store price yet')}</h2><ul class="list">`;
-        for (const it of rows) {
-            const o = it.bestOption;
-            const key = keyOf(it);
-            const forRecipes = it.sourceRecipeIds.map(r => recipeNames.get(r)).filter(Boolean).join(', ');
-            const badge = o?.onSale
-                ? ` <span class="pill pill-sale">Sale${o.validUntil ? ` until ${esc(dayFmt.format(parseDate(o.validUntil)))}` : ''}</span>`
-                : '';
-            html += `<li><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="chk-${it.inventoryItemId}">
-                <input type="checkbox" id="chk-${it.inventoryItemId}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
-                <div class="row-main">
-                    <div class="row-title">${esc(label(it.nameDeutsch))}${badge}</div>
-                    <div class="row-sub">${esc(it.qtyLabel)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
-                    ${forRecipes ? `<div class="row-sub small clamp">For ${esc(forRecipes)}</div>` : ''}
-                </div>
-                <div class="row-end">${priceHtml(o)}</div>
-            </label></li>`;
+    view.innerHTML = staleNotice() + headerHtml + '<div id="shopping-body"></div>';
+
+    function renderBody() {
+        const items = allItems.filter(it => !removed.has(keyOf(it)));
+        const groups = new Map();
+        for (const it of items) {
+            const s = it.bestOption?.storeName || '';
+            if (!groups.has(s)) groups.set(s, []);
+            groups.get(s).push(it);
         }
-        html += '</ul>';
-    }
-    view.innerHTML = html;
+        const storeNames = [...groups.keys()].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'));
 
-    const updateSummary = () => {
-        const total = items.length;
-        const done = items.filter(it => checked.has(keyOf(it))).length;
-        const remaining = items
-            .filter(it => !checked.has(keyOf(it)) && it.bestOption?.tillPrice != null)
+        let html = `<div class="summary" id="summary"></div>
+            <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+            <div class="budget"><label for="budget-input">Weekly budget €</label>
+            <input type="number" id="budget-input" min="0" step="5" inputmode="decimal" placeholder="e.g. 100" value="${savedBudget != null ? savedBudget : ''}"></div>
+            <div class="budget-bar" id="budget-bar"></div>`;
+        if (removed.size) {
+            html += `<p class="removed-note small">${removed.size} item${removed.size === 1 ? '' : 's'} removed
+                — <button type="button" class="link-btn" data-action="restore-removed">Restore</button></p>`;
+        }
+        for (const s of storeNames) {
+            const rows = groups.get(s).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
+            html += `<h2 class="section-title">${esc(s || 'No store price yet')}</h2><ul class="list">`;
+            for (const it of rows) {
+                const o = it.bestOption;
+                const key = keyOf(it);
+                const itemLabel = esc(label(it.nameDeutsch));
+                const forRecipes = it.sourceRecipeIds.map(r => recipeNames.get(r)).filter(Boolean).join(', ');
+                const badge = o?.onSale
+                    ? ` <span class="pill pill-sale">Sale${o.validUntil ? ` until ${esc(dayFmt.format(parseDate(o.validUntil)))}` : ''}</span>`
+                    : '';
+                html += `<li class="shop-row"><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="chk-${it.inventoryItemId}">
+                    <input type="checkbox" id="chk-${it.inventoryItemId}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
+                    <div class="row-main">
+                        <div class="row-title">${itemLabel}${badge}</div>
+                        <div class="row-sub">${esc(it.qtyLabel)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
+                        ${forRecipes ? `<div class="row-sub small clamp">For ${esc(forRecipes)}</div>` : ''}
+                    </div>
+                    <div class="row-end">${priceHtml(o)}</div>
+                </label><button type="button" class="remove-item" data-remove-key="${esc(key)}" title="I already have this" aria-label="Remove ${itemLabel}, I already have it">✕</button></li>`;
+            }
+            html += '</ul>';
+        }
+        document.getElementById('shopping-body').innerHTML = html;
+
+        updateSummary = () => {
+            const total = items.length;
+            const done = items.filter(it => checked.has(keyOf(it))).length;
+            const remaining = items
+                .filter(it => !checked.has(keyOf(it)) && it.bestOption?.tillPrice != null)
+                .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
+            document.getElementById('summary').innerHTML =
+                `<span><strong>${done}</strong> of ${total} in the basket</span>
+                 <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
+            document.getElementById('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
+        };
+        updateSummary();
+
+        // One pack of the cheapest option per priced item; each item counted once (condensed).
+        const estTotal = items.filter(it => it.bestOption?.tillPrice != null)
             .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
-        document.getElementById('summary').innerHTML =
-            `<span><strong>${done}</strong> of ${total} in the basket</span>
-             <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
-        document.getElementById('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
-    };
-    updateSummary();
-
-    // One pack of the cheapest option per priced item; each item counted once (condensed).
-    const estTotal = items.filter(it => it.bestOption?.tillPrice != null)
-        .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
-    const unpriced = items.filter(it => it.bestOption?.tillPrice == null).length;
-    const updateBudget = () => {
-        const bar = document.getElementById('budget-bar');
-        const budget = Number(document.getElementById('budget-input').value);
-        const note = unpriced ? ` · ${unpriced} item${unpriced === 1 ? '' : 's'} without a price yet` : '';
-        if (!budget || budget <= 0) {
-            bar.className = 'budget-bar';
-            bar.innerHTML = `<span>Estimated total <strong>${eur.format(estTotal)}</strong></span>`
-                + `<span class="muted small">one pack per item${note}</span>`;
-            return;
-        }
-        const left = budget - estTotal;
-        bar.className = 'budget-bar' + (left < 0 ? ' over' : '');
-        bar.innerHTML = `<span>Est. <strong>${eur.format(estTotal)}</strong> of ${eur.format(budget)}</span>`
-            + `<span>${left < 0 ? `over by ${eur.format(-left)}` : `${eur.format(left)} left`}${note ? `<span class="muted small">${note}</span>` : ''}</span>`;
-    };
-    updateBudget();
-    document.getElementById('budget-input').addEventListener('input', e => {
-        const v = Number(e.target.value);
-        store(BUDGET_KEY, e.target.value === '' ? null : (Number.isFinite(v) ? v : null));
+        const unpriced = items.filter(it => it.bestOption?.tillPrice == null).length;
+        const updateBudget = () => {
+            const bar = document.getElementById('budget-bar');
+            const budget = Number(document.getElementById('budget-input').value);
+            const note = unpriced ? ` · ${unpriced} item${unpriced === 1 ? '' : 's'} without a price yet` : '';
+            if (!budget || budget <= 0) {
+                bar.className = 'budget-bar';
+                bar.innerHTML = `<span>Estimated total <strong>${eur.format(estTotal)}</strong></span>`
+                    + `<span class="muted small">one pack per item${note}</span>`;
+                return;
+            }
+            const left = budget - estTotal;
+            bar.className = 'budget-bar' + (left < 0 ? ' over' : '');
+            bar.innerHTML = `<span>Est. <strong>${eur.format(estTotal)}</strong> of ${eur.format(budget)}</span>`
+                + `<span>${left < 0 ? `over by ${eur.format(-left)}` : `${eur.format(left)} left`}${note ? `<span class="muted small">${note}</span>` : ''}</span>`;
+        };
         updateBudget();
-    });
+        document.getElementById('budget-input').addEventListener('input', e => {
+            const v = Number(e.target.value);
+            store(BUDGET_KEY, e.target.value === '' ? null : (Number.isFinite(v) ? v : null));
+            updateBudget();
+        });
+    }
+
+    renderBody();
 
     view.addEventListener('change', e => {
         const box = e.target.closest('input[type="checkbox"][data-key]');
@@ -354,6 +373,21 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
         box.closest('.shop-item').classList.toggle('done', box.checked);
         store(checkedKey, [...checked]);
         updateSummary();
+    });
+
+    view.addEventListener('click', e => {
+        const removeBtn = e.target.closest('.remove-item[data-remove-key]');
+        if (removeBtn) {
+            removed.add(removeBtn.dataset.removeKey);
+            store(removedKey, [...removed]);
+            renderBody();
+            return;
+        }
+        if (e.target.closest('[data-action="restore-removed"]')) {
+            removed.clear();
+            store(removedKey, []);
+            renderBody();
+        }
     });
 }
 
@@ -429,6 +463,7 @@ function wireClearPicks() {
     if (btn) btn.addEventListener('click', () => {
         store(PICK_KEY, []);
         store('dahaem.checked.picked', []);
+        store('dahaem.checked.picked.removed', []);
         location.hash = '#/savings';
     });
 }
