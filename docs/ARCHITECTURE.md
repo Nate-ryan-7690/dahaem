@@ -94,14 +94,17 @@ shopping list actually reads.
 
 **Matching and promotion**, the step in between:
 
-- `StoreMatchService` links `store_product` rows to `inventory_item` catalog rows
-  by name (exact match, then longest-whole-word-contains match, with manual
-  overrides from `config/store_overrides.json` taking priority). It matches
-  conservatively on purpose — a store sells specific branded products, the
-  catalog holds generic ingredients, and inventing catalog rows for a ~1,700-item
-  ALDI range (much of it non-food) would wreck the curated catalog. Unmatched
-  products are written to `data/stores/unmatched_*.tsv` for a human to review,
-  never guessed into the database.
+- `StoreMatchService` links `store_product`/`store_offer` rows to
+  `inventory_item` catalog rows by name (manual overrides from
+  `config/store_overrides.json` first, then exact match, then a German-aware
+  fuzzy match that folds plurals/inflection and matches German compound heads,
+  e.g. `Gemüsezwiebeln` -> `Zwiebel` — see
+  [`docs/store-matching.md`](store-matching.md)). It matches conservatively on
+  purpose — a store sells specific branded products, the catalog holds generic
+  ingredients, and inventing catalog rows for a ~1,700-item ALDI range (much of
+  it non-food) would wreck the curated catalog. Unmatched products are written
+  to `data/stores/unmatched_*.tsv` for a human to review, never guessed into
+  the database.
 - `StorePromotionService` promotes matched, available, priced, parseable-pack-size
   `store_product` rows into verified `store_item` rows.
 - `StoreDiscountService` turns matched flyer offers into `store_item` (bootstrapped
