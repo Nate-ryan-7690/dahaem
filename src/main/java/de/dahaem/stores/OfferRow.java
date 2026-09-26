@@ -10,6 +10,7 @@ public record OfferRow(
         String externalId,
         String brand,
         String name,
+        String category,
         String salesUnit,
         double salePrice,
         int dealQuantity,

@@ -12,27 +12,52 @@ guessed into the database.
 ## Match order
 
 1. **`config/store_overrides.json`** — an exact map of normalized store name
-   -> `inventory_item_id`. Always checked first and always wins.
-2. **Exact match** — the normalized store name equals a catalog item's
+   -> `inventory_item_id`. Always checked first and always wins, regardless
+   of every rule below — a human override overrules the non-food guard too.
+2. **Non-food guard** — rejected outright when the product's normalized
+   name *or* category contains a cleaning/hygiene/household marker (a small,
+   commented list in `StoreMatchService.NON_FOOD_MARKERS`: `reiniger`, `wc`,
+   `wasch`, `putz`, `spül`/`spul`, `weichspüler`, `klar`, `kosmetik`,
+   `shampoo`, `seife`, `dusch`, `duft`, `kerze`/`teelicht`, `batterie`,
+   `papier`, `windel`). This is what stops a "WC-Reiniger Zitrone" from
+   resolving to the catalog's lemon just because the word is in the name.
+3. **Exact match** — the normalized store name equals a catalog item's
    normalized English or German name outright.
-3. **German-aware fuzzy match** — after dropping a small stoplist of
-   descriptors (colors, sizes like `XXL`, generic words like `frisch`/
-   `Aktion`, and a few fused cut/part suffixes like `-herzen`/`-scheiben`),
-   each remaining word is compared against every catalog term:
-   - **exact**: the word equals the term, or the term plus a common German
+4. **German-aware fuzzy match, head noun only** — after dropping a small
+   stoplist of descriptors (colors, sizes like `XXL`, generic words like
+   `frisch`/`Aktion`, a few fused cut/part suffixes like
+   `-herzen`/`-scheiben`) and any size/quantity token (`100`, `750ml`,
+   `3x32g`, a bare unit like `g`/`stück`), only the **last remaining word —
+   the head noun** — is compared against catalog terms, never an earlier
+   word in the name:
+   - **exact**: the head equals the term, or the term plus a common German
      plural/inflection ending (`süßkartoffeln` folds onto `süßkartoffel`);
-   - **compound head**: the word *ends with* the term, optionally inflected,
-     with something left over in front (`gemüsezwiebeln` ends with
-     `zwiebeln` -> `zwiebel`). Terms under 4 characters are never used this
-     way, and the match must land on the end of the word — never the middle
-     or start — so short terms don't fire inside unrelated words
+   - **compound head**: the head word *ends with* the term, optionally
+     inflected, with something left over in front (`gemüsezwiebeln` ends
+     with `zwiebeln` -> `zwiebel`). Terms under 4 characters are never used
+     this way, and the match must land on the end of the word — never the
+     middle or start — so short terms don't fire inside unrelated words
      (`kabellose` never matches a catalog term `bell`).
+
+   The head-noun restriction is what keeps a processed derivative from
+   matching the raw ingredient just because the ingredient's name shows up
+   earlier: "Kartoffel-Ringe" (head noun `Ringe`), "Kartoffel Püree" (head
+   noun `Püree`) and "Semmel-Knödel oder Kartoffel-Klöße" (head noun
+   `Klöße`) all stay unmatched against `kartoffel`, while "Kartoffeln"
+   itself still matches, since the head noun *is* the catalog term. A word
+   that isn't on the descriptor/size stoplist is never silently dropped
+   just because it functions like a modifier — "Zitrone Plus" has head noun
+   `Plus`, which blocks the match rather than falling back to `Zitrone`.
+
+   A multi-word catalog term (e.g. an English phrase) still falls back to
+   the old whole-name "contains" check, independent of the head-noun rule.
 
    When several catalog items match, the longest catalog term wins (most
    specific); a tie in length prefers an exact hit over a compound one; a
    remaining tie is left unmatched rather than guessed.
 
-Everything that doesn't resolve is written to a review file
+Everything that doesn't resolve — including anything the non-food guard or
+the head-noun rule rejects — is written to a review file
 (`data/stores/unmatched_aldi.tsv` for `match aldi`,
 `data/stores/unmatched_offers.tsv` for `discounts`) with both the raw and
 normalized name, never silently dropped.

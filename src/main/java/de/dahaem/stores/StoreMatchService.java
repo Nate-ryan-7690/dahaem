@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Links store_product/store_offer rows to inventory_item catalog rows by name (no SQL, no web).
@@ -22,26 +23,41 @@ import java.util.Set;
  * cosmetics, detergent, wine, gift cards) would wreck the curated catalog.
  *
  * Match order per store product/offer (after brand-stripping + normalizing):
- *   1. store_overrides.json exact map  (normalized store name -> catalog id)
- *   2. exact: normalized store name equals a catalog item's normalized de/en name
- *   3. German-aware fuzzy match, word by word:
- *      - a small DESCRIPTOR stoplist (colors, sizes, "frisch"/"Aktion", and a
- *        handful of fused cut/part suffixes like "-herzen"/"-scheiben") is
- *        dropped before comparing;
- *      - a catalog term matches an offer word EXACTLY when the word equals the
- *        term, or equals the term plus a common German plural/inflection ending
- *        (süßkartoffeln <-> süßkartoffel);
- *      - a catalog term matches as a COMPOUND HEAD when the offer word *ends
- *        with* the term (optionally inflected) and has a non-empty prefix
- *        (gemüsezwiebeln ends with zwiebeln -> zwiebel). Terms under 4 chars are
- *        never used for compound matching, and the match must land on the word's
- *        end, never the middle or start, so "bell" never fires inside
- *        "kabellose". A multi-word catalog term (e.g. an English phrase) still
- *        falls back to the old whole-word-run "contains" check.
+ *   1. store_overrides.json exact map  (normalized store name -> catalog id) — always
+ *      wins, regardless of every rule below (a human override overrules the guard too).
+ *   2. non-food guard: reject outright when the product's name or category carries a
+ *      cleaning/hygiene/household marker (see NON_FOOD_MARKERS) — a "WC-Reiniger Zitrone"
+ *      must never resolve to the catalog's lemon just because the word appears.
+ *   3. exact: normalized store name equals a catalog item's normalized de/en name
+ *   4. German-aware fuzzy match, HEAD NOUN ONLY: a size/number/descriptor stoplist is
+ *      dropped from the (space-split) name, and only the last remaining word — the head
+ *      noun — is compared against catalog terms, never any earlier word. This is what
+ *      keeps "Kartoffel-Ringe" (head "ringe") and "Kartoffel Püree" (head "püree") from
+ *      matching the catalog's "kartoffel" just because that word appears earlier in the
+ *      name; "Kartoffeln" (head "kartoffeln") still matches, since the head noun itself
+ *      folds onto the catalog term. Dropped before the head is picked:
+ *      - a small DESCRIPTOR stoplist (colors, sizes, "frisch"/"Aktion", and a handful of
+ *        fused cut/part suffixes like "-herzen"/"-scheiben");
+ *      - size/quantity tokens ("100", "750ml", "3x32g", a bare unit like "g"/"stück").
+ *      A word NOT on either stoplist (e.g. "Plus" in "Zitrone Plus") is kept and, if it
+ *      ends up as the head, blocks the match — it is not silently treated as a descriptor.
+ *      The head noun then matches a catalog term the same way the old word-by-word scan
+ *      did:
+ *      - EXACTLY when the head equals the term, or equals the term plus a common German
+ *        plural/inflection ending (süßkartoffeln <-> süßkartoffel);
+ *      - as a COMPOUND HEAD when the head word *ends with* the term (optionally
+ *        inflected) and has a non-empty prefix (gemüsezwiebeln ends with zwiebeln ->
+ *        zwiebel). Terms under 4 chars are never used for compound matching, and the
+ *        match must land on the word's end, never the middle or start, so "bell" never
+ *        fires inside "kabellose". A multi-word catalog term (e.g. an English phrase)
+ *        still falls back to the old whole-name "contains" check, independent of the
+ *        head-noun restriction.
  *      - the longest matching catalog term wins; ties of equal length prefer an
  *        EXACT hit over a COMPOUND one; a remaining tie (same length, same kind,
  *        different catalog items) is left unmatched rather than guessed.
- * Unmatched products are written to a review file; nothing is guessed into the DB.
+ * Unmatched or rejected products are written to a review file; nothing is guessed into
+ * the DB — an uncertain or non-food-flagged match is left for a human, per the review
+ * workflow below, rather than linked speculatively.
  * See docs/store-matching.md for the grow-from-review workflow (review file ->
  * config/store_overrides.json).
  */
@@ -65,6 +81,29 @@ public class StoreMatchService {
     /** Catalog terms shorter than this are never used for compound-head matching (too many false hits). */
     private static final int MIN_COMPOUND_TERM_LENGTH = 4;
 
+    /** Bare unit/multiplier words that can trail a number as their own token ("100 g", "6 x"). */
+    private static final Set<String> BARE_SIZE_UNITS =
+            Set.of("g", "kg", "mg", "ml", "cl", "l", "stk", "stueck", "st", "x");
+
+    /** A token that is purely a quantity: "100", "750ml", "3x32g" — dropped before picking the head noun. */
+    private static final Pattern SIZE_TOKEN =
+            Pattern.compile("^[0-9]+(x[0-9]+)?(g|kg|mg|ml|cl|l|stk|stueck|st)?$");
+
+    /**
+     * Non-food markers: when the product's normalized name OR category contains one of
+     * these, no catalog (food/recipe) match is made, however well a word would otherwise
+     * line up — this is what stops "WC-Reiniger Zitrone" from resolving to the catalog's
+     * lemon. Kept deliberately small and grouped by kind; each entry was chosen from real
+     * production mismatches or their obvious siblings, not a general non-food dictionary.
+     */
+    private static final Set<String> NON_FOOD_MARKERS = Set.of(
+            // cleaning / laundry
+            "reiniger", "wc", "wasch", "putz", "spuel", "spul", "weichspueler", "klar",
+            // personal care / cosmetics
+            "kosmetik", "shampoo", "seife", "dusch", "duft",
+            // household / misc non-food
+            "kerze", "teelicht", "batterie", "papier", "windel");
+
     private enum Tier { NONE, COMPOUND, EXACT }
 
     private final StoreRepository repository;
@@ -83,7 +122,7 @@ public class StoreMatchService {
         Map<Integer, Integer> matches = new HashMap<>();       // storeProductId -> inventoryItemId
         List<StoreProductRef> unmatched = new ArrayList<>();
         for (StoreProductRef p : products) {
-            Integer itemId = match(p.name(), catalog);
+            Integer itemId = match(p.name(), p.category(), catalog);
             if (itemId != null) {
                 matches.put(p.id(), itemId);
             } else {
@@ -97,13 +136,21 @@ public class StoreMatchService {
         return new ImportSummary(storeName, "MATCH", "OK", 0, matches.size(), List.of(), notes);
     }
 
+    /** Convenience overload for callers with no category available (guard is skipped). */
     Integer match(String storeName, List<CatalogItem> catalog) {
+        return match(storeName, null, catalog);
+    }
+
+    Integer match(String storeName, String category, List<CatalogItem> catalog) {
         String key = Normalizer.key(storeName);
         if (key.isEmpty()) {
             return null;
         }
         if (overrides.containsKey(key)) {
-            return overrides.get(key);
+            return overrides.get(key);                            // override wins regardless of the guard/rules below
+        }
+        if (isNonFood(key, category)) {
+            return null;                                          // cleaning/hygiene/household marker -> never a food match
         }
         for (CatalogItem c : catalog) {
             if (key.equals(c.normDeutsch()) || key.equals(c.normEnglish())) {
@@ -113,13 +160,14 @@ public class StoreMatchService {
 
         List<String> words = new ArrayList<>();
         for (String w : key.split(" ")) {
-            if (!w.isEmpty() && !DESCRIPTORS.contains(w)) {
+            if (!w.isEmpty() && !isNoiseWord(w)) {
                 words.add(w);
             }
         }
         if (words.isEmpty()) {
-            return null;                                          // descriptor-only leftover -> not a match
+            return null;                                          // descriptor/size-only leftover -> not a match
         }
+        String head = words.get(words.size() - 1);                // head noun: last significant token
         String padded = " " + key + " ";
 
         Integer best = null;
@@ -132,7 +180,7 @@ public class StoreMatchService {
                 if (norm.isEmpty()) {
                     continue;
                 }
-                Tier tier = tierFor(norm, words, padded);
+                Tier tier = tierFor(norm, head, padded);
                 if (tier == Tier.NONE) {
                     continue;
                 }
@@ -152,22 +200,28 @@ public class StoreMatchService {
         return tie ? null : best;
     }
 
-    /** Best match tier a single catalog term reaches against the (descriptor-stripped) offer words. */
-    private static Tier tierFor(String norm, List<String> words, String padded) {
+    /** True when the product's name or category carries a non-food marker (see NON_FOOD_MARKERS). */
+    private static boolean isNonFood(String nameKey, String category) {
+        String catKey = category == null ? "" : Normalizer.key(category);
+        for (String marker : NON_FOOD_MARKERS) {
+            if (nameKey.contains(marker) || catKey.contains(marker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Descriptor, or a size/quantity token ("100", "750ml", "3x32g", a bare unit) — never the head noun. */
+    private static boolean isNoiseWord(String word) {
+        return DESCRIPTORS.contains(word) || BARE_SIZE_UNITS.contains(word) || SIZE_TOKEN.matcher(word).matches();
+    }
+
+    /** Match tier a single catalog term reaches against the head noun (last significant word of the name). */
+    private static Tier tierFor(String norm, String head, String padded) {
         if (norm.indexOf(' ') >= 0) {                            // multi-word catalog term: whole-word-run only
             return padded.contains(" " + norm + " ") ? Tier.COMPOUND : Tier.NONE;
         }
-        Tier best = Tier.NONE;
-        for (String word : words) {
-            Tier t = tierForWord(norm, word);
-            if (t == Tier.EXACT) {
-                return Tier.EXACT;
-            }
-            if (t == Tier.COMPOUND) {
-                best = Tier.COMPOUND;
-            }
-        }
-        return best;
+        return tierForWord(norm, head);
     }
 
     private static Tier tierForWord(String norm, String word) {

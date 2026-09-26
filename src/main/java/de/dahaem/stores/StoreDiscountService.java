@@ -56,7 +56,7 @@ public class StoreDiscountService {
                     unmatched++;
                     continue;
                 }
-                Integer itemId = matcher.match(matchName, catalog);
+                Integer itemId = matcher.match(matchName, o.category(), catalog);
                 if (itemId == null) {
                     unmatched++;
                     unmatchedRows.add(o.storeId() + "\t" + o.brand() + "\t" + o.name());

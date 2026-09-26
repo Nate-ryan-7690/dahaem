@@ -144,4 +144,94 @@ class StoreMatchServiceTest {
         assertNull(matchGerman("Malerkrepp"));
         assertNull(matchGerman("Pyjama"));
     }
+
+    // ---------------------------------------------------------------------------------
+    // Precision rules: head-noun matching + non-food guard, modeled on real bad matches
+    // from production data (see the PR description for the full list).
+    // ---------------------------------------------------------------------------------
+
+    private static final int KARTOFFEL = 30;
+    private static final int ZITRONE = 31;
+    private static final int MAYONNAISE = 32;
+    private static final int AIOLI = 33;
+
+    private static final List<CatalogItem> PRECISION_CATALOG = List.of(
+            item(KARTOFFEL, "potato", "Kartoffel"),
+            item(ZITRONE, "lemon", "Zitrone"),
+            item(MAYONNAISE, "mayonnaise", "Mayonnaise"),
+            item(AIOLI, "aioli", "Aioli"));
+
+    private static Integer matchPrecision(String name, String category) {
+        return new StoreMatchService(null, Map.of()).match(name, category, PRECISION_CATALOG);
+    }
+
+    // --- MUST REJECT: catalog word appears in the name, but is not the head noun ---
+
+    @Test
+    void rejectsKartoffelRingeSinceHeadIsRinge() {
+        // "SUN SNACKS Kartoffel-Ringe / Dolphy's" (chips-salzgebaeck) -> head "ringe", not "kartoffel"
+        assertNull(matchPrecision("Kartoffel-Ringe", "chips-salzgebaeck"));
+    }
+
+    @Test
+    void rejectsKartoffelPureeSinceHeadIsPueree() {
+        assertNull(matchPrecision("Kartoffel Püree", "beilagen"));
+    }
+
+    @Test
+    void rejectsKartoffelKloesseSinceHeadIsKloesse() {
+        assertNull(matchPrecision("Semmel-Knödel oder Kartoffel-Klöße", "beilagen"));
+    }
+
+    @Test
+    void rejectsKartoffelchipsCompoundEndingInDifferentNoun() {
+        // Single fused word ending in "chips", not "kartoffel" -> already rejected by the
+        // existing suffix rule; asserted here so the head-noun change doesn't regress it.
+        assertNull(matchPrecision("Kartoffelchips", "chips-salzgebaeck"));
+    }
+
+    @Test
+    void rejectsZitronePlusSinceTrailingModifierIsNotTheCatalogTerm() {
+        // Head is "plus" (BIO, fett-oele-essig, an actual juice) -> "plus" is not stripped as
+        // a descriptor, so it blocks the match rather than falling back to "zitrone".
+        assertNull(matchPrecision("Zitrone Plus", "fett-oele-essig"));
+    }
+
+    // --- MUST REJECT: non-food guard (category or name carries a cleaning/hygiene marker) ---
+
+    @Test
+    void rejectsWcReinigerZitroneByNameMarker() {
+        // "WC-Reiniger Zitrone" (POWER FORCE) -> "zitrone" is even the head noun here, so only
+        // the non-food guard stops this from resolving to the catalog's lemon.
+        assertNull(matchPrecision("WC-Reiniger Zitrone", "haushaltsreiniger"));
+    }
+
+    @Test
+    void rejectsByCategoryMarkerEvenWhenNameLooksLikeFood() {
+        assertNull(matchPrecision("Zitrone", "wc reiniger"));
+    }
+
+    // --- MUST KEEP: real catalog terms still match ---
+
+    @Test
+    void keepsPlainKartoffelnMatch() {
+        assertEquals(KARTOFFEL, matchPrecision("Kartoffeln", "gemuese"));
+        assertEquals(KARTOFFEL, matchPrecision("Kartoffel", "gemuese"));
+    }
+
+    @Test
+    void keepsPlainMayonnaiseMatch() {
+        assertEquals(MAYONNAISE, matchPrecision("Mayonnaise", "sossen-dressings"));
+    }
+
+    @Test
+    void keepsMojoSauceAioliByHeadNoun() {
+        assertEquals(AIOLI, matchPrecision("Mojo-Sauce/Aioli", "sossen-dressings"));
+    }
+
+    @Test
+    void keepsPlainZitroneAndZitronenMatch() {
+        assertEquals(ZITRONE, matchPrecision("Zitrone", "obst"));
+        assertEquals(ZITRONE, matchPrecision("Zitronen", "obst"));
+    }
 }
