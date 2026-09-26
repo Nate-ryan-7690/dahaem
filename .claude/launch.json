@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dahaem",
+      "runtimeExecutable": "java",
+      "runtimeArgs": ["-jar", "target/dahaem-1.0-SNAPSHOT-shaded.jar"],
+      "port": 8080
+    }
+  ]
+}
