@@ -5,6 +5,7 @@ import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.RecipeService;
 import de.dahaem.shopping.ShoppingListService;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,6 +65,19 @@ public class MealPlanController {
         }
         RecipeController.findRecipe(recipeService, request.recipeId());
         mealPlanService.addRecipe(id, request.recipeId(), request.mealTime().trim());
+        return MealPlanDto.from(plan, mealPlanService.recipesForPlan(id));
+    }
+
+    /** Removes a recipe from a plan and returns the updated plan. 404 if the plan or that recipe isn't found. */
+    @DeleteMapping("/{id}/recipes/{recipeId}")
+    public MealPlanDto removeRecipe(@PathVariable("id") int id, @PathVariable("recipeId") int recipeId) {
+        MealPlan plan = mealPlanService.allPlans().stream()
+                .filter(p -> p.getId() == id)
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("No meal plan with id " + id));
+        if (!mealPlanService.removeRecipe(id, recipeId)) {
+            throw new NotFoundException("Recipe " + recipeId + " is not on meal plan " + id);
+        }
         return MealPlanDto.from(plan, mealPlanService.recipesForPlan(id));
     }
 
