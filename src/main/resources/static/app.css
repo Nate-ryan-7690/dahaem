@@ -204,6 +204,9 @@ select, input[type="search"], input[type="email"], input[type="password"] {
 .shop-item.done .row-end, .shop-item.done .row-sub { opacity: 0.6; }
 .price { font-weight: 700; font-variant-numeric: tabular-nums; }
 .price-was { text-decoration: line-through; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+/* A store option whose pack unit doesn't reconcile with what's needed (e.g. g vs ml) -- surfaced,
+   never hidden, but never priced as if it were a real match. */
+.unit-warn { color: var(--warn); font-weight: 600; }
 
 /* A row's ✕ ("I already have this") sits outside the checkbox label so it never toggles it. */
 .shop-row { display: flex; align-items: stretch; }
@@ -309,7 +312,9 @@ select, input[type="search"], input[type="email"], input[type="password"] {
 /* ---- Print (shopping list export) ---- */
 
 @media print {
-    .tabbar, #offline, #logout, .toolbar, .budget, .budget-bar, .progress, .summary,
+    /* budget-bar stays visible: it's the only place the estimated total renders, and the printed
+       list must always carry one (see mountShoppingList's updateBudget). */
+    .tabbar, #offline, #logout, .toolbar, .budget, .progress, .summary,
     .removed-note, .save-status, button, input {
         display: none !important;
     }
@@ -323,5 +328,8 @@ select, input[type="search"], input[type="email"], input[type="password"] {
     .row-title { color: #000; }
     .row-sub, .price-was { color: #444; }
     .price { color: #000; }
+    .unit-warn { color: #000; font-weight: 700; }
+    .budget-bar { background: none; border: 1px solid #000; color: #000; }
+    .budget-bar.over { background: none; color: #000; }
     .pill-sale { background: none; color: #000; font-weight: 700; }
 }

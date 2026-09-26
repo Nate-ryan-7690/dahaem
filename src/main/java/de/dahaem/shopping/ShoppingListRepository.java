@@ -270,7 +270,7 @@ public class ShoppingListRepository {
      */
     public List<ShoppingListItemRow> findItemsForShoppingList(int shoppingListId) {
         String sql = "SELECT sli.shopping_list_item_id, sli.shopping_list_item_inventory_item_id, "
-                + "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, "
+                + "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, ii.inventory_item_unit, "
                 + "sli.shopping_list_item_quantity_needed, sli.shopping_list_item_store_item_id, "
                 + "sli.shopping_list_item_is_manual "
                 + "FROM shopping_list_item sli "
@@ -288,6 +288,7 @@ public class ShoppingListRepository {
                             (Integer) rs.getObject("shopping_list_item_inventory_item_id"),
                             rs.getString("inventory_item_name_deutsch"),
                             rs.getString("inventory_item_name_english"),
+                            rs.getString("inventory_item_unit"),
                             rs.getInt("shopping_list_item_quantity_needed"),
                             (Integer) rs.getObject("shopping_list_item_store_item_id"),
                             rs.getBoolean("shopping_list_item_is_manual")));

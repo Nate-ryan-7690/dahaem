@@ -243,8 +243,12 @@ function lineKey(line) {
     return `${line.inventoryItemId}|${line.unit}`;
 }
 
+// A store option whose unit can't be reconciled with what's needed (different physical dimension,
+// e.g. the recipe needs grams but this pack is sold in ml) is still shown, never hidden, but with
+// no price total attached -- pricing it as one pack would fabricate a number nobody can trust.
 function priceHtml(o) {
     if (!o) return '<span class="muted small">No store price</span>';
+    if (!o.unitCompatible) return '<div class="unit-warn small">⚠ unit mismatch — check</div>';
     const price = o.tillPrice ?? o.normalPrice;
     let html = price != null ? `<div class="price">${eur.format(price)}</div>` : '';
     if (o.onSale && o.normalPrice != null && price != null && o.normalPrice > price) {
@@ -259,7 +263,46 @@ function optionDetails(o) {
     if (o.packageSize) parts.push(`${o.packageSize} ${o.packageUnit || ''}`.trim());
     if (o.dealQuantity > 1 && o.dealPrice != null) parts.push(`${o.dealQuantity} for ${eur.format(o.dealPrice)}`);
     if (o.deposit) parts.push(`incl. ${eur.format(o.deposit)} deposit`);
+    if (o.unitCompatible && o.packsNeeded != null && o.packsTotalPrice != null && o.tillPrice != null) {
+        parts.push(`${o.packsNeeded} × ${eur.format(o.tillPrice)} = ${eur.format(o.packsTotalPrice)}`);
+    }
     return parts.join(' · ');
+}
+
+// Reconciles a condensed item's per-unit lines into one price: sums packsTotalPrice for every
+// line whose store option's unit is actually comparable, and flags the rest (a unit mismatch, or
+// simply no store option yet) instead of silently treating them as free or ignoring the problem.
+function reconcileLines(lines) {
+    let total = 0, anyPriced = false, hasMismatch = false, hasNoPrice = false;
+    for (const line of lines) {
+        const o = line.option;
+        if (!o) { hasNoPrice = true; continue; }
+        if (!o.unitCompatible) { hasMismatch = true; continue; }
+        if (o.packsTotalPrice == null) { hasNoPrice = true; continue; }
+        anyPriced = true;
+        total += o.packsTotalPrice;
+    }
+    return { total: anyPriced ? total : null, hasMismatch, hasNoPrice };
+}
+
+function lineSnippet(line) {
+    const o = line.option;
+    if (!o) return `${line.qtyLabel} · No store price`;
+    if (!o.unitCompatible) return `${line.qtyLabel} · ${optionDetails(o)} · ⚠ unit mismatch — check`;
+    const details = [line.qtyLabel];
+    const rest = optionDetails(o);
+    if (rest) details.push(rest);
+    return details.join(' · ');
+}
+
+function reconciledPriceHtml(r) {
+    if (r.total != null) {
+        let html = `<div class="price">${eur.format(r.total)}</div>`;
+        if (r.hasMismatch || r.hasNoPrice) html += '<div class="unit-warn small">⚠ needs review</div>';
+        return html;
+    }
+    if (r.hasMismatch) return '<div class="unit-warn small">⚠ unit mismatch</div>';
+    return '<span class="muted small">No store price</span>';
 }
 
 // Collapses a shopping list's lines to one row per inventory item. Recipes can list the same
@@ -272,10 +315,12 @@ function condenseByItem(items) {
         let g = byItem.get(line.inventoryItemId);
         if (!g) {
             g = { inventoryItemId: line.inventoryItemId, nameDeutsch: line.nameDeutsch,
-                  units: [], bestOption: o, sourceRecipeIds: new Set() };
+                  units: [], lines: [], bestOption: o, sourceRecipeIds: new Set() };
             byItem.set(line.inventoryItemId, g);
         }
-        g.units.push(`${qty(line.totalQuantity)} ${line.unit}`);
+        const qtyLabel = `${qty(line.totalQuantity)} ${line.unit}`;
+        g.units.push(qtyLabel);
+        g.lines.push({ qtyLabel, option: o });
         (line.sourceRecipeIds || []).forEach(r => g.sourceRecipeIds.add(r));
         if (!g.bestOption && o) g.bestOption = o;
     }
@@ -283,6 +328,7 @@ function condenseByItem(items) {
         inventoryItemId: g.inventoryItemId,
         nameDeutsch: g.nameDeutsch,
         qtyLabel: g.units.join(' + '),
+        lines: g.lines,
         bestOption: g.bestOption,
         sourceRecipeIds: [...g.sourceRecipeIds]
     }));
@@ -315,25 +361,30 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
             .map(s => [s, groups.get(s).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'))]);
     }
 
-    function priceText(o) {
-        const price = o ? (o.tillPrice ?? o.normalPrice) : null;
-        if (price == null) return 'No price yet';
-        return eur.format(price) + (o.onSale ? ' (Sale)' : '');
+    function priceText(r) {
+        if (r.total != null) return eur.format(r.total) + (r.hasMismatch || r.hasNoPrice ? ' (partial)' : '');
+        if (r.hasMismatch) return '⚠ unit mismatch';
+        return 'No price yet';
     }
 
     // Plain-text export: same data the screen shows (removed items excluded, checked items marked).
+    // Always carries an estimated total, built only from lines whose unit could be reconciled with
+    // a real store pack, plus how many items still need a human look (no price, or a unit mismatch).
     function buildShoppingText() {
         const items = allItems.filter(it => !removed.has(keyOf(it)));
         const lines = [`DAHÄM — Shopping list (${dateFmt.format(today())})`];
+        let estTotal = 0, noPriceCount = 0, mismatchCount = 0;
         for (const [s, rows] of groupByStore(items)) {
             lines.push('', s || 'No store price yet');
             for (const it of rows) {
+                const r = reconcileLines(it.lines);
+                if (r.total != null) estTotal += r.total;
+                if (r.hasNoPrice) noPriceCount++;
+                if (r.hasMismatch) mismatchCount++;
                 const mark = checked.has(keyOf(it)) ? '✓ ' : '';
-                lines.push(`- ${mark}${label(it.nameDeutsch)} — ${it.qtyLabel} — ${priceText(it.bestOption)}`);
+                lines.push(`- ${mark}${label(it.nameDeutsch)} — ${it.qtyLabel} — ${priceText(r)}`);
             }
         }
-        const estTotal = items.filter(it => it.bestOption?.tillPrice != null)
-            .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
         let totalLine = `Estimated total: ${eur.format(estTotal)}`;
         const budget = store(BUDGET_KEY);
         if (budget != null && budget > 0) {
@@ -341,6 +392,8 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
             totalLine += `  (budget ${eur.format(budget)}, ${left < 0 ? `over by ${eur.format(-left)}` : `${eur.format(left)} left`})`;
         }
         lines.push('', totalLine);
+        if (noPriceCount) lines.push(`${noPriceCount} item${noPriceCount === 1 ? '' : 's'} without a price`);
+        if (mismatchCount) lines.push(`${mismatchCount} item${mismatchCount === 1 ? '' : 's'} need a unit check`);
         return lines.join('\n');
     }
 
@@ -414,20 +467,22 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
             html += `<h2 class="section-title">${esc(s || 'No store price yet')}</h2><ul class="list">`;
             for (const it of rows) {
                 const o = it.bestOption;
+                const r = reconcileLines(it.lines);
                 const key = keyOf(it);
                 const itemLabel = esc(label(it.nameDeutsch));
-                const forRecipes = it.sourceRecipeIds.map(r => recipeNames.get(r)).filter(Boolean).join(', ');
+                const forRecipes = it.sourceRecipeIds.map(r2 => recipeNames.get(r2)).filter(Boolean).join(', ');
                 const badge = o?.onSale
                     ? ` <span class="pill pill-sale">Sale${o.validUntil ? ` until ${esc(dayFmt.format(parseDate(o.validUntil)))}` : ''}</span>`
                     : '';
+                const rowSub = it.lines.map(l => esc(lineSnippet(l))).join(' + ');
                 html += `<li class="shop-row"><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="chk-${it.inventoryItemId}">
                     <input type="checkbox" id="chk-${it.inventoryItemId}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
                     <div class="row-main">
                         <div class="row-title">${itemLabel}${badge}</div>
-                        <div class="row-sub">${esc(it.qtyLabel)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
+                        <div class="row-sub">${rowSub}</div>
                         ${forRecipes ? `<div class="row-sub small clamp">For ${esc(forRecipes)}</div>` : ''}
                     </div>
-                    <div class="row-end">${priceHtml(o)}</div>
+                    <div class="row-end">${reconciledPriceHtml(r)}</div>
                 </label><button type="button" class="remove-item" data-remove-key="${esc(key)}" title="I already have this" aria-label="Remove ${itemLabel}, I already have it">✕</button></li>`;
             }
             html += '</ul>';
@@ -438,27 +493,31 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
             const total = items.length;
             const done = items.filter(it => checked.has(keyOf(it))).length;
             const remaining = items
-                .filter(it => !checked.has(keyOf(it)) && it.bestOption?.tillPrice != null)
-                .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
+                .filter(it => !checked.has(keyOf(it)))
+                .reduce((sum, it) => sum + (reconcileLines(it.lines).total || 0), 0);
             document.getElementById('summary').innerHTML =
                 `<span><strong>${done}</strong> of ${total} in the basket</span>
-                 <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
+                 <span class="muted" title="Sum of reconciled pack prices per remaining line with a comparable price">≈ ${eur.format(remaining)} left</span>`;
             document.getElementById('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
         };
         updateSummary();
 
-        // One pack of the cheapest option per priced item; each item counted once (condensed).
-        const estTotal = items.filter(it => it.bestOption?.tillPrice != null)
-            .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
-        const unpriced = items.filter(it => it.bestOption?.tillPrice == null).length;
+        // Reconciled pack total per item (units actually comparable), each item counted once
+        // (condensed). Lines whose best option is a unit mismatch or simply unpriced are excluded
+        // from the total and counted in `needsReview` instead of silently priced as one pack.
+        const reconciled = items.map(it => reconcileLines(it.lines));
+        const estTotal = reconciled.reduce((sum, r) => sum + (r.total || 0), 0);
+        const needsReview = reconciled.filter(r => r.hasMismatch || r.hasNoPrice).length;
         const updateBudget = () => {
             const bar = document.getElementById('budget-bar');
             const budget = Number(document.getElementById('budget-input').value);
-            const note = unpriced ? ` · ${unpriced} item${unpriced === 1 ? '' : 's'} without a price yet` : '';
+            const note = needsReview
+                ? ` · ${needsReview} item${needsReview === 1 ? '' : 's'} need review / no comparable price`
+                : '';
             if (!budget || budget <= 0) {
                 bar.className = 'budget-bar';
                 bar.innerHTML = `<span>Estimated total <strong>${eur.format(estTotal)}</strong></span>`
-                    + `<span class="muted small">one pack per item${note}</span>`;
+                    + `<span class="muted small">reconciled pack prices${note}</span>`;
                 return;
             }
             const left = budget - estTotal;

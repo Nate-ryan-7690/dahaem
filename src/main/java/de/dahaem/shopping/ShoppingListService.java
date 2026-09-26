@@ -4,6 +4,7 @@ import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.Item;
 import de.dahaem.mealplanner.MealPlanRecipe;
 import de.dahaem.mealplanner.MealPlanRepository;
+import de.dahaem.shared.Units;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -58,7 +59,8 @@ public class ShoppingListService {
         List<ShoppingListItem> items = new ArrayList<>();
         for (AggregatedIngredient ingredient : aggregated) {
             List<StoreItemCandidate> candidates = repository.loadStoreCandidates(ingredient.inventoryItemId(), today);
-            List<StoreOption> storeOptions = buildStoreOptions(candidates);
+            List<StoreOption> storeOptions =
+                    buildStoreOptions(candidates, ingredient.totalQuantity(), ingredient.unit());
             items.add(new ShoppingListItem(
                     ingredient.inventoryItemId(),
                     ingredient.nameDeutsch(),
@@ -203,7 +205,8 @@ public class ShoppingListService {
     private PersistedShoppingListItem toPersistedItem(ShoppingListItemRow row, LocalDate today) {
         List<StoreOption> options = row.inventoryItemId() == null
                 ? List.of()
-                : buildStoreOptions(repository.loadStoreCandidates(row.inventoryItemId(), today));
+                : buildStoreOptions(repository.loadStoreCandidates(row.inventoryItemId(), today),
+                        row.quantityNeeded(), row.unit());
         return new PersistedShoppingListItem(row.itemId(), row.inventoryItemId(), row.nameDeutsch(),
                 row.nameEnglish(), row.quantityNeeded(), row.isManual(), options, row.selectedStoreItemId());
     }
@@ -214,7 +217,8 @@ public class ShoppingListService {
      * genuinely different store's option, cheapest till-price first — for the user to choose from,
      * never pre-chosen.
      */
-    private List<StoreOption> buildStoreOptions(List<StoreItemCandidate> candidates) {
+    private List<StoreOption> buildStoreOptions(List<StoreItemCandidate> candidates, double neededQuantity,
+                                                 String neededUnit) {
         Map<String, StoreItemCandidate> currentPerListing = new LinkedHashMap<>();
         for (StoreItemCandidate candidate : candidates) {
             String key = candidate.storeName() + "|" + candidate.brandName() + "|"
@@ -226,7 +230,7 @@ public class ShoppingListService {
         }
 
         return currentPerListing.values().stream()
-                .map(this::toOption)
+                .map(candidate -> toOption(candidate, neededQuantity, neededUnit))
                 .sorted(Comparator.comparing(StoreOption::tillPrice, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
@@ -254,7 +258,7 @@ public class ShoppingListService {
         return candidate.productAvailable() != null ? candidate.productAvailable() : candidate.storeItemAvailable();
     }
 
-    private StoreOption toOption(StoreItemCandidate candidate) {
+    private StoreOption toOption(StoreItemCandidate candidate, double neededQuantity, String neededUnit) {
         boolean onSale = candidate.discountPrice() != null;
         Double effectivePrice;
         if (candidate.dealPrice() != null && candidate.dealQuantity() > 0) {
@@ -266,6 +270,18 @@ public class ShoppingListService {
         }
         Double deposit = candidate.deposit();
         Double tillPrice = effectivePrice == null ? null : effectivePrice + (deposit != null ? deposit : 0.0);
+
+        boolean unitCompatible = Units.compatible(neededUnit, candidate.packageUnit());
+        Integer packsNeeded = null;
+        Double packsTotalPrice = null;
+        if (unitCompatible) {
+            Double neededBase = Units.toBase(neededQuantity, neededUnit);
+            Double packageBase = Units.toBase(candidate.packageSize(), candidate.packageUnit());
+            if (neededBase != null && packageBase != null && packageBase > 0) {
+                packsNeeded = Math.max(1, (int) Math.ceil(neededBase / packageBase));
+                packsTotalPrice = tillPrice == null ? null : packsNeeded * tillPrice;
+            }
+        }
 
         return new StoreOption(
                 candidate.storeItemId(),
@@ -280,6 +296,9 @@ public class ShoppingListService {
                 candidate.dealPrice(),
                 candidate.discountValidUntil(),
                 deposit,
-                tillPrice);
+                tillPrice,
+                unitCompatible,
+                packsNeeded,
+                packsTotalPrice);
     }
 }

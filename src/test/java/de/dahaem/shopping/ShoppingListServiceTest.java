@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -178,6 +179,62 @@ class ShoppingListServiceTest {
         assertEquals(0.99, option.salePrice(), 0.001);
         assertEquals(2026, option.validUntil().getYear());
         assertEquals(0.90, option.tillPrice(), 0.001, "deal price 1.80 for 2 => 0.90 per unit, no deposit");
+    }
+
+    @Test
+    void computesPacksNeededAndReconciledPriceWhenUnitsAreCompatible() throws SQLException {
+        // Real-world case: Kartoffel needs 2400 g, the only match is a 100 g pack at 0.99 EUR.
+        exec("INSERT INTO inventory_item VALUES (5, 'Kartoffel', 'Potato', 'Gemüse')");
+        exec("INSERT INTO recipe VALUES (5, 'Kartoffelsuppe', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (5, 5, 'g', 2400)");
+
+        exec("INSERT INTO store VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand VALUES (1, 'Sun Snacks')");
+        exec("INSERT INTO store_item VALUES (1, 1, 1, 5, 'g', 100, 0.99, 1, NULL, NULL, NULL)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(5), LocalDate.of(2026, 9, 25));
+
+        StoreOption option = list.items().get(0).storeOptions().get(0);
+        assertTrue(option.unitCompatible(), "same dimension (mass vs mass) must be compatible");
+        assertEquals(24, option.packsNeeded(), "2400 g needed / 100 g per pack = 24 packs");
+        assertEquals(23.76, option.packsTotalPrice(), 0.001, "24 packs * 0.99 EUR");
+    }
+
+    @Test
+    void flagsUnitMismatchInsteadOfFabricatingAPackPrice() throws SQLException {
+        // Real-world case: Aioli needs 60 g, the only match is a 250 ml product -- not reconcilable.
+        exec("INSERT INTO inventory_item VALUES (6, 'Aioli', 'Aioli', 'Sossen')");
+        exec("INSERT INTO recipe VALUES (6, 'Tapas', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (6, 6, 'g', 60)");
+
+        exec("INSERT INTO store VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand VALUES (1, 'Tesoros Del Sur')");
+        exec("INSERT INTO store_item VALUES (1, 1, 1, 6, 'ml', 250, 1.99, 1, NULL, NULL, NULL)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(6), LocalDate.of(2026, 9, 25));
+
+        StoreOption option = list.items().get(0).storeOptions().get(0);
+        assertFalse(option.unitCompatible(), "g (mass) vs ml (volume) must never be treated as compatible");
+        assertNull(option.packsNeeded(), "no pack count must be fabricated across dimensions");
+        assertNull(option.packsTotalPrice(), "no total price must be fabricated across dimensions");
+    }
+
+    @Test
+    void countsAtLeastOnePackWhenTheNeededQuantityIsSmallerThanOnePack() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (7, 'Butter', 'Butter', 'Milchprodukte')");
+        exec("INSERT INTO recipe VALUES (7, 'Kuchen', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (7, 7, 'g', 100)");
+
+        exec("INSERT INTO store VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand VALUES (1, 'Kerrygold')");
+        exec("INSERT INTO store_item VALUES (1, 1, 1, 7, 'g', 500, 2.49, 1, NULL, NULL, NULL)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(7), LocalDate.of(2026, 9, 25));
+
+        StoreOption option = list.items().get(0).storeOptions().get(0);
+        assertTrue(option.unitCompatible());
+        assertEquals(1, option.packsNeeded(), "needing less than one pack still means buying at least one");
+        assertEquals(2.49, option.packsTotalPrice(), 0.001);
     }
 
     private void exec(String sql) throws SQLException {
