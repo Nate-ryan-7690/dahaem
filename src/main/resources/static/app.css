@@ -106,6 +106,8 @@ main {
 
 .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
 .toolbar select, .toolbar input[type="search"] { flex: 1; min-width: 0; }
+.people-label { color: var(--muted); font-size: 0.875rem; white-space: nowrap; }
+.toolbar #people-select { flex: 0 0 auto; width: auto; min-width: 60px; }
 
 select, input[type="search"], input[type="email"], input[type="password"] {
     height: 44px;

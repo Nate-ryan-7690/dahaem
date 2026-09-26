@@ -22,6 +22,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
@@ -29,6 +31,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -215,6 +218,26 @@ class ApiSmokeTest {
     }
 
     @Test
+    void shoppingListPeopleParamScalesQuantitiesAndValidatesInput() throws Exception {
+        int first = recipeId("Klassische Rinder-Bolognese");
+        int second = recipeId("Gemüse-Gnocchi in Tomatensauce");
+
+        String withoutPeople = mvc.perform(get("/api/shopping-list").param("recipeIds", first + "," + second))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String withPeople = mvc.perform(get("/api/shopping-list").param("recipeIds", first + "," + second)
+                        .param("people", "4"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertEquals(firstTotalQuantity(withoutPeople) * 2, firstTotalQuantity(withPeople), 0.001,
+                "recipe_servings is 2 for every seeded recipe, so people=4 must double the unscaled sum");
+
+        mvc.perform(get("/api/shopping-list").param("recipeIds", first + "," + second).param("people", "0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void shoppingListCanBeGeneratedPersistedReloadedAndSelectedFrom() throws Exception {
         int mealPlanId = 1; // seeded by demo_data.sql, with recipes attached
 
@@ -261,6 +284,18 @@ class ApiSmokeTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/shopping-lists/{id}", 999_999))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void generateShoppingListPeopleParamIsAcceptedAndValidated() throws Exception {
+        int mealPlanId = 1; // seeded by demo_data.sql, with recipes attached
+
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId).with(csrf()).param("people", "4"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shoppingListId").isNumber());
+
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId).with(csrf()).param("people", "0"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -342,6 +377,14 @@ class ApiSmokeTest {
             ps.setInt(2, inventoryItemId);
             ps.executeUpdate();
         }
+    }
+
+    private static double firstTotalQuantity(String shoppingListJson) {
+        Matcher m = Pattern.compile("\"totalQuantity\":(-?\\d+(\\.\\d+)?)").matcher(shoppingListJson);
+        if (!m.find()) {
+            throw new IllegalStateException("No totalQuantity found in " + shoppingListJson);
+        }
+        return Double.parseDouble(m.group(1));
     }
 
     private static int recipeId(String name) throws SQLException {

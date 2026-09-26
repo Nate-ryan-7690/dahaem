@@ -70,6 +70,30 @@ function store(key, value) {
 // ---- Picked recipes: a client-side selection for the "shop what's on sale" flow ----
 const PICK_KEY = 'dahaem.picked';
 const BUDGET_KEY = 'dahaem.budget';
+const PEOPLE_KEY = 'dahaem.people';
+const PEOPLE_MIN = 1;
+const PEOPLE_MAX = 8;
+const PEOPLE_DEFAULT = 2;
+
+function peopleCount() {
+    const v = Number(store(PEOPLE_KEY));
+    return Number.isInteger(v) && v >= PEOPLE_MIN && v <= PEOPLE_MAX ? v : PEOPLE_DEFAULT;
+}
+
+function setPeopleCount(v) {
+    const n = Number(v);
+    store(PEOPLE_KEY, Number.isInteger(n) && n >= PEOPLE_MIN && n <= PEOPLE_MAX ? n : PEOPLE_DEFAULT);
+}
+
+// Shared "People" selector markup; mountShoppingList wires its change event where it is inserted.
+function peopleSelectHtml() {
+    const current = peopleCount();
+    const options = Array.from({ length: PEOPLE_MAX - PEOPLE_MIN + 1 }, (_, i) => i + PEOPLE_MIN)
+        .map(n => `<option value="${n}"${n === current ? ' selected' : ''}>${n}</option>`)
+        .join('');
+    return `<label class="people-label" for="people-select">People</label>
+        <select id="people-select" aria-label="Number of people">${options}</select>`;
+}
 function pickedList() { return store(PICK_KEY) || []; }
 function isPicked(id) { return pickedList().some(p => p.id === id); }
 function togglePick(id, name) {
@@ -364,6 +388,7 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
     }
 
     view.innerHTML = staleNotice() + headerHtml + `<div class="toolbar list-actions">
+            ${peopleSelectHtml()}
             <button class="btn" type="button" data-action="share-list">Share</button>
             <button class="btn" type="button" data-action="print-list">Print</button>
         </div>
@@ -452,6 +477,12 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
     renderBody();
 
     view.addEventListener('change', e => {
+        const peopleSel = e.target.closest('#people-select');
+        if (peopleSel) {
+            setPeopleCount(peopleSel.value);
+            route(); // re-fetch: the API returns quantities already scaled to the chosen people count
+            return;
+        }
         const box = e.target.closest('input[type="checkbox"][data-key]');
         if (!box) return;
         if (box.checked) checked.add(box.dataset.key); else checked.delete(box.dataset.key);
@@ -506,7 +537,7 @@ async function renderPickedList() {
 
     const recipeIds = [...new Set(picks.map(p => p.id))];
     const recipeNames = new Map(picks.map(p => [p.id, p.name]));
-    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}`);
+    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}&people=${peopleCount()}`);
     if (list.items.length === 0) {
         view.innerHTML = bar + stateHtml('Nothing to buy', 'The picked recipes have no ingredients listed.');
         wireClearPicks(); wireToPlan();
@@ -599,7 +630,7 @@ async function renderShopping(planIdParam) {
         return;
     }
 
-    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}`);
+    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}&people=${peopleCount()}`);
     if (list.items.length === 0) {
         view.innerHTML = toolbar + stateHtml('Nothing to buy', 'The recipes in this plan have no ingredients listed.');
         wireShoppingToolbar(plan, null);
@@ -630,7 +661,7 @@ function wireShoppingToolbar(plan, onReset) {
         saveBtn.textContent = 'Saving…';
         statusEl.hidden = true;
         try {
-            const result = await apiWrite(`/api/meal-plans/${plan.id}/shopping-list`, 'POST');
+            const result = await apiWrite(`/api/meal-plans/${plan.id}/shopping-list?people=${peopleCount()}`, 'POST');
             if (token !== routeToken) return;
             location.hash = `#/shopping-list/${result.shoppingListId}`;
         } catch (err) {

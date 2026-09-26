@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -84,16 +86,24 @@ public class MealPlanController {
     /**
      * Builds and persists a shopping list from a plan's recipes (see
      * {@link ShoppingListService#generateFromMealPlan(int)}): one line per item still missing after
-     * subtracting inventory, no store item pre-chosen. Returns the new list's id.
+     * subtracting inventory, no store item pre-chosen. Returns the new list's id. An optional
+     * {@code ?people=N} scales each recipe's ingredient quantities by {@code people / recipe_servings}
+     * before summing; omitted, the raw per-recipe quantities are summed.
      */
     @PostMapping("/{id}/shopping-list")
     @ResponseStatus(HttpStatus.CREATED)
-    public GeneratedShoppingListDto generateShoppingList(@PathVariable("id") int id) {
+    public GeneratedShoppingListDto generateShoppingList(@PathVariable("id") int id,
+                                                          @RequestParam(name = "people", required = false) Integer people) {
         mealPlanService.allPlans().stream()
                 .filter(p -> p.getId() == id)
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("No meal plan with id " + id));
-        int shoppingListId = shoppingListService.generateFromMealPlan(id);
+        if (people != null && people < 1) {
+            throw new BadRequestException("'people' must be at least 1");
+        }
+        int shoppingListId = people == null
+                ? shoppingListService.generateFromMealPlan(id)
+                : shoppingListService.generateFromMealPlan(id, LocalDate.now(), people);
         return new GeneratedShoppingListDto(shoppingListId);
     }
 }
