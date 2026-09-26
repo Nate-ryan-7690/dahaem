@@ -634,9 +634,9 @@ public class StoreRepository {
     /** All offers, newest validity first, for discount promotion. Optionally one store only. */
     public List<OfferRow> loadOffersForPromotion(Integer storeId) {
         String sql = "SELECT store_offer_store_id, store_offer_external_id, store_offer_brand, store_offer_name, "
-                + "store_offer_sales_unit, store_offer_sale_price, store_offer_deal_quantity, store_offer_deal_price, "
-                + "store_offer_normal_price, store_offer_deposit, store_offer_promo_text, store_offer_valid_from, "
-                + "store_offer_valid_until, store_offer_source FROM store_offer"
+                + "store_offer_category, store_offer_sales_unit, store_offer_sale_price, store_offer_deal_quantity, "
+                + "store_offer_deal_price, store_offer_normal_price, store_offer_deposit, store_offer_promo_text, "
+                + "store_offer_valid_from, store_offer_valid_until, store_offer_source FROM store_offer"
                 + (storeId != null ? " WHERE store_offer_store_id = ?" : "");
         List<OfferRow> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
@@ -647,9 +647,9 @@ public class StoreRepository {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new OfferRow(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getString(5), rs.getDouble(6), rs.getInt(7), (Double) rs.getObject(8),
-                            (Double) rs.getObject(9), (Double) rs.getObject(10), rs.getString(11),
-                            rs.getString(12), rs.getString(13), rs.getString(14)));
+                            rs.getString(5), rs.getString(6), rs.getDouble(7), rs.getInt(8), (Double) rs.getObject(9),
+                            (Double) rs.getObject(10), (Double) rs.getObject(11), rs.getString(12),
+                            rs.getString(13), rs.getString(14), rs.getString(15)));
                 }
             }
         } catch (SQLException e) {
