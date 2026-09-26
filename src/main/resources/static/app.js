@@ -275,7 +275,6 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
     const removedKey = checkedKey + '.removed';
     const checked = new Set(store(checkedKey) || []);
     const removed = new Set(store(removedKey) || []);
-    const savedBudget = store(BUDGET_KEY);
     let updateSummary = () => {};
 
     // Groups items by store (cheapest-first item within each group), store with no price last.
@@ -372,6 +371,9 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
         <div id="shopping-body"></div>`;
 
     function renderBody() {
+        // Re-read the budget on every render (removing/restoring an item re-renders the body),
+        // so a budget the user just typed isn't reset to the value from when the list first loaded.
+        const savedBudget = store(BUDGET_KEY);
         const items = allItems.filter(it => !removed.has(keyOf(it)));
 
         let html = `<div class="summary" id="summary"></div>
