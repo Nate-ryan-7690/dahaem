@@ -303,3 +303,23 @@ select, input[type="search"], input[type="email"], input[type="password"] {
     padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--surface); color: var(--text);
 }
+
+/* ---- Print (shopping list export) ---- */
+
+@media print {
+    .tabbar, #offline, #logout, .toolbar, .budget, .budget-bar, .progress, .summary,
+    .removed-note, .save-status, button, input {
+        display: none !important;
+    }
+    body { padding-bottom: 0; background: #fff; color: #000; }
+    .topbar { position: static; border-bottom: 2px solid #000; }
+    main { max-width: none; padding: 0; }
+    .list { border: none; background: none; border-radius: 0; }
+    .list > li + li { border-top: 1px solid #ccc; }
+    .shop-row { display: block; }
+    .row { padding: 6px 0; min-height: 0; }
+    .row-title { color: #000; }
+    .row-sub, .price-was { color: #444; }
+    .price { color: #000; }
+    .pill-sale { background: none; color: #000; font-weight: 700; }
+}
