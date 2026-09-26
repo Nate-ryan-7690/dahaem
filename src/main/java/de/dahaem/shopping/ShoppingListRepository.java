@@ -26,7 +26,8 @@ public class ShoppingListRepository {
     /**
      * Sums recipe_ingredient_quantity_needed per (inventory item, unit) across the given recipes,
      * and collects which recipes contributed. Quantities are only combined when the unit matches,
-     * so the same item can come back as more than one row if recipes disagree on unit.
+     * so the same item can come back as more than one row if recipes disagree on unit. No scaling:
+     * each recipe's own quantities are summed as written.
      */
     public List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds) {
         if (recipeIds.isEmpty()) {
@@ -44,10 +45,48 @@ public class ShoppingListRepository {
                 + "GROUP BY ri.recipe_ingredient_item_id, ri.recipe_ingredient_unit "
                 + "ORDER BY ii.inventory_item_name_deutsch";
 
+        return runAggregateQuery(sql, recipeIds, Optional.empty());
+    }
+
+    /**
+     * Same as {@link #aggregateIngredients(List)}, but scales each recipe's ingredient quantities
+     * by {@code people / recipe_servings} before summing across recipes — so a 2-serving recipe's
+     * ingredients double at {@code people=4}. Only recipes with a positive recipe_servings
+     * contribute (division-by-zero guard); {@code people} must be at least 1.
+     */
+    public List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds, int people) {
+        if (people < 1) {
+            throw new IllegalArgumentException("people must be at least 1");
+        }
+        if (recipeIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String placeholders = recipeIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        String sql = "SELECT ri.recipe_ingredient_item_id AS item_id, "
+                + "ii.inventory_item_name_deutsch AS name_deutsch, "
+                + "ri.recipe_ingredient_unit AS unit, "
+                + "SUM(ri.recipe_ingredient_quantity_needed * ? / CAST(r.recipe_servings AS REAL)) AS total_quantity, "
+                + "GROUP_CONCAT(DISTINCT ri.recipe_ingredient_recipe_id) AS recipe_ids "
+                + "FROM recipe_ingredient ri "
+                + "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id "
+                + "JOIN recipe r ON r.recipe_id = ri.recipe_ingredient_recipe_id "
+                + "WHERE ri.recipe_ingredient_recipe_id IN (" + placeholders + ") "
+                + "AND r.recipe_servings > 0 "
+                + "GROUP BY ri.recipe_ingredient_item_id, ri.recipe_ingredient_unit "
+                + "ORDER BY ii.inventory_item_name_deutsch";
+
+        return runAggregateQuery(sql, recipeIds, Optional.of(people));
+    }
+
+    private List<AggregatedIngredient> runAggregateQuery(String sql, List<Integer> recipeIds,
+                                                           Optional<Integer> people) {
         List<AggregatedIngredient> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             int i = 1;
+            if (people.isPresent()) {
+                ps.setInt(i++, people.get());
+            }
             for (int recipeId : recipeIds) {
                 ps.setInt(i++, recipeId);
             }

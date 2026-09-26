@@ -46,8 +46,8 @@ class ShoppingListServiceTest {
     @Test
     void aggregatesIngredientQuantityAndRecipesAcrossRecipes() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Zwiebel', 'Onion', 'Gemüse')");
-        exec("INSERT INTO recipe VALUES (1, 'Suppe')");
-        exec("INSERT INTO recipe VALUES (2, 'Eintopf')");
+        exec("INSERT INTO recipe VALUES (1, 'Suppe', 2)");
+        exec("INSERT INTO recipe VALUES (2, 'Eintopf', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 100)");
         exec("INSERT INTO recipe_ingredient VALUES (2, 1, 'g', 150)");
 
@@ -66,9 +66,63 @@ class ShoppingListServiceTest {
     }
 
     @Test
+    void scalesA2ServingRecipesIngredientByPeopleOverRecipeServings() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (10, 'Mehl', 'Flour', 'Backen')");
+        exec("INSERT INTO recipe VALUES (10, 'Pfannkuchen', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (10, 10, 'g', 100)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(10), LocalDate.of(2026, 9, 25), 4);
+
+        assertEquals(1, list.items().size());
+        assertEquals(200.0, list.items().get(0).totalQuantity(), 0.001,
+                "a 2-serving recipe's 100g ingredient must double at people=4");
+    }
+
+    @Test
+    void combinesTwoRecipesSameItemWhenScaled() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (11, 'Zucker', 'Sugar', 'Backen')");
+        exec("INSERT INTO recipe VALUES (11, 'Kuchen', 2)");
+        exec("INSERT INTO recipe VALUES (12, 'Kekse', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (11, 11, 'g', 100)");
+        exec("INSERT INTO recipe_ingredient VALUES (12, 11, 'g', 50)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(11, 12), LocalDate.of(2026, 9, 25), 4);
+
+        assertEquals(1, list.items().size());
+        assertEquals(300.0, list.items().get(0).totalQuantity(), 0.001,
+                "each recipe's own quantity is scaled (100*4/2=200, 50*4/2=100) before summing across recipes");
+    }
+
+    @Test
+    void peopleOmittedLeavesTheRawSumUnchanged() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (13, 'Salz', 'Salt', 'Gewürze')");
+        exec("INSERT INTO recipe VALUES (13, 'Suppe 2', 4)");
+        exec("INSERT INTO recipe_ingredient VALUES (13, 13, 'g', 100)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(13), LocalDate.of(2026, 9, 25));
+
+        assertEquals(1, list.items().size());
+        assertEquals(100.0, list.items().get(0).totalQuantity(), 0.001,
+                "without a people param the raw per-recipe quantity is summed, regardless of recipe_servings");
+    }
+
+    @Test
+    void peopleEqualToRecipeServingsIsUnchanged() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (14, 'Reis', 'Rice', 'Trockenware')");
+        exec("INSERT INTO recipe VALUES (14, 'Risotto', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (14, 14, 'g', 100)");
+
+        ShoppingList list = service.buildFromRecipes(List.of(14), LocalDate.of(2026, 9, 25), 2);
+
+        assertEquals(1, list.items().size());
+        assertEquals(100.0, list.items().get(0).totalQuantity(), 0.001,
+                "people equal to the recipe's own servings must leave the quantity unchanged");
+    }
+
+    @Test
     void collapsesDuplicateListingsOfTheSameProductByRecencyButKeepsOtherStoresSeparate() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (2, 'Milch', 'Milk', 'Milchprodukte')");
-        exec("INSERT INTO recipe VALUES (3, 'Pfannkuchen')");
+        exec("INSERT INTO recipe VALUES (3, 'Pfannkuchen', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (3, 2, 'ml', 500)");
 
         exec("INSERT INTO store VALUES (1, 'Aldi')");
@@ -107,7 +161,7 @@ class ShoppingListServiceTest {
     @Test
     void prefersDealPriceOverNormalPriceWhenACurrentDiscountApplies() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (3, 'Nudeln', 'Pasta', 'Trockenware')");
-        exec("INSERT INTO recipe VALUES (4, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe VALUES (4, 'Pasta al Pomodoro', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (4, 3, 'g', 500)");
 
         exec("INSERT INTO store VALUES (2, 'Rewe')");
@@ -142,7 +196,8 @@ class ShoppingListServiceTest {
 
             st.execute("CREATE TABLE recipe (" +
                     "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT)");
+                    "recipe_name TEXT, " +
+                    "recipe_servings INTEGER NOT NULL)");
 
             st.execute("CREATE TABLE recipe_ingredient (" +
                     "recipe_ingredient_recipe_id INTEGER NOT NULL REFERENCES recipe(recipe_id), " +

@@ -43,7 +43,18 @@ public class ShoppingListService {
 
     /** Overload that takes "today" explicitly, so callers (and tests) control which discounts count as current. */
     public ShoppingList buildFromRecipes(List<Integer> recipeIds, LocalDate today) {
-        List<AggregatedIngredient> aggregated = repository.aggregateIngredients(recipeIds);
+        return buildFromRecipes(today, repository.aggregateIngredients(recipeIds));
+    }
+
+    /**
+     * Scales each recipe's ingredient quantities by {@code people / recipe_servings} before summing
+     * across recipes (see {@link ShoppingListRepository#aggregateIngredients(List, int)}).
+     */
+    public ShoppingList buildFromRecipes(List<Integer> recipeIds, LocalDate today, int people) {
+        return buildFromRecipes(today, repository.aggregateIngredients(recipeIds, people));
+    }
+
+    private ShoppingList buildFromRecipes(LocalDate today, List<AggregatedIngredient> aggregated) {
         List<ShoppingListItem> items = new ArrayList<>();
         for (AggregatedIngredient ingredient : aggregated) {
             List<StoreItemCandidate> candidates = repository.loadStoreCandidates(ingredient.inventoryItemId(), today);
@@ -74,10 +85,26 @@ public class ShoppingListService {
      * shopping_list's id.
      */
     public int generateFromMealPlan(int mealPlanId, LocalDate today) {
-        List<MealPlanRecipe> planRecipes = mealPlanRepository.findRecipesForPlan(mealPlanId);
-        List<Integer> recipeIds = planRecipes.stream().map(MealPlanRecipe::getRecipeId).distinct().toList();
-        ShoppingList list = buildFromRecipes(recipeIds, today);
+        List<Integer> recipeIds = recipeIdsForPlan(mealPlanId);
+        return persistGeneratedList(mealPlanId, today, buildFromRecipes(recipeIds, today));
+    }
 
+    /**
+     * Scales each recipe's ingredient quantities by {@code people / recipe_servings} before summing
+     * (see {@link #buildFromRecipes(List, LocalDate, int)}), otherwise identical to
+     * {@link #generateFromMealPlan(int, LocalDate)}.
+     */
+    public int generateFromMealPlan(int mealPlanId, LocalDate today, int people) {
+        List<Integer> recipeIds = recipeIdsForPlan(mealPlanId);
+        return persistGeneratedList(mealPlanId, today, buildFromRecipes(recipeIds, today, people));
+    }
+
+    private List<Integer> recipeIdsForPlan(int mealPlanId) {
+        List<MealPlanRecipe> planRecipes = mealPlanRepository.findRecipesForPlan(mealPlanId);
+        return planRecipes.stream().map(MealPlanRecipe::getRecipeId).distinct().toList();
+    }
+
+    private int persistGeneratedList(int mealPlanId, LocalDate today, ShoppingList list) {
         Connection con = repository.openTransaction();
         try {
             int shoppingListId = repository.insertShoppingList(con, mealPlanId, today, false);

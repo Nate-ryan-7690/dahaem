@@ -54,7 +54,7 @@ class ShoppingListGenerationTest {
     @Test
     void producesOnlyTheMissingQuantityAfterSubtractingInventory() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 100, 'g', 'Gemüse', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Suppe')");
+        exec("INSERT INTO recipe VALUES (1, 'Suppe', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 250)");
 
         exec("INSERT INTO store VALUES (1, 'Aldi')");
@@ -75,10 +75,31 @@ class ShoppingListGenerationTest {
     }
 
     @Test
+    void generateFromMealPlanScalesQuantitiesByPeopleOverRecipeServings() throws SQLException {
+        exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 0, 'g', 'Gemüse', NULL, NULL)");
+        exec("INSERT INTO recipe VALUES (1, 'Suppe', 2)");
+        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 100)");
+
+        exec("INSERT INTO store VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand VALUES (1, 'Bio')");
+        exec("INSERT INTO store_item VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25), 4);
+
+        assertEquals(1, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId));
+        assertEquals(200, singleInt("SELECT shopping_list_item_quantity_needed FROM shopping_list_item "
+                        + "WHERE shopping_list_id = " + shoppingListId),
+                "a 2-serving recipe's 100g ingredient must double at people=4");
+    }
+
+    @Test
     void excludesAnItemAlreadyFullyInStock() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 500, 'g', 'Gemüse', NULL, NULL)");
         exec("INSERT INTO inventory_item VALUES (2, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 250)");
         exec("INSERT INTO recipe_ingredient VALUES (2, 1, 'g', 400)");
 
@@ -104,7 +125,7 @@ class ShoppingListGenerationTest {
     @Test
     void persistsTheShoppingListLinkedToTheMealPlanWithItsItems() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 100, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
 
         exec("INSERT INTO store VALUES (2, 'Rewe')");
@@ -141,7 +162,7 @@ class ShoppingListGenerationTest {
     @Test
     void selectingAStoreItemPersistsTheChoiceAndClearingItPersistsToo() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
 
         exec("INSERT INTO store VALUES (2, 'Rewe')");
@@ -168,7 +189,7 @@ class ShoppingListGenerationTest {
     @Test
     void dropsAnItemNoStoreCurrentlySells() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Saffron', 'Safran', 0, 'g', 'Gewürze', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Paella')");
+        exec("INSERT INTO recipe VALUES (1, 'Paella', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 5)");
         // deliberately no store/brand/store_item: nothing currently sells this item
 
@@ -195,7 +216,7 @@ class ShoppingListGenerationTest {
     @Test
     void loadPersistedListReturnsNamesOptionsAndReflectsAPriorSelection() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
 
         exec("INSERT INTO store VALUES (2, 'Rewe')");
@@ -236,7 +257,7 @@ class ShoppingListGenerationTest {
     void selectStoreItemRejectsAStoreItemThatIsNotACandidateForTheLine() throws SQLException {
         exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
         exec("INSERT INTO inventory_item VALUES (2, 'Milk', 'Milch', 0, 'ml', 'Milchprodukte', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro')");
+        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
         exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
 
         exec("INSERT INTO store VALUES (2, 'Rewe')");
@@ -341,7 +362,8 @@ class ShoppingListGenerationTest {
 
             st.execute("CREATE TABLE recipe (" +
                     "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT NOT NULL)");
+                    "recipe_name TEXT NOT NULL, " +
+                    "recipe_servings INTEGER NOT NULL)");
 
             st.execute("CREATE TABLE recipe_ingredient (" +
                     "recipe_ingredient_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
