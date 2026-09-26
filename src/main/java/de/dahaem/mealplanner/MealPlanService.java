@@ -20,6 +20,11 @@ public class MealPlanService {
         repository.addRecipe(planId, recipeId, mealTime);
     }
 
+    /** Removes a recipe from a plan. Returns true if the recipe was on the plan. */
+    public boolean removeRecipe(int planId, int recipeId) {
+        return repository.removeRecipe(planId, recipeId);
+    }
+
     public List<MealPlanRecipe> recipesForPlan(int planId) { return repository.findRecipesForPlan(planId); }
 
     public List<MealPlan> allPlans() { return repository.findAll(); }
