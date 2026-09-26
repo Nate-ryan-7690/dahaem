@@ -57,6 +57,22 @@ function store(key, value) {
     }
 }
 
+// ---- Picked recipes: a client-side selection for the "shop what's on sale" flow ----
+const PICK_KEY = 'dahaem.picked';
+function pickedList() { return store(PICK_KEY) || []; }
+function isPicked(id) { return pickedList().some(p => p.id === id); }
+function togglePick(id, name) {
+    const list = pickedList();
+    const i = list.findIndex(p => p.id === id);
+    if (i >= 0) list.splice(i, 1); else list.push({ id, name });
+    store(PICK_KEY, list);
+    return i < 0; // true when it is now picked
+}
+// The shopping-list API returns storeOptions cheapest-till-price first; the first is the best buy.
+function bestOption(line) {
+    return line.storeOptions && line.storeOptions.length ? line.storeOptions[0] : null;
+}
+
 // ---- API ----
 
 class ApiError extends Error {
@@ -211,6 +227,102 @@ function optionDetails(o) {
     return parts.join(' · ');
 }
 
+async function renderPickedList() {
+    titleEl.textContent = 'Shopping list';
+    showLoading();
+    const picks = pickedList();
+    const bar = `<div class="toolbar">
+        <a class="btn" href="#/savings">‹ Savings</a>
+        <button class="btn" type="button" data-action="clear-picks" style="margin-left:auto">Clear picks</button>
+    </div>`;
+    if (picks.length === 0) {
+        view.innerHTML = bar + stateHtml('No recipes picked yet',
+            'Open Savings and tap + on the recipes you want to cook, then come back here.');
+        wireClearPicks();
+        return;
+    }
+
+    const recipeIds = [...new Set(picks.map(p => p.id))];
+    const recipeNames = new Map(picks.map(p => [p.id, p.name]));
+    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}`);
+    if (list.items.length === 0) {
+        view.innerHTML = bar + stateHtml('Nothing to buy', 'The picked recipes have no ingredients listed.');
+        wireClearPicks();
+        return;
+    }
+
+    // Group by store so the list reads in the order you walk the shops; no-price lines go last.
+    const groups = new Map();
+    for (const line of list.items) {
+        const storeName = bestOption(line)?.storeName || '';
+        if (!groups.has(storeName)) groups.set(storeName, []);
+        groups.get(storeName).push(line);
+    }
+    const storeNames = [...groups.keys()].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'));
+
+    const checkedKey = 'dahaem.checked.picked';
+    const checked = new Set(store(checkedKey) || []);
+
+    let html = staleNotice() + bar + `<div class="summary" id="summary"></div>
+        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>`;
+    for (const storeName of storeNames) {
+        const lines = groups.get(storeName).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
+        html += `<h2 class="section-title">${esc(storeName || 'No store price yet')}</h2><ul class="list">`;
+        for (const line of lines) {
+            const o = bestOption(line);
+            const key = lineKey(line);
+            const id = `chk-${line.inventoryItemId}-${encodeURIComponent(line.unit)}`.replace(/%/g, '_');
+            const forRecipes = line.sourceRecipeIds.map(rid => recipeNames.get(rid)).filter(Boolean).join(', ');
+            const badge = o?.onSale
+                ? ` <span class="pill pill-sale">Sale${o.validUntil ? ` until ${esc(dayFmt.format(parseDate(o.validUntil)))}` : ''}</span>`
+                : '';
+            html += `<li><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="${id}">
+                <input type="checkbox" id="${id}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
+                <div class="row-main">
+                    <div class="row-title">${esc(label(line.nameDeutsch))}${badge}</div>
+                    <div class="row-sub">${esc(qty(line.totalQuantity))} ${esc(line.unit)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
+                    ${forRecipes ? `<div class="row-sub small clamp">For ${esc(forRecipes)}</div>` : ''}
+                </div>
+                <div class="row-end">${priceHtml(o)}</div>
+            </label></li>`;
+        }
+        html += '</ul>';
+    }
+    view.innerHTML = html;
+
+    const updateSummary = () => {
+        const total = list.items.length;
+        const done = list.items.filter(l => checked.has(lineKey(l))).length;
+        const remaining = list.items
+            .filter(l => !checked.has(lineKey(l)) && bestOption(l)?.tillPrice != null)
+            .reduce((sum, l) => sum + bestOption(l).tillPrice, 0);
+        document.getElementById('summary').innerHTML =
+            `<span><strong>${done}</strong> of ${total} in the basket</span>
+             <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
+        document.getElementById('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
+    };
+    updateSummary();
+
+    view.addEventListener('change', e => {
+        const box = e.target.closest('input[type="checkbox"][data-key]');
+        if (!box) return;
+        if (box.checked) checked.add(box.dataset.key); else checked.delete(box.dataset.key);
+        box.closest('.shop-item').classList.toggle('done', box.checked);
+        store(checkedKey, [...checked]);
+        updateSummary();
+    });
+    wireClearPicks();
+}
+
+function wireClearPicks() {
+    const btn = view.querySelector('[data-action="clear-picks"]');
+    if (btn) btn.addEventListener('click', () => {
+        store(PICK_KEY, []);
+        store('dahaem.checked.picked', []);
+        location.hash = '#/savings';
+    });
+}
+
 async function renderShopping(planIdParam) {
     titleEl.textContent = 'Shopping list';
     showLoading();
@@ -256,7 +368,7 @@ async function renderShopping(planIdParam) {
     // a known store price go last.
     const groups = new Map();
     for (const line of list.items) {
-        const storeName = line.bestOption?.storeName || '';
+        const storeName = bestOption(line)?.storeName || '';
         if (!groups.has(storeName)) groups.set(storeName, []);
         groups.get(storeName).push(line);
     }
@@ -272,7 +384,7 @@ async function renderShopping(planIdParam) {
         const lines = groups.get(storeName).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
         html += `<h2 class="section-title">${esc(storeName || 'No store price yet')}</h2><ul class="list">`;
         for (const line of lines) {
-            const o = line.bestOption;
+            const o = bestOption(line);
             const key = lineKey(line);
             const id = `chk-${line.inventoryItemId}-${encodeURIComponent(line.unit)}`.replace(/%/g, '_');
             const forRecipes = line.sourceRecipeIds.map(rid => recipeNames.get(rid)).filter(Boolean).join(', ');
@@ -297,8 +409,8 @@ async function renderShopping(planIdParam) {
         const total = list.items.length;
         const done = list.items.filter(l => checked.has(lineKey(l))).length;
         const remaining = list.items
-            .filter(l => !checked.has(lineKey(l)) && l.bestOption?.tillPrice != null)
-            .reduce((sum, l) => sum + l.bestOption.tillPrice, 0);
+            .filter(l => !checked.has(lineKey(l)) && bestOption(l)?.tillPrice != null)
+            .reduce((sum, l) => sum + bestOption(l).tillPrice, 0);
         document.getElementById('summary').innerHTML =
             `<span><strong>${done}</strong> of ${total} in the basket</span>
              <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
@@ -635,9 +747,15 @@ async function renderPlans(planIdParam) {
 // ---- Savings ----
 
 function suggestionRowHtml(s, whyText) {
-    return `<li><a class="row row-link" href="#/recipes/${s.recipeId}">
-        <div class="row-main"><div class="row-title">${esc(s.recipeName)}</div>
-        <div class="row-sub">${esc(whyText(s.score))}</div></div></a></li>`;
+    const picked = isPicked(s.recipeId);
+    return `<li class="row-pickable">
+        <a class="row row-link" href="#/recipes/${s.recipeId}">
+            <div class="row-main"><div class="row-title">${esc(s.recipeName)}</div>
+            <div class="row-sub">${esc(whyText(s.score))}</div></div></a>
+        <button class="pick-btn${picked ? ' picked' : ''}" type="button" data-pick="${s.recipeId}"
+            data-name="${esc(s.recipeName)}" aria-pressed="${picked}"
+            title="Add this recipe to the shopping list">${picked ? '✓' : '+'}</button>
+    </li>`;
 }
 
 function onSaleWhy(score) {
@@ -658,7 +776,10 @@ async function renderSavings() {
         api('/api/suggestions/by-expiring?days=7')
     ]);
 
-    let html = staleNotice() + '<h2 class="section-title">On sale now</h2>';
+    const buildBar = `<div class="toolbar">
+        <a class="btn btn-primary" id="build-list" style="flex:1;display:grid;place-content:center"
+           href="#/list">Shopping list (${pickedList().length})</a></div>`;
+    let html = staleNotice() + buildBar + '<h2 class="section-title">On sale now</h2>';
     html += savings.length === 0
         ? stateHtml('No savings-based suggestions right now', 'No recipe ingredients are currently on sale.')
         : `<ul class="list">${savings.map(s => suggestionRowHtml(s, onSaleWhy)).join('')}</ul>`;
@@ -669,6 +790,19 @@ async function renderSavings() {
         : `<ul class="list">${expiring.map(s => suggestionRowHtml(s, expiringSoonWhy)).join('')}</ul>`;
 
     view.innerHTML = html;
+
+    // Tap + / ✓ to add or remove a recipe from the shopping-list selection.
+    view.addEventListener('click', e => {
+        const btn = e.target.closest('[data-pick]');
+        if (!btn) return;
+        e.preventDefault();
+        const nowPicked = togglePick(Number(btn.dataset.pick), btn.dataset.name);
+        btn.classList.toggle('picked', nowPicked);
+        btn.textContent = nowPicked ? '✓' : '+';
+        btn.setAttribute('aria-pressed', String(nowPicked));
+        const build = document.getElementById('build-list');
+        if (build) build.textContent = `Shopping list (${pickedList().length})`;
+    });
 }
 
 // ---- Login ----
@@ -738,6 +872,7 @@ async function logout() {
 
 const routes = {
     shopping: renderShopping,
+    list: renderPickedList,
     'shopping-list': renderPersistedShoppingList,
     inventory: renderInventory,
     recipes: (id) => (id ? renderRecipe(id) : renderRecipes()),
