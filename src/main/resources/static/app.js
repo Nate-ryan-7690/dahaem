@@ -238,67 +238,67 @@ function optionDetails(o) {
     return parts.join(' · ');
 }
 
-async function renderPickedList() {
-    titleEl.textContent = 'Shopping list';
-    showLoading();
-    const picks = pickedList();
-    const bar = `<div class="toolbar">
-        <a class="btn" href="#/savings">‹ Savings</a>
-        <button class="btn" type="button" data-action="clear-picks" style="margin-left:auto">Clear picks</button>
-    </div>`;
-    if (picks.length === 0) {
-        view.innerHTML = bar + stateHtml('No recipes picked yet',
-            'Open Savings and tap + on the recipes you want to cook, then come back here.');
-        wireClearPicks();
-        return;
+// Collapses a shopping list's lines to one row per inventory item. Recipes can list the same
+// item in different units (butter in g and in Stück), which the API returns as separate lines;
+// the store option/price is per item, so we merge them and show the quantities together.
+function condenseByItem(items) {
+    const byItem = new Map();
+    for (const line of items) {
+        const o = bestOption(line);
+        let g = byItem.get(line.inventoryItemId);
+        if (!g) {
+            g = { inventoryItemId: line.inventoryItemId, nameDeutsch: line.nameDeutsch,
+                  units: [], bestOption: o, sourceRecipeIds: new Set() };
+            byItem.set(line.inventoryItemId, g);
+        }
+        g.units.push(`${qty(line.totalQuantity)} ${line.unit}`);
+        (line.sourceRecipeIds || []).forEach(r => g.sourceRecipeIds.add(r));
+        if (!g.bestOption && o) g.bestOption = o;
     }
+    return [...byItem.values()].map(g => ({
+        inventoryItemId: g.inventoryItemId,
+        nameDeutsch: g.nameDeutsch,
+        qtyLabel: g.units.join(' + '),
+        bestOption: g.bestOption,
+        sourceRecipeIds: [...g.sourceRecipeIds]
+    }));
+}
 
-    const recipeIds = [...new Set(picks.map(p => p.id))];
-    const recipeNames = new Map(picks.map(p => [p.id, p.name]));
-    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}`);
-    if (list.items.length === 0) {
-        view.innerHTML = bar + stateHtml('Nothing to buy', 'The picked recipes have no ingredients listed.');
-        wireClearPicks();
-        return;
-    }
-
-    // Group by store so the list reads in the order you walk the shops; no-price lines go last.
+// Renders the body of a shopping list (store-grouped rows, running total, weekly budget, check-off)
+// into `view`, on top of the caller's headerHtml. Shared by the picked list and the meal-plan list.
+function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHtml = '' }) {
+    const items = condenseByItem(list.items);
+    const keyOf = it => 'i' + it.inventoryItemId;
     const groups = new Map();
-    for (const line of list.items) {
-        const storeName = bestOption(line)?.storeName || '';
-        if (!groups.has(storeName)) groups.set(storeName, []);
-        groups.get(storeName).push(line);
+    for (const it of items) {
+        const s = it.bestOption?.storeName || '';
+        if (!groups.has(s)) groups.set(s, []);
+        groups.get(s).push(it);
     }
     const storeNames = [...groups.keys()].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'));
-
-    const checkedKey = 'dahaem.checked.picked';
     const checked = new Set(store(checkedKey) || []);
     const savedBudget = store(BUDGET_KEY);
 
-    let html = staleNotice() + bar + `<div class="summary" id="summary"></div>
+    let html = staleNotice() + headerHtml + `<div class="summary" id="summary"></div>
         <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
-        <div class="budget">
-            <label for="budget-input">Weekly budget €</label>
-            <input type="number" id="budget-input" min="0" step="5" inputmode="decimal"
-                   placeholder="e.g. 100" value="${savedBudget != null ? savedBudget : ''}">
-        </div>
+        <div class="budget"><label for="budget-input">Weekly budget €</label>
+        <input type="number" id="budget-input" min="0" step="5" inputmode="decimal" placeholder="e.g. 100" value="${savedBudget != null ? savedBudget : ''}"></div>
         <div class="budget-bar" id="budget-bar"></div>`;
-    for (const storeName of storeNames) {
-        const lines = groups.get(storeName).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
-        html += `<h2 class="section-title">${esc(storeName || 'No store price yet')}</h2><ul class="list">`;
-        for (const line of lines) {
-            const o = bestOption(line);
-            const key = lineKey(line);
-            const id = `chk-${line.inventoryItemId}-${encodeURIComponent(line.unit)}`.replace(/%/g, '_');
-            const forRecipes = line.sourceRecipeIds.map(rid => recipeNames.get(rid)).filter(Boolean).join(', ');
+    for (const s of storeNames) {
+        const rows = groups.get(s).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
+        html += `<h2 class="section-title">${esc(s || 'No store price yet')}</h2><ul class="list">`;
+        for (const it of rows) {
+            const o = it.bestOption;
+            const key = keyOf(it);
+            const forRecipes = it.sourceRecipeIds.map(r => recipeNames.get(r)).filter(Boolean).join(', ');
             const badge = o?.onSale
                 ? ` <span class="pill pill-sale">Sale${o.validUntil ? ` until ${esc(dayFmt.format(parseDate(o.validUntil)))}` : ''}</span>`
                 : '';
-            html += `<li><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="${id}">
-                <input type="checkbox" id="${id}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
+            html += `<li><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="chk-${it.inventoryItemId}">
+                <input type="checkbox" id="chk-${it.inventoryItemId}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
                 <div class="row-main">
-                    <div class="row-title">${esc(label(line.nameDeutsch))}${badge}</div>
-                    <div class="row-sub">${esc(qty(line.totalQuantity))} ${esc(line.unit)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
+                    <div class="row-title">${esc(label(it.nameDeutsch))}${badge}</div>
+                    <div class="row-sub">${esc(it.qtyLabel)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
                     ${forRecipes ? `<div class="row-sub small clamp">For ${esc(forRecipes)}</div>` : ''}
                 </div>
                 <div class="row-end">${priceHtml(o)}</div>
@@ -309,11 +309,11 @@ async function renderPickedList() {
     view.innerHTML = html;
 
     const updateSummary = () => {
-        const total = list.items.length;
-        const done = list.items.filter(l => checked.has(lineKey(l))).length;
-        const remaining = list.items
-            .filter(l => !checked.has(lineKey(l)) && bestOption(l)?.tillPrice != null)
-            .reduce((sum, l) => sum + bestOption(l).tillPrice, 0);
+        const total = items.length;
+        const done = items.filter(it => checked.has(keyOf(it))).length;
+        const remaining = items
+            .filter(it => !checked.has(keyOf(it)) && it.bestOption?.tillPrice != null)
+            .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
         document.getElementById('summary').innerHTML =
             `<span><strong>${done}</strong> of ${total} in the basket</span>
              <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
@@ -321,12 +321,10 @@ async function renderPickedList() {
     };
     updateSummary();
 
-    // Budget: estimated full cost of the list (one pack of the cheapest option per priced line).
-    const estTotal = list.items
-        .map(bestOption)
-        .filter(o => o && o.tillPrice != null)
-        .reduce((sum, o) => sum + o.tillPrice, 0);
-    const unpriced = list.items.filter(l => bestOption(l)?.tillPrice == null).length;
+    // One pack of the cheapest option per priced item; each item counted once (condensed).
+    const estTotal = items.filter(it => it.bestOption?.tillPrice != null)
+        .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
+    const unpriced = items.filter(it => it.bestOption?.tillPrice == null).length;
     const updateBudget = () => {
         const bar = document.getElementById('budget-bar');
         const budget = Number(document.getElementById('budget-input').value);
@@ -357,7 +355,73 @@ async function renderPickedList() {
         store(checkedKey, [...checked]);
         updateSummary();
     });
+}
+
+async function renderPickedList() {
+    titleEl.textContent = 'Shopping list';
+    showLoading();
+    const picks = pickedList();
+    const bar = `<div class="toolbar">
+        <a class="btn" href="#/savings">‹ Savings</a>
+        <button class="btn" type="button" data-action="to-plan">Add picks to meal plan</button>
+        <button class="btn" type="button" data-action="clear-picks" style="margin-left:auto">Clear picks</button>
+    </div><p class="save-status small" id="plan-status" hidden></p>`;
+    if (picks.length === 0) {
+        view.innerHTML = bar + stateHtml('No recipes picked yet',
+            'Open Savings and tap + on the recipes you want to cook, then come back here.');
+        wireClearPicks(); wireToPlan();
+        return;
+    }
+
+    const recipeIds = [...new Set(picks.map(p => p.id))];
+    const recipeNames = new Map(picks.map(p => [p.id, p.name]));
+    const list = await api(`/api/shopping-list?recipeIds=${recipeIds.join(',')}`);
+    if (list.items.length === 0) {
+        view.innerHTML = bar + stateHtml('Nothing to buy', 'The picked recipes have no ingredients listed.');
+        wireClearPicks(); wireToPlan();
+        return;
+    }
+
+    mountShoppingList(list, { checkedKey: 'dahaem.checked.picked', recipeNames, headerHtml: bar });
     wireClearPicks();
+    wireToPlan();
+}
+
+// Bridge: add every picked recipe to the current week's meal plan (creating it if needed).
+function wireToPlan() {
+    const btn = view.querySelector('[data-action="to-plan"]');
+    if (!btn) return;
+    const status = view.querySelector('#plan-status');
+    btn.addEventListener('click', async () => {
+        const picks = pickedList();
+        if (!picks.length) return;
+        btn.disabled = true;
+        try {
+            const plans = await api('/api/meal-plans');
+            const plan = plans.length
+                ? defaultPlan(plans)
+                : await apiWrite('/api/meal-plans', 'POST', { weekStartDate: mondayOfThisWeek() });
+            let added = 0, already = 0;
+            for (const p of picks) {
+                try {
+                    await apiWrite(`/api/meal-plans/${plan.id}/recipes`, 'POST', { recipeId: p.id, mealTime: 'Abendessen' });
+                    added++;
+                } catch (e) {
+                    if (e && e.status === 409) already++; else throw e;
+                }
+            }
+            if (status) {
+                status.hidden = false;
+                status.textContent = `Added ${added} recipe${added === 1 ? '' : 's'} to ${planLabel(plan)}`
+                    + `${already ? ` · ${already} already there` : ''}.`;
+            }
+        } catch (err) {
+            if (err instanceof LoginRequired) { requireLogin(); return; }
+            if (status) { status.hidden = false; status.textContent = 'Could not add to plan: ' + err.message; }
+        } finally {
+            btn.disabled = false;
+        }
+    });
 }
 
 function wireClearPicks() {
@@ -410,76 +474,12 @@ async function renderShopping(planIdParam) {
         return;
     }
 
-    // Group by store so the list reads in the order you walk the shops; lines without
-    // a known store price go last.
-    const groups = new Map();
-    for (const line of list.items) {
-        const storeName = bestOption(line)?.storeName || '';
-        if (!groups.has(storeName)) groups.set(storeName, []);
-        groups.get(storeName).push(line);
-    }
-    const storeNames = [...groups.keys()].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'));
-
     const checkedKey = `dahaem.checked.${plan.id}`;
-    const checked = new Set(store(checkedKey) || []);
     const recipeNames = new Map(plan.recipes.map(r => [r.recipeId, r.recipeName]));
-
-    let html = staleNotice() + toolbar + `<div class="summary" id="summary"></div>
-        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>`;
-    for (const storeName of storeNames) {
-        const lines = groups.get(storeName).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
-        html += `<h2 class="section-title">${esc(storeName || 'No store price yet')}</h2><ul class="list">`;
-        for (const line of lines) {
-            const o = bestOption(line);
-            const key = lineKey(line);
-            const id = `chk-${line.inventoryItemId}-${encodeURIComponent(line.unit)}`.replace(/%/g, '_');
-            const forRecipes = line.sourceRecipeIds.map(rid => recipeNames.get(rid)).filter(Boolean).join(', ');
-            const badge = o?.onSale
-                ? ` <span class="pill pill-sale">Sale${o.validUntil ? ` until ${esc(dayFmt.format(parseDate(o.validUntil)))}` : ''}</span>`
-                : '';
-            html += `<li><label class="row shop-item${checked.has(key) ? ' done' : ''}" for="${id}">
-                <input type="checkbox" id="${id}" data-key="${esc(key)}"${checked.has(key) ? ' checked' : ''}>
-                <div class="row-main">
-                    <div class="row-title">${esc(label(line.nameDeutsch))}${badge}</div>
-                    <div class="row-sub">${esc(qty(line.totalQuantity))} ${esc(line.unit)}${o ? ` · ${esc(optionDetails(o))}` : ''}</div>
-                    ${forRecipes ? `<div class="row-sub small clamp">For ${esc(forRecipes)}</div>` : ''}
-                </div>
-                <div class="row-end">${priceHtml(o)}</div>
-            </label></li>`;
-        }
-        html += '</ul>';
-    }
-    view.innerHTML = html;
-
-    const updateSummary = () => {
-        const total = list.items.length;
-        const done = list.items.filter(l => checked.has(lineKey(l))).length;
-        const remaining = list.items
-            .filter(l => !checked.has(lineKey(l)) && bestOption(l)?.tillPrice != null)
-            .reduce((sum, l) => sum + bestOption(l).tillPrice, 0);
-        document.getElementById('summary').innerHTML =
-            `<span><strong>${done}</strong> of ${total} in the basket</span>
-             <span class="muted" title="Sum of one pack per remaining line with a known price">≈ ${eur.format(remaining)} left</span>`;
-        document.getElementById('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
-    };
-    updateSummary();
-
-    view.addEventListener('change', e => {
-        const box = e.target.closest('input[type="checkbox"][data-key]');
-        if (!box) return;
-        if (box.checked) checked.add(box.dataset.key); else checked.delete(box.dataset.key);
-        box.closest('.shop-item').classList.toggle('done', box.checked);
-        store(checkedKey, [...checked]);
-        updateSummary();
-    });
+    mountShoppingList(list, { checkedKey, recipeNames, headerHtml: toolbar });
     wireShoppingToolbar(plan, () => {
-        checked.clear();
         store(checkedKey, []);
-        view.querySelectorAll('input[data-key]').forEach(b => {
-            b.checked = false;
-            b.closest('.shop-item').classList.remove('done');
-        });
-        updateSummary();
+        route(); // re-render with everything unchecked
     });
 }
 
