@@ -69,4 +69,79 @@ class StoreMatchServiceTest {
 
         assertNull(service.match("", catalog));
     }
+
+    // ---------------------------------------------------------------------------------
+    // German-aware matching: compounds, plurals and descriptors, against a small catalog
+    // modeled on real flyer names that the old exact/contains-only matcher dropped.
+    // ---------------------------------------------------------------------------------
+
+    private static final int SUESSKARTOFFEL = 1;
+    private static final int ZWIEBEL = 2;
+    private static final int CHAMPIGNON = 3;
+    private static final int PFLAUME = 4;
+    private static final int BIRNE = 5;
+    private static final int ARTISCHOCKE = 6;
+    private static final int OLIVE = 7;
+    private static final int BELL_PEPPER = 8;   // only here to prove "bell" never fires on unrelated words
+
+    private static final List<CatalogItem> GERMAN_CATALOG = List.of(
+            item(SUESSKARTOFFEL, "sweet potato", "Süßkartoffel"),
+            item(ZWIEBEL, "onion", "Zwiebel"),
+            item(CHAMPIGNON, "champignon", "Champignon"),
+            item(PFLAUME, "plum", "Pflaume"),
+            item(BIRNE, "pear", "Birne"),
+            item(ARTISCHOCKE, "artichoke", "Artischocke"),
+            item(OLIVE, "olive", "Olive"),
+            item(BELL_PEPPER, "bell", "Glocke"));
+
+    private static Integer matchGerman(String storeName) {
+        return new StoreMatchService(null, Map.of()).match(storeName, GERMAN_CATALOG);
+    }
+
+    @Test
+    void foldsPluralOntoSingularCatalogTerm() {
+        assertEquals(SUESSKARTOFFEL, matchGerman("Süßkartoffeln"));
+        assertEquals(PFLAUME, matchGerman("Pflaumen"));
+    }
+
+    @Test
+    void matchesCompoundHeadZwiebel() {
+        assertEquals(ZWIEBEL, matchGerman("Gemüsezwiebeln"));
+    }
+
+    @Test
+    void matchesCompoundHeadBirne() {
+        assertEquals(BIRNE, matchGerman("Tafelbirnen"));
+    }
+
+    @Test
+    void dropsDescriptorThenMatchesCompoundHeadChampignon() {
+        assertEquals(CHAMPIGNON, matchGerman("Kulturchampignons braun"));
+    }
+
+    @Test
+    void dropsSizeDescriptorThenMatchesCompoundHeadOlive() {
+        assertEquals(OLIVE, matchGerman("Riesenoliven XXL"));
+    }
+
+    @Test
+    void stripsFusedPartSuffixThenMatchesArtischocke() {
+        assertEquals(ARTISCHOCKE, matchGerman("Artischockenherzen"));
+    }
+
+    @Test
+    void doesNotMatchSubstringInTheMiddleOfAWord() {
+        // "kabellose" contains "bell" mid-word; a real substring scan would wrongly hit the
+        // catalog's "bell" (bell pepper) term. The compound rule only looks at word endings.
+        assertNull(matchGerman("Kabellose Türklingel"));
+    }
+
+    @Test
+    void unrelatedNonFoodNamesStayUnmatched() {
+        assertNull(matchGerman("Klapptrittleiter"));
+        assertNull(matchGerman("LED-Strahler"));
+        assertNull(matchGerman("Servietten"));
+        assertNull(matchGerman("Malerkrepp"));
+        assertNull(matchGerman("Pyjama"));
+    }
 }
