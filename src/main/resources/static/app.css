@@ -278,3 +278,9 @@ select, input[type="search"], input[type="email"], input[type="password"] {
     padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--accent-soft); margin-bottom: 12px; }
 .budget-bar.over { background: var(--sale-soft); border-color: var(--sale); color: var(--sale); }
+
+/* Add-to-meal-plan control on the recipe detail */
+.plan-add select {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--text);
+}

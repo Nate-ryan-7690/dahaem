@@ -48,6 +48,16 @@ function addDays(date, days) {
     return d;
 }
 
+function isoDate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Monday of the current week, as YYYY-MM-DD (meal plans are keyed by week start).
+function mondayOfThisWeek() {
+    const t = today();
+    return isoDate(addDays(t, -((t.getDay() + 6) % 7)));
+}
+
 function store(key, value) {
     try {
         if (value === undefined) return JSON.parse(localStorage.getItem(key));
@@ -735,9 +745,42 @@ async function renderRecipe(id) {
 
     view.innerHTML = staleNotice() + `<a class="back" href="#/recipes">‹ Recipes</a>
         <div class="detail-head"><h2>${esc(r.name)}</h2><div class="facts">${facts}</div></div>
+        <div class="toolbar plan-add">
+            <select id="meal-time" aria-label="Meal">
+                <option value="Frühstück">Frühstück</option>
+                <option value="Mittagessen">Mittagessen</option>
+                <option value="Abendessen" selected>Abendessen</option>
+                <option value="Snack">Snack</option>
+            </select>
+            <button class="btn btn-primary" type="button" id="add-to-plan" style="flex:1">Add to meal plan</button>
+        </div>
+        <p class="save-status small" id="plan-status" hidden></p>
         ${nutritionCells ? `<h3 class="section-title">Nutrition</h3><div class="list nutrition">${nutritionCells}</div>` : ''}
         <h3 class="section-title">Ingredients</h3>${ingredients}
         <h3 class="section-title">Steps</h3>${steps}`;
+
+    const addBtn = view.querySelector('#add-to-plan');
+    const planStatus = view.querySelector('#plan-status');
+    addBtn.addEventListener('click', async () => {
+        addBtn.disabled = true;
+        planStatus.hidden = true;
+        try {
+            const plans = await api('/api/meal-plans');
+            const plan = plans.length
+                ? defaultPlan(plans)
+                : await apiWrite('/api/meal-plans', 'POST', { weekStartDate: mondayOfThisWeek() });
+            const mealTime = view.querySelector('#meal-time').value;
+            await apiWrite(`/api/meal-plans/${plan.id}/recipes`, 'POST', { recipeId: Number(id), mealTime });
+            planStatus.hidden = false;
+            planStatus.textContent = `Added to ${planLabel(plan)}.`;
+        } catch (err) {
+            if (err instanceof LoginRequired) { requireLogin(); return; }
+            planStatus.hidden = false;
+            planStatus.textContent = err.status === 409 ? 'Already on this week’s plan.' : err.message;
+        } finally {
+            addBtn.disabled = false;
+        }
+    });
 }
 
 // ---- Meal plans ----
@@ -747,7 +790,10 @@ async function renderPlans(planIdParam) {
     showLoading();
     const plans = await api('/api/meal-plans');
     if (plans.length === 0) {
-        view.innerHTML = stateHtml('No meal plan yet', 'Weekly meal plans you create will show up here.');
+        view.innerHTML = stateHtml('No meal plan yet',
+            'Create a weekly plan, then add recipes to it from any recipe or the Savings tab.',
+            '<button class="btn btn-primary" type="button" id="new-plan" style="display:inline-grid;place-content:center">New plan</button>');
+        wireNewPlan();
         return;
     }
     const plan = plans.find(p => String(p.id) === planIdParam) || defaultPlan(plans);
@@ -758,7 +804,8 @@ async function renderPlans(planIdParam) {
 
     let body;
     if (plan.recipes.length === 0) {
-        body = stateHtml('No recipes planned', 'This week has no recipes yet.');
+        body = stateHtml('No recipes planned',
+            'Open a recipe (or the Savings tab) and tap "Add to meal plan".');
     } else {
         // Group by meal time, keeping the order the plan lists them in.
         const byMeal = new Map();
@@ -768,15 +815,52 @@ async function renderPlans(planIdParam) {
             byMeal.get(meal).push(r);
         }
         body = [...byMeal].map(([meal, rs]) => `<h2 class="section-title">${esc(meal)}</h2>
-            <ul class="list">${rs.map(r => `<li><a class="row row-link" href="#/recipes/${r.recipeId}">
-                <div class="row-main"><div class="row-title">${esc(r.recipeName)}</div></div></a></li>`).join('')}</ul>`).join('');
+            <ul class="list">${rs.map(r => `<li class="row-pickable">
+                <a class="row row-link" href="#/recipes/${r.recipeId}"><div class="row-main"><div class="row-title">${esc(r.recipeName)}</div></div></a>
+                <button class="pick-btn" type="button" data-remove="${r.recipeId}" aria-label="Remove ${esc(r.recipeName)} from plan" title="Remove from plan">✕</button>
+            </li>`).join('')}</ul>`).join('');
         body += `<p style="margin-top:20px"><a class="btn btn-primary" style="display:grid;place-content:center" href="#/shopping/${plan.id}">Shopping list for this week</a></p>`;
     }
 
     view.innerHTML = staleNotice() + `<div class="toolbar">
-        <select id="plan-view-select" aria-label="Meal plan">${options}</select></div>` + body;
+        <select id="plan-view-select" aria-label="Meal plan">${options}</select>
+        <button class="btn" type="button" id="new-plan">New plan</button>
+    </div>` + body;
     view.querySelector('#plan-view-select').addEventListener('change', e => {
         location.hash = `#/plans/${e.target.value}`;
+    });
+    wireNewPlan();
+
+    // Remove a recipe from this plan (✕), then re-render.
+    view.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-remove]');
+        if (!btn) return;
+        btn.disabled = true;
+        try {
+            await apiWrite(`/api/meal-plans/${plan.id}/recipes/${btn.dataset.remove}`, 'DELETE');
+            route();
+        } catch (err) {
+            btn.disabled = false;
+            if (err instanceof LoginRequired) { requireLogin(); return; }
+            showError(err);
+        }
+    });
+}
+
+function wireNewPlan() {
+    const btn = view.querySelector('#new-plan');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+            const plan = await apiWrite('/api/meal-plans', 'POST', { weekStartDate: mondayOfThisWeek() });
+            location.hash = `#/plans/${plan.id}`;
+        } catch (err) {
+            btn.disabled = false;
+            if (err instanceof LoginRequired) { requireLogin(); return; }
+            if (err.status === 409) { location.hash = '#/plans'; route(); return; } // a plan for this week already exists
+            showError(err);
+        }
     });
 }
 
