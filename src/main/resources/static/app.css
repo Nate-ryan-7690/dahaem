@@ -270,3 +270,11 @@ select, input[type="search"], input[type="email"], input[type="password"] {
     border-radius: var(--radius); font-size: 1.4rem; line-height: 1; cursor: pointer;
 }
 .pick-btn.picked { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+/* Weekly meal budget on the shopping list */
+.budget { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; font-size: 0.9rem; }
+.budget input { width: 110px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+.budget-bar { display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--accent-soft); margin-bottom: 12px; }
+.budget-bar.over { background: var(--sale-soft); border-color: var(--sale); color: var(--sale); }

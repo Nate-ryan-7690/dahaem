@@ -59,6 +59,7 @@ function store(key, value) {
 
 // ---- Picked recipes: a client-side selection for the "shop what's on sale" flow ----
 const PICK_KEY = 'dahaem.picked';
+const BUDGET_KEY = 'dahaem.budget';
 function pickedList() { return store(PICK_KEY) || []; }
 function isPicked(id) { return pickedList().some(p => p.id === id); }
 function togglePick(id, name) {
@@ -262,9 +263,16 @@ async function renderPickedList() {
 
     const checkedKey = 'dahaem.checked.picked';
     const checked = new Set(store(checkedKey) || []);
+    const savedBudget = store(BUDGET_KEY);
 
     let html = staleNotice() + bar + `<div class="summary" id="summary"></div>
-        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>`;
+        <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+        <div class="budget">
+            <label for="budget-input">Weekly budget €</label>
+            <input type="number" id="budget-input" min="0" step="5" inputmode="decimal"
+                   placeholder="e.g. 100" value="${savedBudget != null ? savedBudget : ''}">
+        </div>
+        <div class="budget-bar" id="budget-bar"></div>`;
     for (const storeName of storeNames) {
         const lines = groups.get(storeName).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
         html += `<h2 class="section-title">${esc(storeName || 'No store price yet')}</h2><ul class="list">`;
@@ -302,6 +310,34 @@ async function renderPickedList() {
         document.getElementById('progress-bar').style.width = `${total ? (done / total) * 100 : 0}%`;
     };
     updateSummary();
+
+    // Budget: estimated full cost of the list (one pack of the cheapest option per priced line).
+    const estTotal = list.items
+        .map(bestOption)
+        .filter(o => o && o.tillPrice != null)
+        .reduce((sum, o) => sum + o.tillPrice, 0);
+    const unpriced = list.items.filter(l => bestOption(l)?.tillPrice == null).length;
+    const updateBudget = () => {
+        const bar = document.getElementById('budget-bar');
+        const budget = Number(document.getElementById('budget-input').value);
+        const note = unpriced ? ` · ${unpriced} item${unpriced === 1 ? '' : 's'} without a price yet` : '';
+        if (!budget || budget <= 0) {
+            bar.className = 'budget-bar';
+            bar.innerHTML = `<span>Estimated total <strong>${eur.format(estTotal)}</strong></span>`
+                + `<span class="muted small">one pack per item${note}</span>`;
+            return;
+        }
+        const left = budget - estTotal;
+        bar.className = 'budget-bar' + (left < 0 ? ' over' : '');
+        bar.innerHTML = `<span>Est. <strong>${eur.format(estTotal)}</strong> of ${eur.format(budget)}</span>`
+            + `<span>${left < 0 ? `over by ${eur.format(-left)}` : `${eur.format(left)} left`}${note ? `<span class="muted small">${note}</span>` : ''}</span>`;
+    };
+    updateBudget();
+    document.getElementById('budget-input').addEventListener('input', e => {
+        const v = Number(e.target.value);
+        store(BUDGET_KEY, e.target.value === '' ? null : (Number.isFinite(v) ? v : null));
+        updateBudget();
+    });
 
     view.addEventListener('change', e => {
         const box = e.target.closest('input[type="checkbox"][data-key]');
