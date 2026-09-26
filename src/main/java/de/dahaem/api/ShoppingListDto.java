@@ -25,17 +25,24 @@ public record ShoppingListDto(List<Line> items) {
         }
     }
 
-    /** One store's current price for a line: what it costs at the till (sale/deal price where one applies, plus deposit). */
+    /**
+     * One store's current price for a line: what it costs at the till (sale/deal price where one
+     * applies, plus deposit), plus whether this pack's unit is even comparable to what's needed.
+     * unitCompatible is false when the pack's unit is a different physical dimension (or either
+     * unit is unrecognized) than the line needs; packsNeeded/packsTotalPrice are only ever set
+     * when it's true — never a fabricated pack count for an incompatible unit.
+     */
     public record StoreOptionDto(int storeItemId, String storeName, String brandName, String packageUnit,
                              int packageSize, Double normalPrice, boolean onSale, Double salePrice,
                              int dealQuantity, Double dealPrice, LocalDate validUntil, Double deposit,
-                             Double tillPrice) {
+                             Double tillPrice, boolean unitCompatible, Integer packsNeeded, Double packsTotalPrice) {
 
         static StoreOptionDto from(StoreOption option) {
             return new StoreOptionDto(option.storeItemId(), option.storeName(), option.brandName(),
                     option.packageUnit(), option.packageSize(), option.normalPrice(), option.onSale(),
                     option.salePrice(), option.dealQuantity(), option.dealPrice(), option.validUntil(),
-                    option.deposit(), option.tillPrice());
+                    option.deposit(), option.tillPrice(), option.unitCompatible(), option.packsNeeded(),
+                    option.packsTotalPrice());
         }
     }
 
