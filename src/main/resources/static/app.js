@@ -278,17 +278,101 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
     const savedBudget = store(BUDGET_KEY);
     let updateSummary = () => {};
 
-    view.innerHTML = staleNotice() + headerHtml + '<div id="shopping-body"></div>';
-
-    function renderBody() {
-        const items = allItems.filter(it => !removed.has(keyOf(it)));
+    // Groups items by store (cheapest-first item within each group), store with no price last.
+    // Shared by the on-screen render and the plain-text export so they always agree.
+    function groupByStore(items) {
         const groups = new Map();
         for (const it of items) {
             const s = it.bestOption?.storeName || '';
             if (!groups.has(s)) groups.set(s, []);
             groups.get(s).push(it);
         }
-        const storeNames = [...groups.keys()].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'));
+        return [...groups.keys()]
+            .sort((a, b) => (a === '') - (b === '') || a.localeCompare(b, 'de'))
+            .map(s => [s, groups.get(s).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'))]);
+    }
+
+    function priceText(o) {
+        const price = o ? (o.tillPrice ?? o.normalPrice) : null;
+        if (price == null) return 'No price yet';
+        return eur.format(price) + (o.onSale ? ' (Sale)' : '');
+    }
+
+    // Plain-text export: same data the screen shows (removed items excluded, checked items marked).
+    function buildShoppingText() {
+        const items = allItems.filter(it => !removed.has(keyOf(it)));
+        const lines = [`DAHÄM — Shopping list (${dateFmt.format(today())})`];
+        for (const [s, rows] of groupByStore(items)) {
+            lines.push('', s || 'No store price yet');
+            for (const it of rows) {
+                const mark = checked.has(keyOf(it)) ? '✓ ' : '';
+                lines.push(`- ${mark}${label(it.nameDeutsch)} — ${it.qtyLabel} — ${priceText(it.bestOption)}`);
+            }
+        }
+        const estTotal = items.filter(it => it.bestOption?.tillPrice != null)
+            .reduce((sum, it) => sum + it.bestOption.tillPrice, 0);
+        let totalLine = `Estimated total: ${eur.format(estTotal)}`;
+        const budget = store(BUDGET_KEY);
+        if (budget != null && budget > 0) {
+            const left = budget - estTotal;
+            totalLine += `  (budget ${eur.format(budget)}, ${left < 0 ? `over by ${eur.format(-left)}` : `${eur.format(left)} left`})`;
+        }
+        lines.push('', totalLine);
+        return lines.join('\n');
+    }
+
+    function setExportStatus(html) {
+        const el = document.getElementById('export-status');
+        if (!el) return;
+        el.hidden = false;
+        el.innerHTML = html;
+    }
+
+    function downloadShoppingText() {
+        const blob = new Blob([buildShoppingText()], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dahaem-einkaufsliste-${isoDate(today())}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    // Web Share API ("send to phone") when available; otherwise copy to clipboard with a
+    // download link offered alongside, so there is always a way to get the list off-device.
+    async function shareShoppingList() {
+        const text = buildShoppingText();
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: 'DAHÄM — Shopping list', text });
+                return;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return; // user cancelled the share sheet
+            }
+        }
+        let copied = false;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                copied = true;
+            } catch (e) { /* clipboard blocked; fall back to download only */ }
+        }
+        setExportStatus(copied
+            ? 'Copied to clipboard. <button type="button" class="link-btn" data-action="download-list">Download .txt</button>'
+            : 'Could not copy automatically. <button type="button" class="link-btn" data-action="download-list">Download .txt</button>');
+    }
+
+    view.innerHTML = staleNotice() + headerHtml + `<div class="toolbar list-actions">
+            <button class="btn" type="button" data-action="share-list">Share</button>
+            <button class="btn" type="button" data-action="print-list">Print</button>
+        </div>
+        <p class="save-status small" id="export-status" hidden></p>
+        <div id="shopping-body"></div>`;
+
+    function renderBody() {
+        const items = allItems.filter(it => !removed.has(keyOf(it)));
 
         let html = `<div class="summary" id="summary"></div>
             <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
@@ -299,8 +383,7 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
             html += `<p class="removed-note small">${removed.size} item${removed.size === 1 ? '' : 's'} removed
                 — <button type="button" class="link-btn" data-action="restore-removed">Restore</button></p>`;
         }
-        for (const s of storeNames) {
-            const rows = groups.get(s).sort((a, b) => a.nameDeutsch.localeCompare(b.nameDeutsch, 'de'));
+        for (const [s, rows] of groupByStore(items)) {
             html += `<h2 class="section-title">${esc(s || 'No store price yet')}</h2><ul class="list">`;
             for (const it of rows) {
                 const o = it.bestOption;
@@ -387,6 +470,18 @@ function mountShoppingList(list, { checkedKey, recipeNames = new Map(), headerHt
             removed.clear();
             store(removedKey, []);
             renderBody();
+            return;
+        }
+        if (e.target.closest('[data-action="print-list"]')) {
+            window.print();
+            return;
+        }
+        if (e.target.closest('[data-action="share-list"]')) {
+            shareShoppingList();
+            return;
+        }
+        if (e.target.closest('[data-action="download-list"]')) {
+            downloadShoppingText();
         }
     });
 }

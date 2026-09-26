@@ -5,7 +5,7 @@
 //   carry an X-Dahaem-Cached header with the time they were saved. /api/auth/* is never
 //   cached, and the app deletes the API cache on logout.
 // Bump CACHE_VERSION whenever a shell file changes so clients pick up the new files.
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const SHELL_CACHE = `dahaem-shell-${CACHE_VERSION}`;
 const API_CACHE = 'dahaem-api';
 
