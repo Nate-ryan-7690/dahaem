@@ -260,3 +260,13 @@ select, input[type="search"], input[type="email"], input[type="password"] {
 .login-form label { display: grid; gap: 6px; font-size: 0.875rem; font-weight: 600; }
 .login-form input { width: 100%; }
 .form-error { margin: 0; color: var(--sale); font-size: 0.9rem; }
+
+/* Recipe row with an add-to-shopping-list toggle (Savings view) */
+.row-pickable { display: flex; align-items: stretch; gap: 8px; }
+.row-pickable .row-link { flex: 1; }
+.pick-btn {
+    flex: 0 0 auto; width: 46px; min-height: 44px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius); font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.pick-btn.picked { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
