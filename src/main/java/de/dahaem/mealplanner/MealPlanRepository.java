@@ -49,6 +49,20 @@ public class MealPlanRepository {
         }
     }
 
+    /** Removes a recipe from a plan. Returns true if a row was actually deleted. */
+    public boolean removeRecipe(int planId, int recipeId) {
+        String sql = "DELETE FROM meal_plan_recipe WHERE meal_plan_recipe_plan_id = ? " +
+                "AND meal_plan_recipe_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, planId);
+            ps.setInt(2, recipeId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not remove recipe " + recipeId + " from plan " + planId, e);
+        }
+    }
+
     // Finds all meal plans, sorted by week start date.
     public List<MealPlan> findAll() {
         String sql = "SELECT meal_plan_id, meal_plan_week_start_date FROM meal_plan " +
