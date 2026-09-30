@@ -1,0 +1,25 @@
+A L D I
+Waldweg 1-5, 27356 Roterburg
+
+CHRYSANTHEME               5,97 € 1
+3 x 1,99 €
+FLÜSSIGSEIFE               1,99 € 2
+BUTTER                     1,29 € 1
+TOASTBROT                  1,49 € 1
+TOMATEN                    0,99 € 1
+SPÜLMITTEL                 1,59 € 2
+ZAHNPASTA                  1,51 € 2
+------------------------------------
+ZU ZAHLEN                 14,83 €
+
+Steuer        Netto    Steuer   Brutto
+1  7,00%       9,10     0,64     9,74
+2 19,00%       4,28     0,81     5,09
+
+Girocard                  14,83 €
+Karte: ************9999
+Terminal-ID: 12345678
+TA-Nr: 654321
+AID: A0000003591010
+TSE-Signatur: MEUCIQDx7kq9PZ1fX3Yv0m5cA2LJhE8sTn4RwB6uGdKoV1zHq
+Datum 25.09.26   08:46 Uhr
