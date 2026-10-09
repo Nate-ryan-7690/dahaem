@@ -48,9 +48,14 @@ public class StoreDiscountService {
         StoreMatchService matcher = new StoreMatchService(repository, overrides);
         List<OfferRow> offers = repository.loadOffersForPromotion(storeId);
         Map<String, String> knownBrands = knownBrandsByKey(repository.loadKnownOfferBrands());
+        Map<Integer, String> itemUnits = repository.loadItemUnits();
+        MatchGate.References references = repository.loadReferencePrices();
+        Map<Integer, String> itemNames = new HashMap<>();
+        catalog.forEach(c -> itemNames.put(c.id(), c.deutsch() != null ? c.deutsch() : c.english()));
 
-        int items = 0, discounts = 0, unmatched = 0, noSize = 0;
+        int items = 0, discounts = 0, unmatched = 0, noSize = 0, held = 0;
         List<String> unmatchedRows = new ArrayList<>();
+        List<String> reviewRows = new ArrayList<>();
 
         Connection con = repository.openTransaction();
         try {
@@ -73,6 +78,13 @@ public class StoreDiscountService {
                     noSize++;
                     continue;
                 }
+                MatchGate.Verdict verdict = MatchGate.check(itemUnits.get(itemId), pack, o.salePrice(), itemId, references);
+                if (!verdict.ok()) {
+                    held++;
+                    reviewRows.add(o.storeId() + "\t" + o.externalId() + "\t" + o.name() + "\t" + o.salesUnit() + "\t"
+                            + o.salePrice() + "\t" + itemId + " " + itemNames.get(itemId) + "\t" + verdict.reason());
+                    continue;
+                }
                 int brandId = repository.findOrCreateBrand(con, brand == null ? NO_BRAND : brand);
                 int storeItemId = repository.upsertStoreItemFromOffer(con, o.storeId(), o.externalId(), brandId,
                         itemId, pack.unit(), pack.size(), o.normalPrice(), true, o.deposit());
@@ -92,9 +104,12 @@ public class StoreDiscountService {
         }
 
         writeReview(reviewFile, unmatchedRows);
+        Path matchReview = reviewFile.resolveSibling("review_matches.tsv");
+        writeTsv(matchReview, "# matches held back by the gate (store_id\texternal_id\toffer\tsales_unit\tsale_price\t"
+                + "proposed_item\treason): " + reviewRows.size(), reviewRows);
         String notes = String.format("%d offers: %d store_items touched, %d new discounts; "
-                + "%d unmatched (-> %s), %d unparseable-size", offers.size(), items, discounts,
-                unmatched, reviewFile, noSize);
+                + "%d unmatched (-> %s), %d unparseable-size, %d held for review (-> %s)", offers.size(), items,
+                discounts, unmatched, reviewFile, noSize, held, matchReview);
         return new ImportSummary("(offers)", "DISCOUNTS", "OK", 0, discounts, List.of(), notes);
     }
 
@@ -134,7 +149,11 @@ public class StoreDiscountService {
     }
 
     private void writeReview(Path file, List<String> rows) {
-        StringBuilder sb = new StringBuilder("# unmatched offers (store_id\tbrand\tname): " + rows.size() + "\n");
+        writeTsv(file, "# unmatched offers (store_id\tbrand\tname): " + rows.size(), rows);
+    }
+
+    private void writeTsv(Path file, String header, List<String> rows) {
+        StringBuilder sb = new StringBuilder(header + "\n");
         rows.forEach(r -> sb.append(r).append('\n'));
         try {
             if (file.getParent() != null) {

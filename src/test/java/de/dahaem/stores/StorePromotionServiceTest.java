@@ -52,4 +52,18 @@ class StorePromotionServiceTest {
         StorePromotionService.Pack pack = StorePromotionService.parseSize("10-St.-Packung");
         assertEquals(new StorePromotionService.Pack(10, "stück"), pack);
     }
+
+    @Test
+    void dotBeforeThreeDigitsIsAGermanThousandsSeparatorForSmallUnits() {
+        StorePromotionService.Pack pack = StorePromotionService.parseSize("1.062-ml-Glas");
+
+        assertEquals(1062, pack.size());
+        assertEquals("ml", pack.unit());
+    }
+
+    @Test
+    void dotBeforeThreeDigitsStaysADecimalForKgAndLitres() {
+        assertEquals(1250, StorePromotionService.parseSize("1.250 kg").size());
+        assertEquals(1500, StorePromotionService.parseSize("1.5 l").size());
+    }
 }
