@@ -273,6 +273,42 @@ public class StoreRepository {
         return out;
     }
 
+    /** inventory_item_id -> inventory_item_unit ("g", "ml", "Stück", or a container word like "Packung"). */
+    public Map<Integer, String> loadItemUnits() {
+        Map<Integer, String> out = new HashMap<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT inventory_item_id, inventory_item_unit FROM inventory_item");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.put(rs.getInt(1), rs.getString(2));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load item units", e);
+        }
+        return out;
+    }
+
+    /** Reference prices for the match gate: matched store_product rows (STORE data), never offers. */
+    public MatchGate.References loadReferencePrices() {
+        MatchGate.References refs = new MatchGate.References();
+        String sql = "SELECT store_product_inventory_item_id, store_product_sales_unit, store_product_regular_price "
+                + "FROM store_product WHERE store_product_inventory_item_id IS NOT NULL "
+                + "AND store_product_regular_price IS NOT NULL";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                StorePromotionService.Pack pack = StorePromotionService.parseSize(rs.getString(2));
+                if (pack != null) {
+                    refs.add(rs.getInt(1), pack, rs.getDouble(3));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load reference prices", e);
+        }
+        return refs;
+    }
+
     /** Store products of one store that aren't linked to a catalog item yet. */
     public List<StoreProductRef> loadStoreProductsForMatch(int storeId) {
         String sql = "SELECT store_product_id, store_product_name, store_product_category FROM store_product "

@@ -31,6 +31,7 @@ public class StorePromotionService {
     record Pack(int size, String unit) {}
 
     // "<n> <unit>" possibly as "500-g", "1,5-l", "6 x 0,33 l"; the container word ("Packung") is ignored.
+    private static final Pattern THOUSANDS = Pattern.compile("\\d{1,3}(?:\\.\\d{3})+");
     private static final Pattern SIZE = Pattern.compile(
             "(?:(\\d+(?:[.,]\\d+)?)\\s*-?\\s*[xX]\\s*-?\\s*)?"      // optional "6 x"
             + "(\\d+(?:[.,]\\d+)?)\\s*-?\\s*"                        // the amount
@@ -86,9 +87,9 @@ public class StorePromotionService {
         if (!m.find()) {
             return null;
         }
-        double multiplier = m.group(1) != null ? num(m.group(1)) : 1.0;
-        double amount = num(m.group(2));
         String unit = m.group(3).toLowerCase();
+        double multiplier = m.group(1) != null ? num(m.group(1), unit) : 1.0;
+        double amount = num(m.group(2), unit);
         double total = multiplier * amount;
         switch (unit) {
             case "kg" -> { total *= 1000; unit = "g"; }
@@ -101,7 +102,15 @@ public class StorePromotionService {
         return size > 0 ? new Pack(size, unit) : null;
     }
 
-    private static double num(String s) {
+    /**
+     * "1,5" -> 1.5. For g / ml / piece packs a dot followed by exactly three digits is a German thousands
+     * separator ("1.062 ml" = 1062 ml); for kg / l / cl it stays a decimal point ("1.250 kg").
+     */
+    private static double num(String s, String unit) {
+        boolean smallUnit = unit.equals("g") || unit.equals("ml") || unit.equals("st") || unit.equals("stück");
+        if (smallUnit && THOUSANDS.matcher(s).matches()) {
+            return Double.parseDouble(s.replace(".", ""));
+        }
         return Double.parseDouble(s.replace(",", "."));
     }
 
