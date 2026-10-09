@@ -492,18 +492,23 @@ public class StoreRepository {
         return out;
     }
 
-    /** All offers, newest validity first, for discount promotion. Optionally one store only. */
-    public List<OfferRow> loadOffersForPromotion(Integer storeId) {
+    /**
+     * Offers still valid on {@code today} (valid_until >= today), for discount promotion. Optionally one store
+     * only. Expired offers stay in the table as history but are not re-processed on every run.
+     */
+    public List<OfferRow> loadOffersForPromotion(Integer storeId, LocalDate today) {
         String sql = "SELECT store_offer_store_id, store_offer_external_id, store_offer_brand, store_offer_name, "
                 + "store_offer_category, store_offer_sales_unit, store_offer_sale_price, store_offer_deal_quantity, "
                 + "store_offer_deal_price, store_offer_normal_price, store_offer_deposit, store_offer_promo_text, "
-                + "store_offer_valid_from, store_offer_valid_until, store_offer_source FROM store_offer"
-                + (storeId != null ? " WHERE store_offer_store_id = ?" : "");
+                + "store_offer_valid_from, store_offer_valid_until, store_offer_source FROM store_offer "
+                + "WHERE store_offer_valid_until >= ?"
+                + (storeId != null ? " AND store_offer_store_id = ?" : "");
         List<OfferRow> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setObject(1, today);
             if (storeId != null) {
-                ps.setInt(1, storeId);
+                ps.setInt(2, storeId);
             }
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
