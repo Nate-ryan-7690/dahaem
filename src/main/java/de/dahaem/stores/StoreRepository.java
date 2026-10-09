@@ -305,7 +305,7 @@ public class StoreRepository {
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 out.add(new PromotableProduct(rs.getInt(1), rs.getInt(2), rs.getString(3), rs.getString(4),
-                        rs.getString(5), (Double) rs.getObject(6), (Double) rs.getObject(7),
+                        rs.getString(5), getNullableDouble(rs, 6), getNullableDouble(rs, 7),
                         rs.getBoolean(8), rs.getInt(9)));
             }
         } catch (SQLException e) {
@@ -451,8 +451,8 @@ public class StoreRepository {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new OfferRow(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getString(5), rs.getString(6), rs.getDouble(7), rs.getInt(8), (Double) rs.getObject(9),
-                            (Double) rs.getObject(10), (Double) rs.getObject(11), rs.getString(12),
+                            rs.getString(5), rs.getString(6), rs.getDouble(7), rs.getInt(8), getNullableDouble(rs, 9),
+                            getNullableDouble(rs, 10), getNullableDouble(rs, 11), rs.getString(12),
                             rs.getString(13), rs.getString(14), rs.getString(15)));
                 }
             }
@@ -684,5 +684,11 @@ public class StoreRepository {
             throw new RuntimeException("Could not save offers for store " + storeId, e);
         }
         return offers.size();
+    }
+
+    /** DECIMAL columns come back from MariaDB as BigDecimal, so read them as double and map SQL NULL to null. */
+    private static Double getNullableDouble(ResultSet rs, int column) throws SQLException {
+        double value = rs.getDouble(column);
+        return rs.wasNull() ? null : value;
     }
 }
