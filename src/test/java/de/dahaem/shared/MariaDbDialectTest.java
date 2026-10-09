@@ -166,12 +166,12 @@ class MariaDbDialectTest {
     @Test
     void offersForPromotionReadDecimalPricesAndKeepNulls() throws SQLException {
         int storeId = stores.findOrCreateStore("Penny");
-        LocalDate from = LocalDate.of(2026, 10, 5);
+        LocalDate from = LocalDate.now();
         StoreOffer deal = new StoreOffer("D1", "Brand", "Cola", "1,5 l", 1.29, 2, 2.22, 1.79, null, null, 0.25,
                 null, "Getränke", "", from, from.plusDays(6));
         stores.saveOffers(storeId, List.of(deal, offer("N1", 0.99, from, from.plusDays(6))), from, "STORE");
 
-        Map<String, OfferRow> rows = stores.loadOffersForPromotion(null).stream()
+        Map<String, OfferRow> rows = stores.loadOffersForPromotion(null, LocalDate.now()).stream()
                 .collect(Collectors.toMap(OfferRow::externalId, r -> r));
 
         // DECIMAL comes back from MariaDB as BigDecimal; a (Double) cast here failed the weekly discounts step.
@@ -183,6 +183,24 @@ class MariaDbDialectTest {
         assertNull(plain.dealPrice());
         assertNull(plain.normalPrice());
         assertNull(plain.deposit());
+    }
+
+    @Test
+    void offersForPromotionSkipExpiredOffers() throws SQLException {
+        int storeId = stores.findOrCreateStore("Penny");
+        LocalDate today = LocalDate.of(2026, 10, 9);
+        LocalDate lastWeek = today.minusDays(7);
+        stores.saveOffers(storeId, List.of(
+                offer("OLD", 0.99, lastWeek, lastWeek.plusDays(6)),       // ended 3 days ago
+                offer("ENDS_TODAY", 1.19, today.minusDays(5), today),     // last valid day is still current
+                offer("NEW", 1.29, today, today.plusDays(6))), today, "STORE");
+
+        List<String> ids = stores.loadOffersForPromotion(null, today).stream().map(OfferRow::externalId).sorted().toList();
+        List<String> forStore = stores.loadOffersForPromotion(storeId, today).stream().map(OfferRow::externalId).sorted().toList();
+
+        assertEquals(List.of("ENDS_TODAY", "NEW"), ids);
+        assertEquals(ids, forStore);
+        assertEquals(3, count("SELECT COUNT(*) FROM store_offer"), "expired offers stay stored as history");
     }
 
     @Test

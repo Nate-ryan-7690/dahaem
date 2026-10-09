@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -46,7 +47,7 @@ public class StoreDiscountService {
     public ImportSummary promoteOffers(Integer storeId, Path reviewFile) {
         List<CatalogItem> catalog = repository.loadCatalog();
         StoreMatchService matcher = new StoreMatchService(repository, overrides);
-        List<OfferRow> offers = repository.loadOffersForPromotion(storeId);
+        List<OfferRow> offers = repository.loadOffersForPromotion(storeId, LocalDate.now(JsonUtil.GERMANY));
         Map<String, String> knownBrands = knownBrandsByKey(repository.loadKnownOfferBrands());
         Map<Integer, String> itemUnits = repository.loadItemUnits();
         MatchGate.References references = repository.loadReferencePrices();
