@@ -164,6 +164,14 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+                <configuration>
+                    <!-- Outer safety net: a hung forked test JVM is killed (with a thread dump)
+                         instead of letting CI hang for hours. A full, healthy test run finishes in
+                         ~1 minute, so 7 minutes only ever trips on a genuine hang. Per-test timeouts
+                         (src/test/resources/junit-platform.properties) are the first, finer line of
+                         defence and name the exact offending test. -->
+                    <forkedProcessTimeoutInSeconds>420</forkedProcessTimeoutInSeconds>
+                </configuration>
             </plugin>
         </plugins>
     </build>

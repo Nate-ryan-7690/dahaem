@@ -18,4 +18,6 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - run: mvn -B -q -DskipTests=false verify
+      # No -q: print per-class test progress so a hang is diagnosable from the log
+      # (the last "Running de.dahaem.…Test" line is the class that stalled).
+      - run: mvn -B -DskipTests=false verify
