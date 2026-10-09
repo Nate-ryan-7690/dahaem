@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 
 /**
  * Turns exceptions into JSON error responses with sensible status codes.
@@ -64,8 +64,7 @@ public class ApiExceptionHandler {
 
     private static boolean isConstraintViolation(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause()) {
-            if (cause instanceof SQLException sql && sql.getMessage() != null
-                    && sql.getMessage().contains("SQLITE_CONSTRAINT")) {
+            if (cause instanceof SQLIntegrityConstraintViolationException) {
                 return true;
             }
         }

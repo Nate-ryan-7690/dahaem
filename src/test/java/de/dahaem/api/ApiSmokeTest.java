@@ -1,6 +1,7 @@
 package de.dahaem.api;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -42,9 +43,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Starts the full Spring context and hits the API through MockMvc against a real, temporary
- * SQLite file built the same way setup_db.py builds the demo database (schema.sql, then the
+ * throwaway MariaDB (Testcontainers) loaded the way the demo database is built (schema.sql, then the
  * inventory catalog, the sample recipes and the demo data). Nothing is mocked: only Database's
- * target file is swapped out via the dahaem.db.path system property.
+ * target is pointed at the throwaway container.
  *
  * <p>Every request runs as a logged-in user ({@code @WithMockUser}) and every write carries a CSRF
  * token, as the real frontend's would; the login itself is covered by AuthApiTest.
@@ -60,27 +61,17 @@ class ApiSmokeTest {
             Path.of("scripts", "recipes", "samples", "sample_recipes.sql"),
             Path.of("seed", "demo_data.sql"));
 
-    private static Path dbFile;
-
     @Autowired
     private MockMvc mvc;
 
     @BeforeAll
     static void createDatabase() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-api-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            for (Path script : SCRIPTS) {
-                st.executeUpdate(Files.readString(script, StandardCharsets.UTF_8));
-            }
-        }
+        TestDatabase.reset(SCRIPTS);
     }
 
     @AfterAll
     static void deleteDatabase() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test

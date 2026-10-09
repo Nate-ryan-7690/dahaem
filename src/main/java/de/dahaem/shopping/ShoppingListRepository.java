@@ -65,7 +65,7 @@ public class ShoppingListRepository {
         String sql = "SELECT ri.recipe_ingredient_item_id AS item_id, "
                 + "ii.inventory_item_name_deutsch AS name_deutsch, "
                 + "ri.recipe_ingredient_unit AS unit, "
-                + "SUM(ri.recipe_ingredient_quantity_needed * ? / CAST(r.recipe_servings AS REAL)) AS total_quantity, "
+                + "SUM(ri.recipe_ingredient_quantity_needed * ? / CAST(r.recipe_servings AS DOUBLE)) AS total_quantity, "
                 + "GROUP_CONCAT(DISTINCT ri.recipe_ingredient_recipe_id) AS recipe_ids "
                 + "FROM recipe_ingredient ri "
                 + "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id "
@@ -153,8 +153,8 @@ public class ShoppingListRepository {
     }
 
     private StoreItemCandidate mapCandidate(ResultSet rs) throws SQLException {
-        String lastSeenText = rs.getString("store_product_last_seen");
-        String validUntilText = rs.getString("store_discount_end_date");
+        LocalDate lastSeen = rs.getObject("store_product_last_seen", LocalDate.class);
+        LocalDate validUntil = rs.getObject("store_discount_end_date", LocalDate.class);
         int dealQuantity = rs.getInt("store_discount_deal_quantity");
         if (rs.wasNull()) {
             dealQuantity = 1;
@@ -168,10 +168,10 @@ public class ShoppingListRepository {
                 getNullableDouble(rs, "store_item_price"),
                 getNullableDouble(rs, "store_item_deposit"),
                 rs.getBoolean("store_item_is_available"),
-                lastSeenText == null ? null : LocalDate.parse(lastSeenText),
+                lastSeen,
                 getNullableBoolean(rs, "store_product_is_available"),
                 getNullableDouble(rs, "store_discount_price"),
-                validUntilText == null ? null : LocalDate.parse(validUntilText),
+                validUntil,
                 dealQuantity,
                 getNullableDouble(rs, "store_discount_deal_price"));
     }
@@ -204,7 +204,7 @@ public class ShoppingListRepository {
                 + "shopping_list_status) VALUES (?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setObject(1, mealPlanId);
-            ps.setString(2, createdDate.toString());
+            ps.setObject(2, createdDate);
             ps.setBoolean(3, status);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -256,7 +256,7 @@ public class ShoppingListRepository {
                 return Optional.of(new ShoppingListRow(
                         rs.getInt("shopping_list_id"),
                         (Integer) rs.getObject("shopping_list_meal_plan_id"),
-                        LocalDate.parse(rs.getString("shopping_list_created_date")),
+                        rs.getObject("shopping_list_created_date", LocalDate.class),
                         rs.getBoolean("shopping_list_status")));
             }
         } catch (SQLException e) {

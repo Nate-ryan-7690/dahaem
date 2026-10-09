@@ -3,6 +3,7 @@ package de.dahaem.api;
 import de.dahaem.auth.AccountRepository;
 import de.dahaem.auth.AccountService;
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -51,29 +52,19 @@ class AuthApiTest {
             Path.of("schema.sql"),
             Path.of("seed", "inventory_catalog.sql"));
 
-    private static Path dbFile;
-
     @Autowired
     private MockMvc mvc;
 
     @BeforeAll
     static void createDatabaseAndUser() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-auth-api-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            for (Path script : SCRIPTS) {
-                st.executeUpdate(Files.readString(script, StandardCharsets.UTF_8));
-            }
-        }
+        TestDatabase.reset(SCRIPTS);
         new AccountService(new AccountRepository(), new BCryptPasswordEncoder())
                 .createUser(EMAIL, "Anna", PASSWORD, "Zuhause", LocalDate.of(2026, 9, 25));
     }
 
     @AfterAll
     static void deleteDatabase() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test

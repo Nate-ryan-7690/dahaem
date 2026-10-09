@@ -8,9 +8,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * translate HTTP to service calls and service results to DTOs, nothing more.
  * The console runners (de.dahaem.Main, StoreImportRunner, ...) stay separate entry points.
  *
- * <p>The database is still chosen by the {@code dahaem.db.path} system property
- * (default {@code data/kitchen_organizer.db}), e.g.
- * {@code java -Ddahaem.db.path=/srv/dahaem/kitchen.db -jar dahaem-1.0-SNAPSHOT.jar}.
+ * <p>The database is MariaDB, configured from the {@code DAHAEM_DB_URL}, {@code DAHAEM_DB_USER}
+ * and {@code DAHAEM_DB_PASSWORD} environment variables (see {@code de.dahaem.shared.Database}).
  */
 @SpringBootApplication
 public class DahaemApplication {

@@ -48,7 +48,6 @@ public class StoreImportRunner {
         StoreConfig config = new StoreConfig();
         HttpFetcher http = new HttpFetcher(config.requestDelay());
         StoreRepository repository = new StoreRepository();
-        repository.ensureSchema();
         AggregatorClient aggregator = new AggregatorClient(http);
         StoreImportService service = new StoreImportService(
                 repository, new AldiNordClient(http), new PennyClient(http), aggregator, config);

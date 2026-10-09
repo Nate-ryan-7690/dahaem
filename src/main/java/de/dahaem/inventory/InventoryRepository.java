@@ -111,8 +111,7 @@ public class InventoryRepository {
 
     // Turns the current ResultSet row into an Item. Kept in one place so every query maps the same way.
     private Item mapRow(ResultSet rs) throws SQLException {
-        String expText = rs.getString("inventory_item_earliest_exp_date");
-        LocalDate exp = (expText == null || expText.isBlank()) ? null : LocalDate.parse(expText);
+        LocalDate exp = rs.getObject("inventory_item_earliest_exp_date", LocalDate.class);
         return new Item(
                 rs.getInt("inventory_item_id"),
                 rs.getString("inventory_item_name_english"),

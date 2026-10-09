@@ -35,7 +35,7 @@ public class AccountRepository {
         String sql = "INSERT INTO household (household_name, created_date) VALUES (?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, name);
-            ps.setString(2, createdDate.toString());
+            ps.setObject(2, createdDate);
             ps.executeUpdate();
             return new Household(generatedId(ps), name, createdDate);
         }
@@ -43,7 +43,7 @@ public class AccountRepository {
 
     /**
      * Inserts an app_user row, on the caller's transaction. Returns it with its generated id.
-     * user_email is UNIQUE, so a second user with the same email fails with SQLITE_CONSTRAINT.
+     * user_email is UNIQUE, so a second user with the same email fails with a SQLIntegrityConstraintViolationException.
      */
     public AppUser insertUser(Connection con, String email, String displayName, String passwordHash,
                               LocalDate createdDate) throws SQLException {
@@ -53,7 +53,7 @@ public class AccountRepository {
             ps.setString(1, email);
             ps.setString(2, displayName);
             ps.setString(3, passwordHash);
-            ps.setString(4, createdDate.toString());
+            ps.setObject(4, createdDate);
             ps.executeUpdate();
             return new AppUser(generatedId(ps), email, displayName, passwordHash, createdDate);
         }
@@ -158,13 +158,13 @@ public class AccountRepository {
                 rs.getString("user_email"),
                 rs.getString("user_display_name"),
                 rs.getString("user_password_hash"),
-                LocalDate.parse(rs.getString("user_created_date")));
+                rs.getObject("user_created_date", LocalDate.class));
     }
 
     private static Household mapHousehold(ResultSet rs) throws SQLException {
         return new Household(
                 rs.getInt("household_id"),
                 rs.getString("household_name"),
-                LocalDate.parse(rs.getString("created_date")));
+                rs.getObject("created_date", LocalDate.class));
     }
 }

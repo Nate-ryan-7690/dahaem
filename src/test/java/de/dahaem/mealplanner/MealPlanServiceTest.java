@@ -1,6 +1,7 @@
 package de.dahaem.mealplanner;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,22 +25,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class MealPlanServiceTest {
 
-    private Path dbFile;
     private MealPlanService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-mealplan-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         service = new MealPlanService(new MealPlanRepository());
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -54,8 +50,8 @@ class MealPlanServiceTest {
 
     @Test
     void addsRecipesToAPlanAndListsThemWithNames() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (2, 'Eintopf', 4, 45, 15, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (2, 'Eintopf', 4, 45, 15, NULL, NULL, NULL, NULL, NULL, NULL)");
         int planId = service.createWeeklyPlan(LocalDate.of(2026, 9, 28));
 
         service.addRecipe(planId, 1, "dinner");
@@ -75,30 +71,4 @@ class MealPlanServiceTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("CREATE TABLE recipe (" +
-                    "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT NOT NULL, " +
-                    "recipe_servings INTEGER NOT NULL, " +
-                    "recipe_cook_time INTEGER NOT NULL, " +
-                    "recipe_prep_time INTEGER NOT NULL, " +
-                    "recipe_calories INTEGER, " +
-                    "recipe_protein INTEGER, " +
-                    "recipe_carbs INTEGER, " +
-                    "recipe_fat INTEGER, " +
-                    "recipe_fibre INTEGER, " +
-                    "recipe_sugar INTEGER)");
-
-            st.execute("CREATE TABLE meal_plan (" +
-                    "meal_plan_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "meal_plan_week_start_date DATE NOT NULL UNIQUE)");
-
-            st.execute("CREATE TABLE meal_plan_recipe (" +
-                    "meal_plan_recipe_id INTEGER NOT NULL REFERENCES recipe(recipe_id), " +
-                    "meal_plan_recipe_plan_id INTEGER NOT NULL REFERENCES meal_plan(meal_plan_id), " +
-                    "meal_plan_recipe_meal_time TEXT, " +
-                    "PRIMARY KEY (meal_plan_recipe_id, meal_plan_recipe_plan_id))");
-        }
-    }
 }

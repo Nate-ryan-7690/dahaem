@@ -56,7 +56,7 @@ public class TagRepository {
 
     // Links a recipe to a tag. Safe to call more than once for the same pair.
     public void tagRecipe(int recipeId, int tagId){
-        String sql = "INSERT OR IGNORE INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id) VALUES (?, ?)";
+        String sql = "INSERT IGNORE INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id) VALUES (?, ?)";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, recipeId);

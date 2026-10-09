@@ -7,24 +7,24 @@
 --
 -- Load order: schema.sql -> seed/inventory_catalog.sql ->
 --             scripts/recipes/samples/sample_recipes.sql -> this file.
--- INSERT OR IGNORE so it is safe to re-run against an already-seeded database.
+-- INSERT IGNORE so it is safe to re-run against an already-seeded database.
 BEGIN;
 
 -- ---------------------------------------------------------------------------------------
 -- Stores and store items (fabricated prices/discounts on ingredients the sample recipes use)
 -- ---------------------------------------------------------------------------------------
 
-INSERT OR IGNORE INTO store (store_id, store_name) VALUES
+INSERT IGNORE INTO store (store_id, store_name) VALUES
   (1, 'Marktecke Mitte'),
   (2, 'Kornladen Süd');
 
-INSERT OR IGNORE INTO brand (brand_id, brand_name) VALUES
+INSERT IGNORE INTO brand (brand_id, brand_name) VALUES
   (1, 'Hofkorn'),
   (2, 'Talblick');
 
 -- item ids: 40 onion, 45 garlic, 825 tomato passata, 1022 olive oil, 622 long grain rice,
 -- 371 cooking cream - all used by multiple sample recipes.
-INSERT OR IGNORE INTO store_item
+INSERT IGNORE INTO store_item
   (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id,
    store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit)
 VALUES
@@ -36,21 +36,21 @@ VALUES
   (6, 2, 2, 371,  'ml',  200, 0.89, 1, NULL);
 
 -- Current-window discounts, so the shopping list has something on sale right now.
-INSERT OR IGNORE INTO store_discount
+INSERT IGNORE INTO store_discount
   (store_discount_id, store_discount_store_item_id, store_discount_start_date, store_discount_end_date,
    store_discount_price, store_discount_notes)
 VALUES
-  (1, 1, date('now', '-2 days'), date('now', '+5 days'), 0.99, 'Wochenangebot (demo)'),
-  (2, 4, date('now', '-1 days'), date('now', '+7 days'), 3.49, 'Aktionspreis (demo)');
+  (1, 1, CURDATE() - INTERVAL 2 DAY, CURDATE() + INTERVAL 5 DAY, 0.99, 'Wochenangebot (demo)'),
+  (2, 4, CURDATE() - INTERVAL 1 DAY, CURDATE() + INTERVAL 7 DAY, 3.49, 'Aktionspreis (demo)');
 
 -- ---------------------------------------------------------------------------------------
 -- Meal planning: one demo week with a few sample recipes slotted in
 -- ---------------------------------------------------------------------------------------
 
-INSERT OR IGNORE INTO meal_plan (meal_plan_id, meal_plan_week_start_date) VALUES
-  (1, date('now'));
+INSERT IGNORE INTO meal_plan (meal_plan_id, meal_plan_week_start_date) VALUES
+  (1, CURDATE());
 
-INSERT OR IGNORE INTO meal_plan_recipe (meal_plan_recipe_id, meal_plan_recipe_plan_id, meal_plan_recipe_meal_time)
+INSERT IGNORE INTO meal_plan_recipe (meal_plan_recipe_id, meal_plan_recipe_plan_id, meal_plan_recipe_meal_time)
 VALUES
   ((SELECT recipe_id FROM recipe WHERE recipe_name = 'Cremige Hähnchen-Pilz-Pasta'), 1, 'Abendessen'),
   ((SELECT recipe_id FROM recipe WHERE recipe_name = 'Klassische Rinder-Bolognese'), 1, 'Mittagessen'),
@@ -60,12 +60,12 @@ VALUES
 -- Tags, applied to a few sample recipes
 -- ---------------------------------------------------------------------------------------
 
-INSERT OR IGNORE INTO tag (tag_id, tag_name, tag_category) VALUES
+INSERT IGNORE INTO tag (tag_id, tag_name, tag_category) VALUES
   (1, 'vegetarisch', 'Diät'),
   (2, 'schnell', 'Zeit'),
   (3, 'familienfreundlich', 'Anlass');
 
-INSERT OR IGNORE INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id) VALUES
+INSERT IGNORE INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id) VALUES
   ((SELECT recipe_id FROM recipe WHERE recipe_name = 'Gemüse-Gnocchi in Tomatensauce'), 1),
   ((SELECT recipe_id FROM recipe WHERE recipe_name = 'Feta-Spinat-Pasta'), 1),
   ((SELECT recipe_id FROM recipe WHERE recipe_name = 'Feta-Spinat-Pasta'), 2),
@@ -76,11 +76,11 @@ INSERT OR IGNORE INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id) VALUES
 -- Shopping list: built from the demo meal plan above, plus one manually added item
 -- ---------------------------------------------------------------------------------------
 
-INSERT OR IGNORE INTO shopping_list (shopping_list_id, shopping_list_meal_plan_id, shopping_list_created_date, shopping_list_status)
+INSERT IGNORE INTO shopping_list (shopping_list_id, shopping_list_meal_plan_id, shopping_list_created_date, shopping_list_status)
 VALUES
-  (1, 1, date('now'), 0);
+  (1, 1, CURDATE(), 0);
 
-INSERT OR IGNORE INTO shopping_list_item
+INSERT IGNORE INTO shopping_list_item
   (shopping_list_item_id, shopping_list_id, shopping_list_item_store_item_id, shopping_list_item_store_section,
    shopping_list_item_quantity_needed, shopping_list_item_is_discounted, shopping_list_item_purchase_status, shopping_list_item_is_manual)
 VALUES

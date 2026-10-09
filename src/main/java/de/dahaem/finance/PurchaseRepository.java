@@ -60,10 +60,10 @@ public class PurchaseRepository {
             ps.setInt(1, storeItemId);
             ps.setObject(2, discountId);
             ps.setBoolean(3, wasDiscounted);
-            ps.setString(4, purchaseDate.toString());
+            ps.setObject(4, purchaseDate);
             ps.setInt(5, quantityPurchased);
             ps.setDouble(6, pricePaid);
-            ps.setString(7, expirationDate.toString());
+            ps.setObject(7, expirationDate);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -156,10 +156,10 @@ public class PurchaseRepository {
                 rs.getInt("purchase_history_store_item_id"),
                 discount,
                 rs.getBoolean("purchase_history_was_discounted"),
-                LocalDate.parse(rs.getString("purchase_history_purchase_date")),
+                rs.getObject("purchase_history_purchase_date", LocalDate.class),
                 rs.getInt("purchase_history_quantity_purchased"),
                 rs.getDouble("purchase_history_price_paid"),
-                LocalDate.parse(rs.getString("purchase_history_expiration_date"))
+                rs.getObject("purchase_history_expiration_date", LocalDate.class)
         );
     }
 }

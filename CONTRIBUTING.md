@@ -13,10 +13,10 @@ Requires Java 17+ and Maven.
 mvn package
 ```
 
-The app needs a SQLite database at `data/kitchen_organizer.db` (gitignored, not
-distributed) with the tables described in [`docs/DATABASE.md`](docs/DATABASE.md)
-already present — see that doc's [Gaps](docs/DATABASE.md#gaps) section, since
-there is currently no in-repo way to create one from scratch. For store
+Running the app needs a MariaDB reachable through `DAHAEM_DB_URL`, `DAHAEM_DB_USER`
+and `DAHAEM_DB_PASSWORD`, loaded from `schema.sql` as described in
+[`docs/DATABASE.md`](docs/DATABASE.md). Never point development at a database that holds
+real data. For store
 importers, copy `config/stores.properties.example` to `config/stores.properties`
 and fill in your own store id / postal code.
 
@@ -28,9 +28,9 @@ mvn verify
 
 This is what CI (`.github/workflows/ci.yml`) runs on every push/PR to `main`. It
 compiles, runs the JUnit test suite (`src/test/java`), and packages the shaded
-jar. Tests hit a real, temporary SQLite file (via the `dahaem.db.path` system
-property on `de.dahaem.shared.Database`), not mocks, so no separate test-database
-setup is needed.
+jar. Tests hit a real, throwaway MariaDB started by Testcontainers (see
+`de.dahaem.testsupport.TestDatabase`), not mocks, so **Docker must be running**;
+no separate test-database setup is needed.
 
 ## Code conventions
 
@@ -48,7 +48,7 @@ setup is needed.
   try-with-resources so they always close, matching every existing repository
   method.
 - **Comments.** Sparse and purposeful — explaining a non-obvious *why* (a
-  matching rule, a scheduling dependency, a SQLite quirk), not restating what
+  matching rule, a scheduling dependency, a MariaDB quirk), not restating what
   the code already says. Follow the existing style in
   `StoreMatchService`/`StoreImportService` rather than adding narration.
 
@@ -63,7 +63,7 @@ recipe TSV). Keep the summary line short and imperative ("add", not "added").
 New logic belongs with a test, following the existing pattern in
 `src/test/java/de/dahaem/stores/` — JUnit 5, one test class per class under
 test, exercising pure logic directly and repository-backed logic against a real
-temporary SQLite file. `inventory`, `mealplanner`, `finance`, and `shared`
+throwaway MariaDB (`TestDatabase`). `inventory`, `mealplanner`, `finance`, and `shared`
 currently have no test coverage; new work in those packages is a good place to
 start closing that gap.
 

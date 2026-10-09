@@ -3,7 +3,7 @@
 ## What it is
 
 DAHÄM is a self-hosted household organizer for a two-person household: one Java
-application on one SQLite database that manages inventory, recipes, meal
+application on one MariaDB database that manages inventory, recipes, meal
 planning, shopping lists, supermarket prices and discounts, and spending.
 
 The name is Kurpfälzisch (the Mannheim-area dialect) for *daheim*, "at home."
@@ -57,7 +57,7 @@ swappable behind the existing provenance layer:
 
 ## Stack and trajectory
 
-- **Now:** Java 17 + Maven + SQLite, one shaded jar, deployed self-hosted on a
+- **Now:** Java 17 + Maven + MariaDB, one shaded jar, deployed self-hosted on a
   home server for two users. Package-by-feature, strict model/repository/service
   layering.
 - **Chosen over** the original Python/Django/PostgreSQL plan partly because Java

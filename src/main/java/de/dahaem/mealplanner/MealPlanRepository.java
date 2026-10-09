@@ -23,7 +23,7 @@ public class MealPlanRepository {
         String sql = "INSERT INTO meal_plan (meal_plan_week_start_date) VALUES (?)";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, weekStartDate.toString());
+            ps.setObject(1, weekStartDate);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -108,7 +108,7 @@ public class MealPlanRepository {
     private MealPlan mapRow(ResultSet rs) throws SQLException {
         return new MealPlan(
                 rs.getInt("meal_plan_id"),
-                LocalDate.parse(rs.getString("meal_plan_week_start_date"))
+                rs.getObject("meal_plan_week_start_date", LocalDate.class)
         );
     }
 

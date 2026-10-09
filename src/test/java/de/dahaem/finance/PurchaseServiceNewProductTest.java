@@ -2,6 +2,7 @@ package de.dahaem.finance;
 
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import de.dahaem.stores.StoreRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,24 +28,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PurchaseServiceNewProductTest {
 
-    private Path dbFile;
     private PurchaseRepository purchaseRepository;
     private PurchaseService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-finance-new-product-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         purchaseRepository = new PurchaseRepository();
         service = new PurchaseService(purchaseRepository, new StoreRepository(), new InventoryRepository());
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -237,48 +233,4 @@ class PurchaseServiceNewProductTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "inventory_item_name_english TEXT NOT NULL, " +
-                    "inventory_item_name_deutsch TEXT, " +
-                    "inventory_item_quantity INTEGER NOT NULL DEFAULT 0, " +
-                    "inventory_item_unit TEXT NOT NULL, " +
-                    "inventory_item_category TEXT NOT NULL, " +
-                    "inventory_item_subcategory TEXT, " +
-                    "inventory_item_earliest_exp_date DATE)");
-
-            st.execute("CREATE TABLE store (" +
-                    "store_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "store_name TEXT NOT NULL UNIQUE)");
-
-            st.execute("CREATE TABLE brand (" +
-                    "brand_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "brand_name TEXT NOT NULL UNIQUE)");
-
-            st.execute("CREATE TABLE store_item (" +
-                    "store_item_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "store_item_brand_id INTEGER NOT NULL REFERENCES brand(brand_id), " +
-                    "store_item_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_item_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "store_item_package_unit TEXT NOT NULL, " +
-                    "store_item_package_size INTEGER NOT NULL, " +
-                    "store_item_price REAL, " +
-                    "store_item_is_available BOOLEAN NOT NULL, " +
-                    "store_item_deposit REAL, " +
-                    "store_item_store_product_id INTEGER, " +
-                    "store_item_external_id TEXT)");
-
-            st.execute("CREATE TABLE purchase_history (" +
-                    "purchase_history_purchase_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "purchase_history_store_item_id INTEGER NOT NULL, " +
-                    "purchase_history_discount_id INTEGER, " +
-                    "purchase_history_was_discounted BOOLEAN NOT NULL, " +
-                    "purchase_history_purchase_date DATE NOT NULL, " +
-                    "purchase_history_quantity_purchased INTEGER NOT NULL, " +
-                    "purchase_history_price_paid REAL NOT NULL, " +
-                    "purchase_history_expiration_date DATE NOT NULL)");
-        }
-    }
 }

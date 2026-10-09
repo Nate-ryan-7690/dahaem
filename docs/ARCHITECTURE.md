@@ -24,9 +24,9 @@ SQL directly, and should not put lookup/aggregation/matching rules inside a
 repository method.
 
 `de.dahaem.shared.Database` is the single place that knows how to open a JDBC
-connection (`jdbc:sqlite:<path>`, from the `dahaem.db.path` system property or
-`data/kitchen_organizer.db` by default) and turns on `PRAGMA foreign_keys = ON`
-per-connection, since SQLite does not enforce foreign keys otherwise.
+connection: a HikariCP pool over `mariadb-java-client`, configured from the
+`DAHAEM_DB_URL` / `DAHAEM_DB_USER` / `DAHAEM_DB_PASSWORD` environment variables.
+InnoDB enforces foreign keys, so no per-connection setup is needed.
 
 ## Package map
 
@@ -142,8 +142,8 @@ this repo, and its note on what a from-scratch setup is currently missing.
 ## Testing
 
 Tests live under `src/test/java/de/dahaem/`, mirroring the main package layout,
-and run against a real (temporary) SQLite file rather than mocks — see
-`Database`'s `dahaem.db.path` system property. Today only `shopping` (1 test
+and run against a real, throwaway MariaDB (Testcontainers) rather than mocks — see
+`de.dahaem.testsupport.TestDatabase`. Today only `shopping` (1 test
 class) and `stores` (6 test classes, covering the pure-logic pieces:
 `Normalizer`, `VariantParser`, `JsonUtil`, `AggregatorClient`, `StoreMatchService`,
 `StorePromotionService`) have coverage. `inventory`, `mealplanner`, `finance` and

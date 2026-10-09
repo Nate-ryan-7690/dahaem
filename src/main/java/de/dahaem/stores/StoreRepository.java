@@ -11,8 +11,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,206 +25,12 @@ import java.util.Set;
  */
 public class StoreRepository {
 
-    private static final String[] SCHEMA = {
-            """
-            CREATE TABLE IF NOT EXISTS store_import_run (
-                store_import_run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_import_run_store_id    INTEGER NOT NULL REFERENCES store(store_id),
-                store_import_run_kind        TEXT NOT NULL,      -- RANGE / OFFERS
-                store_import_run_started_at  TEXT NOT NULL,
-                store_import_run_finished_at TEXT,
-                store_import_run_status      TEXT NOT NULL,      -- RUNNING / OK / PARTIAL / FAILED
-                store_import_run_pages       INTEGER,
-                store_import_run_items       INTEGER,
-                store_import_run_notes       TEXT)
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS store_product (
-                store_product_id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_product_store_id          INTEGER NOT NULL REFERENCES store(store_id),
-                store_product_external_id       TEXT NOT NULL,   -- the chain's own product id
-                store_product_brand             TEXT,
-                store_product_name              TEXT NOT NULL,
-                store_product_sales_unit        TEXT,            -- e.g. "250-g-Packung"
-                store_product_regular_price     REAL,
-                store_product_base_price        REAL,            -- price per base unit
-                store_product_base_unit         TEXT,            -- e.g. "kg", "Liter"
-                store_product_deposit           REAL,            -- Pfand per unit (null = none)
-                store_product_category          TEXT,
-                store_product_description       TEXT,
-                store_product_url               TEXT,
-                store_product_is_available      BOOLEAN NOT NULL,
-                store_product_first_seen        DATE NOT NULL,
-                store_product_last_seen         DATE NOT NULL,
-                store_product_inventory_item_id INTEGER REFERENCES inventory_item(inventory_item_id),  -- set by matching later
-                UNIQUE (store_product_store_id, store_product_external_id))
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS store_product_variant (
-                store_product_variant_id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_product_variant_product_id INTEGER NOT NULL REFERENCES store_product(store_product_id),
-                store_product_variant_name       TEXT NOT NULL,  -- flavour, e.g. "Natur"
-                store_product_variant_size       TEXT)           -- e.g. "150 g"
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS store_price_history (
-                store_price_history_id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_price_history_product_id    INTEGER NOT NULL REFERENCES store_product(store_product_id),
-                store_price_history_price         REAL NOT NULL,
-                store_price_history_base_price    REAL,
-                store_price_history_recorded_date DATE NOT NULL)
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS store_catalog_change (
-                store_catalog_change_id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_catalog_change_run_id        INTEGER NOT NULL REFERENCES store_import_run(store_import_run_id),
-                store_catalog_change_product_id    INTEGER NOT NULL REFERENCES store_product(store_product_id),
-                store_catalog_change_type          TEXT NOT NULL,  -- NEW / REMOVED / RETURNED / PRICE
-                store_catalog_change_old_price     REAL,
-                store_catalog_change_new_price     REAL,
-                store_catalog_change_detected_date DATE NOT NULL)
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS store_offer (
-                store_offer_id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                store_offer_store_id     INTEGER NOT NULL REFERENCES store(store_id),
-                store_offer_product_id   INTEGER REFERENCES store_product(store_product_id),  -- null if not in the range
-                store_offer_external_id  TEXT NOT NULL,
-                store_offer_brand        TEXT,
-                store_offer_name         TEXT NOT NULL,
-                store_offer_sales_unit   TEXT,
-                store_offer_sale_price   REAL NOT NULL,        -- per unit
-                store_offer_deal_quantity INTEGER NOT NULL DEFAULT 1,  -- units required for a multi-buy deal
-                store_offer_deal_price   REAL,                 -- total for the deal quantity (null = normal single offer)
-                store_offer_normal_price REAL,
-                store_offer_base_price   REAL,
-                store_offer_base_unit    TEXT,
-                store_offer_deposit      REAL,                 -- Pfand per unit
-                store_offer_promo_text   TEXT,
-                store_offer_category     TEXT,
-                store_offer_region       TEXT NOT NULL DEFAULT '',
-                store_offer_valid_from   DATE NOT NULL,
-                store_offer_valid_until  DATE NOT NULL,
-                store_offer_pulled_on    DATE NOT NULL,
-                store_offer_source       TEXT NOT NULL DEFAULT 'STORE',  -- STORE (direct) / AGGREGATOR / RECEIPT
-                UNIQUE (store_offer_store_id, store_offer_external_id, store_offer_valid_from, store_offer_region))
-            """
-    };
-
-    /**
-     * store_item / store_discount already exist (matched layer). These columns hold the
-     * deposit and multi-buy deal terms once a store_product/store_offer is matched to them.
-     * Deposit lives on the item (constant per pack); deal terms live on the discount (per offer).
-     */
-    private static final Map<String, String> STORE_ITEM_COLUMNS = new LinkedHashMap<>() {{
-        put("store_item_deposit", "REAL");
-        // Ties a promoted store_item to the exact store_product it came from, so distinct
-        // products (same brand+size, different price/variant) never collapse into one.
-        put("store_item_store_product_id", "INTEGER REFERENCES store_product(store_product_id)");
-        // Stable per-chain id for a flyer-bootstrapped store_item (the offer's external id),
-        // since those have no store_product. One of the two is set; both null = manual entry.
-        put("store_item_external_id", "TEXT");
-    }};
-    private static final Map<String, String> STORE_DISCOUNT_COLUMNS = new LinkedHashMap<>() {{
-        put("store_discount_deal_quantity", "INTEGER NOT NULL DEFAULT 1");
-        put("store_discount_deal_price", "REAL");
-    }};
-    /** Provenance on offers pulled before this column existed defaults to the direct-store source. */
-    private static final Map<String, String> STORE_OFFER_COLUMNS = Map.of(
-            "store_offer_source", "TEXT NOT NULL DEFAULT 'STORE'");
-
-    /** Creates the store tables if they don't exist yet, and back-fills new columns. Safe to call every run. */
-    public void ensureSchema() {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement()) {
-            for (String ddl : SCHEMA) {
-                st.execute(ddl);
-            }
-            addMissingColumns(con, "store_item", STORE_ITEM_COLUMNS);
-            addMissingColumns(con, "store_discount", STORE_DISCOUNT_COLUMNS);
-            addMissingColumns(con, "store_offer", STORE_OFFER_COLUMNS);
-            makeStoreItemPriceNullable(con);
-        } catch (SQLException e) {
-            throw new RuntimeException("Could not create store tables", e);
-        }
-    }
-
-    /**
-     * A flyer-bootstrapped store_item has no known normal price (the flyer price is the sale price,
-     * which lives on store_discount), so store_item_price must allow NULL. SQLite can't drop a NOT NULL
-     * constraint in place, so rebuild the table once. store_discount is the only referrer; foreign_keys
-     * is toggled off around the swap. No-op once the column is already nullable.
-     */
-    private void makeStoreItemPriceNullable(Connection con) throws SQLException {
-        boolean notNull;
-        try (ResultSet rs = con.getMetaData().getColumns(null, null, "store_item", "store_item_price")) {
-            if (!rs.next()) {
-                return;                                    // table missing entirely; nothing to do
-            }
-            notNull = rs.getInt("NULLABLE") == java.sql.DatabaseMetaData.columnNoNulls;
-        }
-        if (!notNull) {
-            return;
-        }
-        boolean prevAutoCommit = con.getAutoCommit();
-        try (Statement st = con.createStatement()) {
-            con.setAutoCommit(true);
-            st.execute("PRAGMA foreign_keys=OFF");        // must be outside a transaction
-            con.setAutoCommit(false);
-            st.execute("CREATE TABLE store_item_new ("
-                    + "store_item_id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                    + "store_item_brand_id INTEGER NOT NULL REFERENCES brand(brand_id), "
-                    + "store_item_store_id INTEGER NOT NULL REFERENCES store(store_id), "
-                    + "store_item_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), "
-                    + "store_item_package_unit TEXT NOT NULL, "
-                    + "store_item_package_size INTEGER NOT NULL, "
-                    + "store_item_price REAL, "                                       // now nullable
-                    + "store_item_is_available BOOLEAN NOT NULL, "
-                    + "store_item_deposit REAL, "
-                    + "store_item_store_product_id INTEGER REFERENCES store_product(store_product_id), "
-                    + "store_item_external_id TEXT)");
-            st.execute("INSERT INTO store_item_new (store_item_id, store_item_brand_id, store_item_store_id, "
-                    + "store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, "
-                    + "store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) "
-                    + "SELECT store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, "
-                    + "store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, "
-                    + "store_item_deposit, store_item_store_product_id, store_item_external_id FROM store_item");
-            st.execute("DROP TABLE store_item");
-            st.execute("ALTER TABLE store_item_new RENAME TO store_item");
-            con.commit();
-            con.setAutoCommit(true);
-            st.execute("PRAGMA foreign_keys=ON");
-        } catch (SQLException e) {
-            con.rollback();
-            throw e;
-        } finally {
-            con.setAutoCommit(prevAutoCommit);
-        }
-    }
-
-    /** Adds any of the given columns that the table doesn't have yet (SQLite has no "ADD COLUMN IF NOT EXISTS"). */
-    private void addMissingColumns(Connection con, String table, Map<String, String> columns) throws SQLException {
-        Set<String> existing = new HashSet<>();
-        try (ResultSet rs = con.getMetaData().getColumns(null, null, table, null)) {
-            while (rs.next()) {
-                existing.add(rs.getString("COLUMN_NAME"));
-            }
-        }
-        try (Statement st = con.createStatement()) {
-            for (Map.Entry<String, String> col : columns.entrySet()) {
-                if (!existing.contains(col.getKey())) {
-                    st.execute("ALTER TABLE " + table + " ADD COLUMN " + col.getKey() + " " + col.getValue());
-                }
-            }
-        }
-    }
-
     /** Id of a row in the existing `store` table, creating it if the chain isn't there yet. */
     public int findOrCreateStore(String name) {
-        // Atomic upsert instead of check-then-act: store_name is UNIQUE, so ON CONFLICT DO NOTHING
+        // Atomic upsert instead of check-then-act: store_name is UNIQUE, so INSERT IGNORE
         // makes the insert a no-op when the store already exists, and the SELECT then returns its id.
         // This removes the race where two callers both pass the SELECT and both INSERT a duplicate.
-        String upsert = "INSERT INTO store (store_name) VALUES (?) ON CONFLICT(store_name) DO NOTHING";
+        String upsert = "INSERT IGNORE INTO store (store_name) VALUES (?)";
         String select = "SELECT store_id FROM store WHERE store_name = ?";
         try (Connection con = Database.getConnection()) {
             try (PreparedStatement ps = con.prepareStatement(upsert)) {
@@ -254,7 +58,7 @@ public class StoreRepository {
              PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, storeId);
             ps.setString(2, kind);
-            ps.setString(3, LocalDateTime.now(JsonUtil.GERMANY).toString());
+            ps.setObject(3, LocalDateTime.now(JsonUtil.GERMANY));
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -271,7 +75,7 @@ public class StoreRepository {
                 + "WHERE store_import_run_id = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, LocalDateTime.now(JsonUtil.GERMANY).toString());
+            ps.setObject(1, LocalDateTime.now(JsonUtil.GERMANY));
             ps.setString(2, status);
             ps.setInt(3, pages);
             ps.setInt(4, items);
@@ -354,7 +158,7 @@ public class StoreRepository {
 
                 Map<String, Integer> idByExternal = new HashMap<>();
                 known.forEach((externalId, k) -> idByExternal.put(externalId, k.id()));
-                String day = today.toString();
+                LocalDate day = today;
 
                 for (StoreProduct p : products) {
                     Integer id = idByExternal.get(p.externalId());
@@ -372,8 +176,8 @@ public class StoreRepository {
                         insP.setString(11, p.description());
                         insP.setString(12, p.url());
                         insP.setBoolean(13, p.available());
-                        insP.setString(14, day);
-                        insP.setString(15, day);
+                        insP.setObject(14, day);
+                        insP.setObject(15, day);
                         insP.executeUpdate();
                         try (ResultSet keys = insP.getGeneratedKeys()) {
                             keys.next();
@@ -392,7 +196,7 @@ public class StoreRepository {
                         updP.setString(9, p.description());
                         updP.setString(10, p.url());
                         updP.setBoolean(11, p.available());
-                        updP.setString(12, day);
+                        updP.setObject(12, day);
                         updP.setInt(13, id);
                         updP.executeUpdate();
                     }
@@ -409,7 +213,7 @@ public class StoreRepository {
                         insH.setInt(1, id);
                         insH.setDouble(2, p.regularPrice());
                         insH.setObject(3, p.basePrice());
-                        insH.setString(4, day);
+                        insH.setObject(4, day);
                         insH.addBatch();
                     }
                 }
@@ -432,7 +236,7 @@ public class StoreRepository {
                     insC.setString(3, c.type().name());
                     insC.setObject(4, c.oldPrice());
                     insC.setObject(5, c.newPrice());
-                    insC.setString(6, day);
+                    insC.setObject(6, day);
                     insC.addBatch();
                 }
                 insC.executeBatch();
@@ -743,7 +547,7 @@ public class StoreRepository {
         try (PreparedStatement ps = con.prepareStatement("SELECT store_discount_id FROM store_discount "
                 + "WHERE store_discount_store_item_id = ? AND store_discount_start_date = ?")) {
             ps.setInt(1, storeItemId);
-            ps.setString(2, startDate);
+            ps.setObject(2, LocalDate.parse(startDate));
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     existing = rs.getInt(1);
@@ -754,7 +558,7 @@ public class StoreRepository {
             try (PreparedStatement up = con.prepareStatement("UPDATE store_discount SET store_discount_end_date = ?, "
                     + "store_discount_price = ?, store_discount_deal_quantity = ?, store_discount_deal_price = ?, "
                     + "store_discount_notes = ? WHERE store_discount_id = ?")) {
-                up.setString(1, endDate);
+                up.setObject(1, LocalDate.parse(endDate));
                 up.setDouble(2, price);
                 up.setInt(3, dealQuantity);
                 up.setObject(4, dealPrice);
@@ -768,8 +572,8 @@ public class StoreRepository {
                 + "store_discount_start_date, store_discount_end_date, store_discount_price, store_discount_notes, "
                 + "store_discount_deal_quantity, store_discount_deal_price) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
             ins.setInt(1, storeItemId);
-            ins.setString(2, startDate);
-            ins.setString(3, endDate);
+            ins.setObject(2, LocalDate.parse(startDate));
+            ins.setObject(3, LocalDate.parse(endDate));
             ins.setDouble(4, price);
             ins.setString(5, notes);
             ins.setInt(6, dealQuantity);
@@ -828,22 +632,21 @@ public class StoreRepository {
                 + "VALUES (?, (SELECT store_product_id FROM store_product "
                 + "            WHERE store_product_store_id = ? AND store_product_external_id = ?), "
                 + "        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                + "ON CONFLICT (store_offer_store_id, store_offer_external_id, store_offer_valid_from, store_offer_region) "
-                + "DO UPDATE SET store_offer_product_id = excluded.store_offer_product_id, "
-                + "store_offer_brand = excluded.store_offer_brand, store_offer_name = excluded.store_offer_name, "
-                + "store_offer_sales_unit = excluded.store_offer_sales_unit, "
-                + "store_offer_sale_price = excluded.store_offer_sale_price, "
-                + "store_offer_deal_quantity = excluded.store_offer_deal_quantity, "
-                + "store_offer_deal_price = excluded.store_offer_deal_price, "
-                + "store_offer_normal_price = excluded.store_offer_normal_price, "
-                + "store_offer_base_price = excluded.store_offer_base_price, "
-                + "store_offer_base_unit = excluded.store_offer_base_unit, "
-                + "store_offer_deposit = excluded.store_offer_deposit, "
-                + "store_offer_promo_text = excluded.store_offer_promo_text, "
-                + "store_offer_category = excluded.store_offer_category, "
-                + "store_offer_valid_until = excluded.store_offer_valid_until, "
-                + "store_offer_pulled_on = excluded.store_offer_pulled_on, "
-                + "store_offer_source = excluded.store_offer_source";
+                + "ON DUPLICATE KEY UPDATE store_offer_product_id = VALUES(store_offer_product_id), "
+                + "store_offer_brand = VALUES(store_offer_brand), store_offer_name = VALUES(store_offer_name), "
+                + "store_offer_sales_unit = VALUES(store_offer_sales_unit), "
+                + "store_offer_sale_price = VALUES(store_offer_sale_price), "
+                + "store_offer_deal_quantity = VALUES(store_offer_deal_quantity), "
+                + "store_offer_deal_price = VALUES(store_offer_deal_price), "
+                + "store_offer_normal_price = VALUES(store_offer_normal_price), "
+                + "store_offer_base_price = VALUES(store_offer_base_price), "
+                + "store_offer_base_unit = VALUES(store_offer_base_unit), "
+                + "store_offer_deposit = VALUES(store_offer_deposit), "
+                + "store_offer_promo_text = VALUES(store_offer_promo_text), "
+                + "store_offer_category = VALUES(store_offer_category), "
+                + "store_offer_valid_until = VALUES(store_offer_valid_until), "
+                + "store_offer_pulled_on = VALUES(store_offer_pulled_on), "
+                + "store_offer_source = VALUES(store_offer_source)";
         try (Connection con = Database.getConnection()) {
             con.setAutoCommit(false);
             try (PreparedStatement ps = con.prepareStatement(sql)) {
@@ -865,9 +668,9 @@ public class StoreRepository {
                     ps.setString(15, o.promoText());
                     ps.setString(16, o.category());
                     ps.setString(17, o.region() == null ? "" : o.region());
-                    ps.setString(18, o.validFrom().toString());
-                    ps.setString(19, o.validUntil().toString());
-                    ps.setString(20, pulledOn.toString());
+                    ps.setObject(18, o.validFrom());
+                    ps.setObject(19, o.validUntil());
+                    ps.setObject(20, pulledOn);
                     ps.setString(21, source);
                     ps.addBatch();
                 }

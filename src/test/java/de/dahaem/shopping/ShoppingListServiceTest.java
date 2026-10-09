@@ -1,6 +1,7 @@
 package de.dahaem.shopping;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,31 +27,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ShoppingListServiceTest {
 
-    private Path dbFile;
     private ShoppingListService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-shopping-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         service = new ShoppingListService(new ShoppingListRepository());
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
     void aggregatesIngredientQuantityAndRecipesAcrossRecipes() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Zwiebel', 'Onion', 'Gemüse')");
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 2)");
-        exec("INSERT INTO recipe VALUES (2, 'Eintopf', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 100)");
-        exec("INSERT INTO recipe_ingredient VALUES (2, 1, 'g', 150)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (1, 'Zwiebel', 'Onion', 'Gemüse')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Suppe', 2)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (2, 'Eintopf', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 100)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (2, 1, 'g', 150)");
 
         ShoppingList list = service.buildFromRecipes(List.of(1, 2));
 
@@ -68,9 +64,9 @@ class ShoppingListServiceTest {
 
     @Test
     void scalesA2ServingRecipesIngredientByPeopleOverRecipeServings() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (10, 'Mehl', 'Flour', 'Backen')");
-        exec("INSERT INTO recipe VALUES (10, 'Pfannkuchen', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (10, 10, 'g', 100)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (10, 'Mehl', 'Flour', 'Backen')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (10, 'Pfannkuchen', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (10, 10, 'g', 100)");
 
         ShoppingList list = service.buildFromRecipes(List.of(10), LocalDate.of(2026, 9, 25), 4);
 
@@ -81,11 +77,11 @@ class ShoppingListServiceTest {
 
     @Test
     void combinesTwoRecipesSameItemWhenScaled() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (11, 'Zucker', 'Sugar', 'Backen')");
-        exec("INSERT INTO recipe VALUES (11, 'Kuchen', 2)");
-        exec("INSERT INTO recipe VALUES (12, 'Kekse', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (11, 11, 'g', 100)");
-        exec("INSERT INTO recipe_ingredient VALUES (12, 11, 'g', 50)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (11, 'Zucker', 'Sugar', 'Backen')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (11, 'Kuchen', 2)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (12, 'Kekse', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (11, 11, 'g', 100)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (12, 11, 'g', 50)");
 
         ShoppingList list = service.buildFromRecipes(List.of(11, 12), LocalDate.of(2026, 9, 25), 4);
 
@@ -96,9 +92,9 @@ class ShoppingListServiceTest {
 
     @Test
     void peopleOmittedLeavesTheRawSumUnchanged() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (13, 'Salz', 'Salt', 'Gewürze')");
-        exec("INSERT INTO recipe VALUES (13, 'Suppe 2', 4)");
-        exec("INSERT INTO recipe_ingredient VALUES (13, 13, 'g', 100)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (13, 'Salz', 'Salt', 'Gewürze')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (13, 'Suppe 2', 4)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (13, 13, 'g', 100)");
 
         ShoppingList list = service.buildFromRecipes(List.of(13), LocalDate.of(2026, 9, 25));
 
@@ -109,9 +105,9 @@ class ShoppingListServiceTest {
 
     @Test
     void peopleEqualToRecipeServingsIsUnchanged() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (14, 'Reis', 'Rice', 'Trockenware')");
-        exec("INSERT INTO recipe VALUES (14, 'Risotto', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (14, 14, 'g', 100)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (14, 'Reis', 'Rice', 'Trockenware')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (14, 'Risotto', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (14, 14, 'g', 100)");
 
         ShoppingList list = service.buildFromRecipes(List.of(14), LocalDate.of(2026, 9, 25), 2);
 
@@ -122,25 +118,25 @@ class ShoppingListServiceTest {
 
     @Test
     void collapsesDuplicateListingsOfTheSameProductByRecencyButKeepsOtherStoresSeparate() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (2, 'Milch', 'Milk', 'Milchprodukte')");
-        exec("INSERT INTO recipe VALUES (3, 'Pfannkuchen', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (3, 2, 'ml', 500)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (2, 'Milch', 'Milk', 'Milchprodukte')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (3, 'Pfannkuchen', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (3, 2, 'ml', 500)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'MilchMarke')");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'MilchMarke')");
 
         // A stale, no-longer-available relisting of the SAME product at the SAME store — must collapse away.
-        exec("INSERT INTO store_product VALUES (1, 1, 'ext-old', '2026-01-01', 0)");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 2, 'ml', 500, 0.89, 1, NULL, 1, NULL)");
+        exec("INSERT INTO store_product (store_product_id, store_product_store_id, store_product_external_id, store_product_last_seen, store_product_is_available) VALUES (1, 1, 'ext-old', '2026-01-01', 0)");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 2, 'ml', 500, 0.89, 1, NULL, 1, NULL)");
 
         // The current, available listing for the same store/brand/pack, seen far more recently.
-        exec("INSERT INTO store_product VALUES (2, 1, 'ext-new', '2026-09-20', 1)");
-        exec("INSERT INTO store_item VALUES (2, 1, 1, 2, 'ml', 500, 1.29, 1, NULL, 2, NULL)");
+        exec("INSERT INTO store_product (store_product_id, store_product_store_id, store_product_external_id, store_product_last_seen, store_product_is_available) VALUES (2, 1, 'ext-new', '2026-09-20', 1)");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (2, 1, 1, 2, 'ml', 500, 1.29, 1, NULL, 2, NULL)");
 
         // A genuinely different store's option for the same item — must NOT be collapsed away.
-        exec("INSERT INTO store VALUES (2, 'Rewe')");
-        exec("INSERT INTO brand VALUES (2, 'AndereMarke')");
-        exec("INSERT INTO store_item VALUES (3, 2, 2, 2, 'ml', 500, 0.79, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'AndereMarke')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 2, 'ml', 500, 0.79, 1, NULL, NULL, NULL)");
 
         ShoppingList list = service.buildFromRecipes(List.of(3), LocalDate.of(2026, 9, 25));
 
@@ -161,14 +157,14 @@ class ShoppingListServiceTest {
 
     @Test
     void prefersDealPriceOverNormalPriceWhenACurrentDiscountApplies() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (3, 'Nudeln', 'Pasta', 'Trockenware')");
-        exec("INSERT INTO recipe VALUES (4, 'Pasta al Pomodoro', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (4, 3, 'g', 500)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (3, 'Nudeln', 'Pasta', 'Trockenware')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (4, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (4, 3, 'g', 500)");
 
-        exec("INSERT INTO store VALUES (2, 'Rewe')");
-        exec("INSERT INTO brand VALUES (2, 'Barilla')");
-        exec("INSERT INTO store_item VALUES (3, 2, 2, 3, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
-        exec("INSERT INTO store_discount VALUES (1, 3, '2026-09-20', '2026-09-30', 0.99, 'promo', 2, 1.80)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 3, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+        exec("INSERT INTO store_discount (store_discount_id, store_discount_store_item_id, store_discount_start_date, store_discount_end_date, store_discount_price, store_discount_notes, store_discount_deal_quantity, store_discount_deal_price) VALUES (1, 3, '2026-09-20', '2026-09-30', 0.99, 'promo', 2, 1.80)");
 
         ShoppingList list = service.buildFromRecipes(List.of(4), LocalDate.of(2026, 9, 25));
 
@@ -184,13 +180,13 @@ class ShoppingListServiceTest {
     @Test
     void computesPacksNeededAndReconciledPriceWhenUnitsAreCompatible() throws SQLException {
         // Real-world case: Kartoffel needs 2400 g, the only match is a 100 g pack at 0.99 EUR.
-        exec("INSERT INTO inventory_item VALUES (5, 'Kartoffel', 'Potato', 'Gemüse')");
-        exec("INSERT INTO recipe VALUES (5, 'Kartoffelsuppe', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (5, 5, 'g', 2400)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (5, 'Kartoffel', 'Potato', 'Gemüse')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (5, 'Kartoffelsuppe', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (5, 5, 'g', 2400)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'Sun Snacks')");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 5, 'g', 100, 0.99, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Sun Snacks')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 5, 'g', 100, 0.99, 1, NULL, NULL, NULL)");
 
         ShoppingList list = service.buildFromRecipes(List.of(5), LocalDate.of(2026, 9, 25));
 
@@ -203,13 +199,13 @@ class ShoppingListServiceTest {
     @Test
     void flagsUnitMismatchInsteadOfFabricatingAPackPrice() throws SQLException {
         // Real-world case: Aioli needs 60 g, the only match is a 250 ml product -- not reconcilable.
-        exec("INSERT INTO inventory_item VALUES (6, 'Aioli', 'Aioli', 'Sossen')");
-        exec("INSERT INTO recipe VALUES (6, 'Tapas', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (6, 6, 'g', 60)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (6, 'Aioli', 'Aioli', 'Sossen')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (6, 'Tapas', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (6, 6, 'g', 60)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'Tesoros Del Sur')");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 6, 'ml', 250, 1.99, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Tesoros Del Sur')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 6, 'ml', 250, 1.99, 1, NULL, NULL, NULL)");
 
         ShoppingList list = service.buildFromRecipes(List.of(6), LocalDate.of(2026, 9, 25));
 
@@ -221,13 +217,13 @@ class ShoppingListServiceTest {
 
     @Test
     void countsAtLeastOnePackWhenTheNeededQuantityIsSmallerThanOnePack() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (7, 'Butter', 'Butter', 'Milchprodukte')");
-        exec("INSERT INTO recipe VALUES (7, 'Kuchen', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (7, 7, 'g', 100)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_deutsch, inventory_item_name_english, inventory_item_category) VALUES (7, 'Butter', 'Butter', 'Milchprodukte')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (7, 'Kuchen', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (7, 7, 'g', 100)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'Kerrygold')");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 7, 'g', 500, 2.49, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Kerrygold')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 7, 'g', 500, 2.49, 1, NULL, NULL, NULL)");
 
         ShoppingList list = service.buildFromRecipes(List.of(7), LocalDate.of(2026, 9, 25));
 
@@ -237,68 +233,21 @@ class ShoppingListServiceTest {
         assertEquals(2.49, option.packsTotalPrice(), 0.001);
     }
 
+    /**
+     * Seed rows only fill the columns these tests care about; the real schema has further NOT NULL
+     * columns without defaults, so strict mode is relaxed for the seed insert (and restored before the
+     * connection goes back into the pool). The code under test still runs under the server's strict mode.
+     */
     private void exec(String sql) throws SQLException {
         try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
+            st.execute("SET @previous_sql_mode = @@SESSION.sql_mode");
+            st.execute("SET SESSION sql_mode = ''");
+            try {
+                st.execute(sql);
+            } finally {
+                st.execute("SET SESSION sql_mode = @previous_sql_mode");
+            }
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY, " +
-                    "inventory_item_name_deutsch TEXT, " +
-                    "inventory_item_name_english TEXT, " +
-                    "inventory_item_category TEXT)");
-
-            st.execute("CREATE TABLE recipe (" +
-                    "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT, " +
-                    "recipe_servings INTEGER NOT NULL)");
-
-            st.execute("CREATE TABLE recipe_ingredient (" +
-                    "recipe_ingredient_recipe_id INTEGER NOT NULL REFERENCES recipe(recipe_id), " +
-                    "recipe_ingredient_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "recipe_ingredient_unit TEXT NOT NULL, " +
-                    "recipe_ingredient_quantity_needed INTEGER NOT NULL)");
-
-            st.execute("CREATE TABLE store (" +
-                    "store_id INTEGER PRIMARY KEY, " +
-                    "store_name TEXT NOT NULL)");
-
-            st.execute("CREATE TABLE brand (" +
-                    "brand_id INTEGER PRIMARY KEY, " +
-                    "brand_name TEXT NOT NULL)");
-
-            st.execute("CREATE TABLE store_product (" +
-                    "store_product_id INTEGER PRIMARY KEY, " +
-                    "store_product_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_product_external_id TEXT NOT NULL, " +
-                    "store_product_last_seen DATE NOT NULL, " +
-                    "store_product_is_available BOOLEAN NOT NULL)");
-
-            st.execute("CREATE TABLE store_item (" +
-                    "store_item_id INTEGER PRIMARY KEY, " +
-                    "store_item_brand_id INTEGER NOT NULL REFERENCES brand(brand_id), " +
-                    "store_item_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_item_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "store_item_package_unit TEXT NOT NULL, " +
-                    "store_item_package_size INTEGER NOT NULL, " +
-                    "store_item_price REAL, " +
-                    "store_item_is_available BOOLEAN NOT NULL, " +
-                    "store_item_deposit REAL, " +
-                    "store_item_store_product_id INTEGER REFERENCES store_product(store_product_id), " +
-                    "store_item_external_id TEXT)");
-
-            st.execute("CREATE TABLE store_discount (" +
-                    "store_discount_id INTEGER PRIMARY KEY, " +
-                    "store_discount_store_item_id INTEGER NOT NULL REFERENCES store_item(store_item_id), " +
-                    "store_discount_start_date DATE NOT NULL, " +
-                    "store_discount_end_date DATE NOT NULL, " +
-                    "store_discount_price REAL NOT NULL, " +
-                    "store_discount_notes TEXT, " +
-                    "store_discount_deal_quantity INTEGER NOT NULL DEFAULT 1, " +
-                    "store_discount_deal_price REAL)");
-        }
-    }
 }
