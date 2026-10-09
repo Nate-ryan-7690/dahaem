@@ -4,6 +4,8 @@ import de.dahaem.mealplanner.MealPlan;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.shopping.AggregatedIngredient;
 import de.dahaem.shopping.ShoppingListRepository;
+import de.dahaem.stores.OfferRow;
+import de.dahaem.stores.PromotableProduct;
 import de.dahaem.stores.StoreOffer;
 import de.dahaem.stores.StoreRepository;
 import de.dahaem.testsupport.TestDatabase;
@@ -19,16 +21,19 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The dialect-sensitive paths of the SQLite -> MariaDB switch, against the real schema.sql on a
  * throwaway MariaDB: INSERT IGNORE upserts, generated keys, DATE and DATETIME round-trips,
- * ON DUPLICATE KEY UPDATE, and GROUP_CONCAT.
+ * ON DUPLICATE KEY UPDATE, GROUP_CONCAT, and DECIMAL columns read back as nullable doubles.
  */
 class MariaDbDialectTest {
 
@@ -156,6 +161,50 @@ class MariaDbDialectTest {
         // The scaled variant uses CAST(... AS DOUBLE), which MariaDB requires instead of AS REAL.
         List<AggregatedIngredient> scaled = new ShoppingListRepository().aggregateIngredients(List.of(1, 2), 4);
         assertEquals(40.0, scaled.get(0).totalQuantity(), 0.0001);
+    }
+
+    @Test
+    void offersForPromotionReadDecimalPricesAndKeepNulls() throws SQLException {
+        int storeId = stores.findOrCreateStore("Penny");
+        LocalDate from = LocalDate.of(2026, 10, 5);
+        StoreOffer deal = new StoreOffer("D1", "Brand", "Cola", "1,5 l", 1.29, 2, 2.22, 1.79, null, null, 0.25,
+                null, "Getränke", "", from, from.plusDays(6));
+        stores.saveOffers(storeId, List.of(deal, offer("N1", 0.99, from, from.plusDays(6))), from, "STORE");
+
+        Map<String, OfferRow> rows = stores.loadOffersForPromotion(null).stream()
+                .collect(Collectors.toMap(OfferRow::externalId, r -> r));
+
+        // DECIMAL comes back from MariaDB as BigDecimal; a (Double) cast here failed the weekly discounts step.
+        OfferRow withDeal = rows.get("D1");
+        assertEquals(2.22, withDeal.dealPrice(), 0.0001);
+        assertEquals(1.79, withDeal.normalPrice(), 0.0001);
+        assertEquals(0.25, withDeal.deposit(), 0.0001);
+        OfferRow plain = rows.get("N1");
+        assertNull(plain.dealPrice());
+        assertNull(plain.normalPrice());
+        assertNull(plain.deposit());
+    }
+
+    @Test
+    void promotableProductsReadDecimalPricesAndKeepNulls() throws SQLException {
+        int storeId = stores.findOrCreateStore("Penny");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, "
+                + "inventory_item_quantity, inventory_item_unit, inventory_item_category) "
+                + "VALUES (1, 'Water', 'Wasser', 0, 'ml', 'Getränke')");
+        exec("INSERT INTO store_product (store_product_store_id, store_product_external_id, store_product_name, "
+                + "store_product_sales_unit, store_product_regular_price, store_product_deposit, "
+                + "store_product_is_available, store_product_first_seen, store_product_last_seen, "
+                + "store_product_inventory_item_id) VALUES "
+                + "(" + storeId + ", 'P1', 'Wasser still', '1,5 l', 0.29, 0.25, 1, '2026-10-01', '2026-10-01', 1), "
+                + "(" + storeId + ", 'P2', 'Wasser Glas', '0,7 l', 0.89, NULL, 1, '2026-10-01', '2026-10-01', 1)");
+
+        Map<String, PromotableProduct> rows = stores.loadPromotableProducts().stream()
+                .collect(Collectors.toMap(PromotableProduct::name, p -> p));
+
+        assertEquals(0.29, rows.get("Wasser still").regularPrice(), 0.0001);
+        assertEquals(0.25, rows.get("Wasser still").deposit(), 0.0001);
+        assertEquals(0.89, rows.get("Wasser Glas").regularPrice(), 0.0001);
+        assertNull(rows.get("Wasser Glas").deposit());
     }
 
     private static StoreOffer offer(String id, double price, LocalDate from, LocalDate until) {
