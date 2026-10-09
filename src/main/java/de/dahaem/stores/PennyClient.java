@@ -13,11 +13,9 @@ import java.time.temporal.IsoFields;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,7 +27,8 @@ import static de.dahaem.stores.JsonUtil.text;
  *
  *  1. /.rest/market lists every Penny store with its price region ("sellingRegion").
  *  2. The offers page names the current / next calendar week (data-current-week,
- *     data-next-week) and the offer categories (data-category-name).
+ *     data-next-week) and the offer categories per week with the day they start
+ *     (Mo-Sa, Do-Sa, Fr-Sa; see categoryStarts). Next week's offers appear there from Friday.
  *  3. /.rest/offers/by-category/{week}/{category}?region={sellingRegion}
  *     returns the offer tiles of one category.
  *
@@ -42,6 +41,11 @@ public class PennyClient {
     private static final Pattern CATEGORY = Pattern.compile("data-category-name=\"([^\"]+)\"");
     private static final Pattern CURRENT_WEEK = Pattern.compile("data-current-week=\"(\\d{4}-\\d{1,2})\"");
     private static final Pattern NEXT_WEEK = Pattern.compile("data-next-week=\"(\\d{4}-\\d{1,2})\"");
+    private static final Pattern SECTION = Pattern.compile(
+            "id=\"ab-(naechsten-)?([a-z]+)--[^\"]*\"[^>]*?data-category-name=\"([^\"]+)\"");
+    private static final Map<String, DayOfWeek> WEEKDAYS = Map.of(
+            "montag", DayOfWeek.MONDAY, "dienstag", DayOfWeek.TUESDAY, "mittwoch", DayOfWeek.WEDNESDAY,
+            "donnerstag", DayOfWeek.THURSDAY, "freitag", DayOfWeek.FRIDAY, "samstag", DayOfWeek.SATURDAY);
     // "(1 kg = 7.98)", "(1 l = 17.96)", "(100 g = 1.20)"
     private static final Pattern BASE_PRICE = Pattern.compile(
             "(\\d+(?:[.,]\\d+)?)?\\s*([A-Za-zÄÖÜäöü]+)\\s*=\\s*(\\d+(?:[.,]\\d+)?)");
@@ -74,12 +78,18 @@ public class PennyClient {
             throw new IOException("Penny store " + marketId + " has no price region");
         }
         String page = http.get(BASE + "/angebote");
-        Set<String> categories = new LinkedHashSet<>();
-        Matcher m = CATEGORY.matcher(page);
-        while (m.find()) {
-            categories.add(m.group(1));
+        List<Map<String, DayOfWeek>> starts = categoryStarts(page);
+        Map<String, DayOfWeek> currentCategories = starts.get(0);
+        Map<String, DayOfWeek> nextCategories = starts.get(1);
+        if (currentCategories.isEmpty() && nextCategories.isEmpty()) {
+            // No dated sections (layout changed?): every category in both weeks, Monday to Saturday.
+            Matcher m = CATEGORY.matcher(page);
+            while (m.find()) {
+                currentCategories.put(m.group(1), DayOfWeek.MONDAY);
+                nextCategories.put(m.group(1), DayOfWeek.MONDAY);
+            }
         }
-        if (categories.isEmpty()) {
+        if (currentCategories.isEmpty() && nextCategories.isEmpty()) {
             throw new IOException("no offer categories on penny.de/angebote (site layout changed?)");
         }
         String currentWeek = firstGroup(CURRENT_WEEK, page);
@@ -90,18 +100,38 @@ public class PennyClient {
 
         Map<String, StoreOffer> offers = new LinkedHashMap<>();   // key id|validFrom dedupes
         List<String> failed = new ArrayList<>();
-        fetchWeek(currentWeek, market.sellingRegion(), categories, offers, failed);
+        fetchWeek(currentWeek, market.sellingRegion(), currentCategories, offers, failed);
         if (nextWeek != null && market.nextWeekSellingRegion() != null) {
-            fetchWeek(nextWeek, market.nextWeekSellingRegion(), categories, offers, failed);
+            fetchWeek(nextWeek, market.nextWeekSellingRegion(), nextCategories, offers, failed);
         }
         return new OfferPull(new ArrayList<>(offers.values()), failed);
     }
 
-    private void fetchWeek(String week, String region, Set<String> categories,
+    /**
+     * The offers page has one section per category and week, e.g.
+     * {@code <section id="ab-donnerstag--obst-und-gemuese1" ... data-category-name="obst-und-gemuese1">}.
+     * The id prefix is the day that category's offers start ("ab-montag" Mo-Sa, "ab-donnerstag" Do-Sa,
+     * "ab-freitag" Fr-Sa for Framstag); "ab-naechsten-..." is next week. Returns [this week, next week],
+     * each category -> start day. The page repeats the sections (menu), so the first one wins.
+     */
+    static List<Map<String, DayOfWeek>> categoryStarts(String page) {
+        Map<String, DayOfWeek> current = new LinkedHashMap<>();
+        Map<String, DayOfWeek> next = new LinkedHashMap<>();
+        Matcher m = SECTION.matcher(page);
+        while (m.find()) {
+            DayOfWeek start = WEEKDAYS.getOrDefault(m.group(2), DayOfWeek.MONDAY);
+            (m.group(1) == null ? current : next).putIfAbsent(m.group(3), start);
+        }
+        return List.of(current, next);
+    }
+
+    private void fetchWeek(String week, String region, Map<String, DayOfWeek> categories,
                            Map<String, StoreOffer> offers, List<String> failed) {
         LocalDate monday = weekStart(week);
         LocalDate saturday = monday.plusDays(5);
-        for (String category : categories) {
+        for (Map.Entry<String, DayOfWeek> entry : categories.entrySet()) {
+            String category = entry.getKey();
+            LocalDate from = monday.with(entry.getValue());
             String url = BASE + "/.rest/offers/by-category/" + week + "/" + enc(category) + "?region=" + enc(region);
             JsonNode body;
             try {
@@ -113,7 +143,7 @@ public class PennyClient {
                 continue;
             }
             for (JsonNode tile : body.path("offerTiles")) {
-                StoreOffer offer = toOffer(tile, category, region, monday, saturday);
+                StoreOffer offer = toOffer(tile, category, region, from, saturday);
                 if (offer != null) {
                     offers.put(offer.externalId() + "|" + offer.validFrom(), offer);
                 }

@@ -2,6 +2,7 @@ package de.dahaem.stores;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,5 +78,34 @@ class AggregatorClientTest {
     @Test
     void emptyHtmlYieldsNoOffers() {
         assertEquals(0, client.parse("no tiles here").size());
+    }
+
+    @Test
+    void offersGetTheWeekFromThePageHeader() {
+        String page = "<span>Angebote vom 05.10. - 11.10.2026</span><br>" + HTML;
+
+        List<StoreOffer> offers = client.parse(page, LocalDate.of(2026, 1, 5));
+
+        for (StoreOffer o : offers) {
+            assertEquals(LocalDate.of(2026, 10, 5), o.validFrom());
+            assertEquals(LocalDate.of(2026, 10, 11), o.validUntil());
+        }
+    }
+
+    @Test
+    void headerStartWithoutYearAcrossNewYearIsTheYearBefore() {
+        LocalDate[] valid = AggregatorClient.validity("Angebote vom 28.12. - 03.01.2027", LocalDate.of(2026, 1, 5));
+
+        assertEquals(LocalDate.of(2026, 12, 28), valid[0]);
+        assertEquals(LocalDate.of(2027, 1, 3), valid[1]);
+    }
+
+    @Test
+    void withoutAHeaderTheFallbackWeekIsMondayToSaturday() {
+        // Stable within a week, so pulling again on another day updates the same rows.
+        List<StoreOffer> offers = client.parse(HTML, LocalDate.of(2026, 10, 12));
+
+        assertEquals(LocalDate.of(2026, 10, 12), offers.get(0).validFrom());
+        assertEquals(LocalDate.of(2026, 10, 17), offers.get(0).validUntil());
     }
 }

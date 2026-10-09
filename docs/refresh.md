@@ -35,7 +35,7 @@ REFRESH_ENABLED=true            # or the property dahaem.refresh.enabled=true
 | Env var | Property | Default |
 |---|---|---|
 | `REFRESH_ENABLED` | `dahaem.refresh.enabled` | `false` |
-| `REFRESH_WEEKLY_CRON` | `dahaem.refresh.weekly-cron` | `0 0 6 * * MON` (Mondays 06:00) |
+| `REFRESH_WEEKLY_CRON` | `dahaem.refresh.weekly-cron` | `0 0 6 * * *` (daily 06:00, see below) |
 | `REFRESH_MONTHLY_CRON` | `dahaem.refresh.monthly-cron` | `0 0 5 1 * *` (1st of month 05:00) |
 | `REFRESH_ZONE` | `dahaem.refresh.zone` | `Europe/Berlin` |
 
@@ -54,7 +54,7 @@ offers aldi + offers penny (offers all)  ->  offers aggregator all  ->  discount
 
 1. **Offers all** – pulls this week's (+ next week's preview) flyer offers directly
    from ALDI Nord and Penny. These are the two chains with a clean direct feed.
-2. **Offers aggregator all** – pulls the same week's offers for the chains with no
+2. **Offers aggregator all** – pulls this week's (+ next week's, once posted) offers for the chains with no
    direct feed (Netto, Edeka, Rewe, Lidl, famila) plus a cross-check pull for ALDI,
    from the aktionspreis.de aggregator (`AggregatorClient.STORES`, tagged
    `SRC_AGGREGATOR` downstream, ranked below a direct pull).
@@ -70,7 +70,13 @@ doesn't stop the others from running, and `discounts` still runs over whatever
 offers are pulled. The process exits `0` only if every step succeeded; `1` if any
 step failed or came back partial.
 
-Intended cadence: weekly, whenever fresh flyer offers are published.
+Intended cadence: **daily**, despite the name. Chains publish new flyers on different
+days (Penny shows next week's offers from Friday, aktionspreis.de has a next-week page),
+and a flyer's offers start on different days (Penny Mo-Sa / Do-Sa / Fr-Sa sections, ALDI
+Monday and Thursday). A daily pull picks up a new flyer within a day, whichever day it
+appears. Re-pulling is safe: an offer is keyed by store, id, start date and region, and every
+source now gives a stable start date (ALDI and Penny per offer, the aggregator per page week),
+so a repeat pull updates the row instead of adding one.
 
 ## `refresh monthly`
 
@@ -158,10 +164,10 @@ ExecStart=/usr/bin/java --enable-native-access=ALL-UNNAMED -cp /opt/dahaem/targe
 `/etc/systemd/system/dahaem-refresh-weekly.timer`
 ```ini
 [Unit]
-Description=Run dahaem-refresh-weekly.service every week
+Description=Run dahaem-refresh-weekly.service every day
 
 [Timer]
-OnCalendar=Mon *-*-* 04:00:00
+OnCalendar=*-*-* 04:00:00
 Persistent=true
 
 [Install]
