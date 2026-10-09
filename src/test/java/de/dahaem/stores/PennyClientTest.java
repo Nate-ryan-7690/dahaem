@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PennyClientTest {
@@ -51,5 +52,14 @@ class PennyClientTest {
     @Test
     void weekStartIsTheIsoMonday() {
         assertEquals(LocalDate.of(2026, 10, 5), PennyClient.weekStart("2026-41"));
+    }
+
+    @Test
+    void percentageTilesAreNotOffers() throws Exception {
+        var tile = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                "{\"title\":\"Ferrero-Kühlartikel\",\"price\":\"20% Rabatt\",\"uuid\":\"u4\"}");
+
+        assertNull(new PennyClient(null).toOffer(tile, "framstag", "15A-03-22",
+                LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 10)));
     }
 }
