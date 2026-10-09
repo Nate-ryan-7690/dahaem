@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Hard cap enforced by GitHub itself: a healthy run takes ~1-2 min, so a job that is
+    # still going at 15 min is hung and gets killed, whatever the JVM is doing.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 

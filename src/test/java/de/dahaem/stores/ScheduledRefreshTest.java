@@ -7,8 +7,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -92,28 +90,22 @@ class ScheduledRefreshTest {
     }
 
     @Test
-    void overlappingRunIsSkipped() throws Exception {
+    void overlappingRunIsSkipped() {
         RefreshService service = mock(RefreshService.class);
-        CountDownLatch started = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
+        ScheduledRefresh scheduled = new ScheduledRefresh(service);
+        when(service.refreshMonthly()).thenReturn(OK);
+        // Single-threaded on purpose: start the next runs from inside the weekly refresh, while
+        // it still holds the guard. Same check as two overlapping threads, no thread to leak.
         when(service.refreshWeekly()).thenAnswer(inv -> {
-            started.countDown();
-            release.await(5, TimeUnit.SECONDS);
+            scheduled.monthly();   // weekly still in progress -> skipped
+            scheduled.weekly();    // likewise
             return OK;
         });
-        ScheduledRefresh scheduled = new ScheduledRefresh(service);
 
-        Thread first = new Thread(scheduled::weekly);
-        first.start();
-        assertTrue(started.await(5, TimeUnit.SECONDS));
-
-        scheduled.monthly();   // weekly still in progress -> skipped
-        scheduled.weekly();    // likewise
+        scheduled.weekly();
         verify(service, never()).refreshMonthly();
         verify(service, times(1)).refreshWeekly();
 
-        release.countDown();
-        first.join(5000);
         scheduled.monthly();   // guard released
         verify(service).refreshMonthly();
     }
