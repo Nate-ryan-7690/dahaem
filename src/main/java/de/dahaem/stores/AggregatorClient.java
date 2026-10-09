@@ -1,6 +1,8 @@
 package de.dahaem.stores;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,10 +30,15 @@ import java.util.regex.Pattern;
  *   - TIEFSTPREIS : lowest-price badge (kept in promoText)
  * There is no explicit old price and no Pfand on the tiles; the old price is
  * derived from the discount %. Offers only, no full range.
+ *
+ * Dates: the tiles have none; the page header gives the week ("Angebote vom 05.10. - 11.10.2026"),
+ * which every offer on the page gets. Next week's flyer is at
+ * /prospekte/<slug>-angebote-naechsteWoche once the site has it.
  */
 public class AggregatorClient {
 
     private static final String BASE = "https://www.aktionspreis.de/prospekt/";
+    private static final String NEXT_BASE = "https://www.aktionspreis.de/prospekte/";   // next week: plural path
 
     /**
      * CLI store key -> (display name EXACTLY as the row in the `store` table, aktionspreis url slug).
@@ -62,6 +69,8 @@ public class AggregatorClient {
     private static final Pattern BASE_P  = Pattern.compile(
             "([0-9][0-9.,]*)\\s*(?:&euro;|\\u20ac)\\s*je\\s*([A-Za-z\\u00e4]+)");
     private static final Pattern SIZE    = Pattern.compile("\\(([^)]*)\\)");
+    private static final Pattern VALIDITY = Pattern.compile(
+            "Angebote vom (\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})?\\s*-\\s*(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})");
 
     private final HttpFetcher http;
 
@@ -96,14 +105,36 @@ public class AggregatorClient {
         } else {
             html = http.get(url);                            // national page (famila without a PLZ shows nothing)
         }
-        List<StoreOffer> offers = parse(html);
-        List<String> failed = offers.isEmpty() ? List.of(url + " (no tiles found)") : List.of();
+        LocalDate monday = LocalDate.now(JsonUtil.GERMANY).with(DayOfWeek.MONDAY);
+        List<StoreOffer> offers = new ArrayList<>(parse(html, monday));
+        List<String> failed = new ArrayList<>();
+        if (offers.isEmpty()) {
+            failed.add(url + " (no tiles found)");
+        }
+        // Next week's flyer, once the site has it. Same session, so a regional chain keeps its PLZ.
+        String nextUrl = NEXT_BASE + s[1] + "-angebote-naechsteWoche";
+        try {
+            offers.addAll(parse(http.get(nextUrl), monday.plusWeeks(1)));
+        } catch (FileNotFoundException e) {
+            // not published yet
+        } catch (IOException e) {
+            failed.add(nextUrl + ": " + e.getMessage());
+        }
         return new OfferPull(offers, failed);
     }
 
     List<StoreOffer> parse(String html) {
+        return parse(html, LocalDate.now(JsonUtil.GERMANY).with(DayOfWeek.MONDAY));
+    }
+
+    /**
+     * Offers valid for the range in the page header ("Angebote vom 05.10. - 11.10.2026").
+     * The tiles carry no dates of their own. Without a header the week of fallbackMonday,
+     * Monday to Saturday, is used, so repeated pulls in one week update the same rows.
+     */
+    List<StoreOffer> parse(String html, LocalDate fallbackMonday) {
         List<StoreOffer> out = new ArrayList<>();
-        LocalDate today = LocalDate.now(JsonUtil.GERMANY);
+        LocalDate[] valid = validity(html, fallbackMonday);
         Matcher tile = TILE.matcher(html);
         while (tile.find()) {
             String attrs = tile.group(1);
@@ -153,9 +184,25 @@ public class AggregatorClient {
             out.add(new StoreOffer(externalId, null, name, size, salePrice,
                     1, null, normalPrice, basePrice, baseUnit, null,
                     promo.length() == 0 ? null : promo.toString(),
-                    "", "", today, today.plusDays(6)));
+                    "", "", valid[0], valid[1]));
         }
         return out;
+    }
+
+    /** [from, until] from "Angebote vom 05.10. - 11.10.2026"; the start may omit its year. */
+    static LocalDate[] validity(String html, LocalDate fallbackMonday) {
+        Matcher m = VALIDITY.matcher(html);
+        if (!m.find()) {
+            return new LocalDate[]{fallbackMonday, fallbackMonday.plusDays(5)};
+        }
+        int untilYear = Integer.parseInt(m.group(6));
+        int fromMonth = Integer.parseInt(m.group(2));
+        int untilMonth = Integer.parseInt(m.group(5));
+        int fromYear = m.group(3) != null ? Integer.parseInt(m.group(3))
+                : fromMonth > untilMonth ? untilYear - 1 : untilYear;    // "29.12. - 04.01.2027"
+        return new LocalDate[]{
+                LocalDate.of(fromYear, fromMonth, Integer.parseInt(m.group(1))),
+                LocalDate.of(untilYear, untilMonth, Integer.parseInt(m.group(4)))};
     }
 
     // ---- small helpers (regex HTML parse; tiles are machine-generated and uniform) ----
