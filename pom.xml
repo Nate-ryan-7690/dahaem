@@ -160,11 +160,29 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Sets ${org.mockito:mockito-core:jar} to the jar's path, for the surefire argLine below. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
+                    <!-- Load Mockito's agent at JVM start. Otherwise Mockito self-attaches on the
+                         first mock, which spawns a separate java process; on the JDK 17 CI runner
+                         that attach hung the whole test run (first seen with #46, the first tests
+                         to use Mockito). This is the setup Mockito 5 documents. -->
+                    <argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
                     <!-- Outer safety net: a hung forked test JVM is killed (with a thread dump)
                          instead of letting CI hang for hours. A full, healthy test run finishes in
                          ~1 minute, so 7 minutes only ever trips on a genuine hang. Per-test timeouts
