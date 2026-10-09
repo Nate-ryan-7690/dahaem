@@ -298,4 +298,15 @@ class StoreMatchServiceTest {
         assertEquals(2, service.match("Tafeläpfel", catalog));
         assertNull(service.match("Ärzte", catalog));
     }
+
+    @Test
+    void anOverrideOfZeroMeansExcludedAndSkipsTheRules() {
+        List<CatalogItem> catalog = List.of(item(1, "butter", "butter"));
+        StoreMatchService service = new StoreMatchService(null, Map.of(Normalizer.key("Butter Gebäck"), 0));
+
+        assertEquals(0, service.match("Butter Gebäck", catalog));
+        assertEquals(true, StoreMatchService.isExcluded(service.match("Butter Gebäck", catalog)));
+        assertEquals(false, StoreMatchService.isExcluded(service.match("Butter", catalog)));
+        assertEquals(false, StoreMatchService.isExcluded(null));
+    }
 }

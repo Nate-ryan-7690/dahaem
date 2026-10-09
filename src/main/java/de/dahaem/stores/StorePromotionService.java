@@ -32,6 +32,11 @@ public class StorePromotionService {
 
     // "<n> <unit>" possibly as "500-g", "1,5-l", "6 x 0,33 l"; the container word ("Packung") is ignored.
     private static final Pattern THOUSANDS = Pattern.compile("\\d{1,3}(?:\\.\\d{3})+");
+    /**
+     * Some shop pages write the litre sign as a capital I ("0,7 I", "1,5 I"). Only an upper-case I that directly
+     * follows a number and stands alone counts, so "Typ I", "2 IN 1" or "500 g I" are left alone.
+     */
+    private static final Pattern CAPITAL_I_LITRE = Pattern.compile("(\\d(?:[.,]\\d+)?)\\s*-?\\s*I(?![\\p{L}\\d])");
     private static final Pattern SIZE = Pattern.compile(
             "(?:(\\d+(?:[.,]\\d+)?)\\s*-?\\s*[xX]\\s*-?\\s*)?"      // optional "6 x"
             + "(\\d+(?:[.,]\\d+)?)\\s*-?\\s*"                        // the amount
@@ -83,7 +88,7 @@ public class StorePromotionService {
         if (salesUnit == null) {
             return null;
         }
-        Matcher m = SIZE.matcher(salesUnit);
+        Matcher m = SIZE.matcher(CAPITAL_I_LITRE.matcher(salesUnit).replaceAll("$1 l"));
         if (!m.find()) {
             return null;
         }

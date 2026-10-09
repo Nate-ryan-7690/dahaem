@@ -54,7 +54,7 @@ public class StoreDiscountService {
         Map<Integer, String> itemNames = new HashMap<>();
         catalog.forEach(c -> itemNames.put(c.id(), c.deutsch() != null ? c.deutsch() : c.english()));
 
-        int items = 0, discounts = 0, unmatched = 0, noSize = 0, held = 0;
+        int items = 0, discounts = 0, unmatched = 0, noSize = 0, held = 0, excluded = 0;
         List<String> unmatchedRows = new ArrayList<>();
         List<String> reviewRows = new ArrayList<>();
 
@@ -68,7 +68,14 @@ public class StoreDiscountService {
                     unmatched++;
                     continue;
                 }
-                Integer itemId = matcher.match(matchName, o.category(), catalog);
+                Integer itemId = matcher.overrideFor(o.name());          // full-name override wins over brand stripping
+                if (itemId == null) {
+                    itemId = matcher.match(matchName, o.category(), catalog);
+                }
+                if (StoreMatchService.isExcluded(itemId)) {
+                    excluded++;                                          // override value 0: left out on purpose, not reported
+                    continue;
+                }
                 if (itemId == null) {
                     unmatched++;
                     unmatchedRows.add(o.storeId() + "\t" + o.brand() + "\t" + o.name());
@@ -109,8 +116,8 @@ public class StoreDiscountService {
         writeTsv(matchReview, "# matches held back by the gate (store_id\texternal_id\toffer\tsales_unit\tsale_price\t"
                 + "proposed_item\treason): " + reviewRows.size(), reviewRows);
         String notes = String.format("%d offers: %d store_items touched, %d new discounts; "
-                + "%d unmatched (-> %s), %d unparseable-size, %d held for review (-> %s)", offers.size(), items,
-                discounts, unmatched, reviewFile, noSize, held, matchReview);
+                + "%d unmatched (-> %s), %d unparseable-size, %d held for review (-> %s), %d excluded by override",
+                offers.size(), items, discounts, unmatched, reviewFile, noSize, held, matchReview, excluded);
         return new ImportSummary("(offers)", "DISCOUNTS", "OK", 0, discounts, List.of(), notes);
     }
 

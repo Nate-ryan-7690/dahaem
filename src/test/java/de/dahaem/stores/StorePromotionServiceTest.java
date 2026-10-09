@@ -66,4 +66,24 @@ class StorePromotionServiceTest {
         assertEquals(1250, StorePromotionService.parseSize("1.250 kg").size());
         assertEquals(1500, StorePromotionService.parseSize("1.5 l").size());
     }
+
+    @Test
+    void capitalIReadAsLitreOnlyDirectlyAfterANumber() {
+        assertEquals(700, StorePromotionService.parseSize("0,7 I").size());
+        assertEquals("ml", StorePromotionService.parseSize("0,7 I").unit());
+        assertEquals(1500, StorePromotionService.parseSize("1,5 I").size());
+        assertEquals(1000, StorePromotionService.parseSize("1 I").size());
+        assertEquals(500, StorePromotionService.parseSize("0,5-I-Dose").size());
+        assertEquals(2000, StorePromotionService.parseSize("2 I-Flasche").size());
+    }
+
+    @Test
+    void capitalIInOtherWordsIsNotALitre() {
+        assertNull(StorePromotionService.parseSize("Typ I"));
+        assertNull(StorePromotionService.parseSize("Größe I"));
+        assertNull(StorePromotionService.parseSize("2 IN 1"));
+        assertNull(StorePromotionService.parseSize("3 Impfstoffe"));
+        assertEquals(500, StorePromotionService.parseSize("500 g I").size());
+        assertEquals("g", StorePromotionService.parseSize("500 g I").unit());
+    }
 }
