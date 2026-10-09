@@ -37,10 +37,18 @@ public class StorePromotionService {
      * follows a number and stands alone counts, so "Typ I", "2 IN 1" or "500 g I" are left alone.
      */
     private static final Pattern CAPITAL_I_LITRE = Pattern.compile("(\\d(?:[.,]\\d+)?)\\s*-?\\s*I(?![\\p{L}\\d])");
+    /** "46-50 WL", "4 - 6 Stück", "140 - 150g", "0,5 - 0,7l": a range of the same unit; the lower number counts. */
+    private static final Pattern RANGE = Pattern.compile(
+            "(\\d+(?:[.,]\\d+)?)\\s*-\\s*(?=\\d+(?:[.,]\\d+)?\\s*-?\\s*(?:kg|g|ml|cl|l|stück|st|wl)\\b)(?:\\d+(?:[.,]\\d+)?)\\s*-?\\s*(kg|g|ml|cl|l|stück|st|wl)\\b",
+            Pattern.CASE_INSENSITIVE);
+    /** "8er-Packung", "10er", "6er-Pack": that many pieces. */
+    private static final Pattern MULTIPACK = Pattern.compile("(?<![\\d.,])(\\d{1,3})er\\b", Pattern.CASE_INSENSITIVE);
+    /** Products whose litre figure is a yield. */
+    private static final Pattern YIELD_PRODUCT = Pattern.compile("(?i)br(ü|ue)he|bouillon|\\bfond\\b|\\bfonds\\b");
     private static final Pattern SIZE = Pattern.compile(
             "(?:(\\d+(?:[.,]\\d+)?)\\s*-?\\s*[xX]\\s*-?\\s*)?"      // optional "6 x"
             + "(\\d+(?:[.,]\\d+)?)\\s*-?\\s*"                        // the amount
-            + "(kg|g|ml|cl|l|stück|st)\\b",                          // the unit
+            + "(kg|g|ml|cl|l|stück|st|wl)\\b",                       // the unit ("WL" = Waschladungen)
             Pattern.CASE_INSENSITIVE);
 
     public ImportSummary promote() {
@@ -55,7 +63,7 @@ public class StorePromotionService {
                     skippedBrand++;
                     continue;
                 }
-                Pack pack = parseSize(p.salesUnit());
+                Pack pack = parseSize(p.salesUnit(), p.name());
                 if (pack == null) {
                     skippedSize++;
                     continue;
@@ -85,11 +93,42 @@ public class StorePromotionService {
 
     /** "500-g-Packung" -> 500 g; "1,5-l-Flasche" -> 1500 ml; "6 x 0,33 l" -> 1980 ml; null if unparseable. */
     static Pack parseSize(String salesUnit) {
+        return parseSize(salesUnit, null);
+    }
+
+    /**
+     * Like {@link #parseSize(String)}, with the product name for the cases where the name changes the reading.
+     * For broths and stocks ("Gemüse Brühe 18 I") a litre figure is the yield (what the pack makes), not the content,
+     * so only a stated weight counts; without one there is no usable size.
+     */
+    static Pack parseSize(String salesUnit, String productName) {
         if (salesUnit == null) {
             return null;
         }
-        Matcher m = SIZE.matcher(CAPITAL_I_LITRE.matcher(salesUnit).replaceAll("$1 l"));
-        if (!m.find()) {
+        boolean yieldProduct = productName != null && YIELD_PRODUCT.matcher(productName).find();
+        String text = CAPITAL_I_LITRE.matcher(salesUnit).replaceAll("$1 l");
+        text = RANGE.matcher(text).replaceAll("$1 $2");            // "46-50 WL", "4 - 6 Stück": the LOWER number
+        Matcher m = SIZE.matcher(text);
+        boolean found = false;
+        while (m.find()) {
+            String u = m.group(3).toLowerCase();
+            if (yieldProduct && (u.equals("l") || u.equals("ml") || u.equals("cl"))) {
+                continue;                                           // a yield, look for a weight instead
+            }
+            found = true;
+            break;
+        }
+        Matcher multi = MULTIPACK.matcher(text);
+        int packs = 0;
+        int multiCount = 0;
+        while (multi.find()) {
+            multiCount++;
+            packs = Integer.parseInt(multi.group(1));
+        }
+        if (!found) {
+            if (multiCount == 1 && !yieldProduct && packs > 0) {
+                return new Pack(packs, "stück");                    // "8er-Packung" = 8 pieces
+            }
             return null;
         }
         String unit = m.group(3).toLowerCase();
@@ -101,16 +140,13 @@ public class StorePromotionService {
             case "l"  -> { total *= 1000; unit = "ml"; }
             case "cl" -> { total *= 10;   unit = "ml"; }
             case "st" -> unit = "stück";
+            case "wl" -> unit = "WL";
             default -> { /* g, ml, stück stay as-is */ }
         }
         int size = (int) Math.round(total);
         return size > 0 ? new Pack(size, unit) : null;
     }
 
-    /**
-     * "1,5" -> 1.5. For g / ml / piece packs a dot followed by exactly three digits is a German thousands
-     * separator ("1.062 ml" = 1062 ml); for kg / l / cl it stays a decimal point ("1.250 kg").
-     */
     private static double num(String s, String unit) {
         boolean smallUnit = unit.equals("g") || unit.equals("ml") || unit.equals("st") || unit.equals("stück");
         if (smallUnit && THOUSANDS.matcher(s).matches()) {

@@ -12,7 +12,7 @@ import java.util.Map;
  * A match that fails creates nothing; the offer goes to the review report instead.
  *
  * UNIT: the pack's unit family must fit the item's unit. Families are weight (g, kg), volume (ml, cl, l) and
- * pieces (Stück). An item whose unit is a container word ("Packung", "Flasche", "Glas", "Dose", ...) carries
+ * pieces (Stück), plus "WL" (wash loads) as a family of its own. An item whose unit is a container word ("Packung", "Flasche", "Glas", "Dose", ...) carries
  * no quantity, so it accepts a pack of any family: there is nothing to contradict. A weight item does not
  * accept a volume or piece pack (a 750 ml soft drink is not "zitrone"; "15 Stück" is not a number of grams).
  *
@@ -52,12 +52,21 @@ final class MatchGate {
 
     static Verdict check(String itemUnit, StorePromotionService.Pack pack, double salePrice,
                          int itemId, References references) {
+        return check(itemUnit, pack, salePrice, itemId, references, false);
+    }
+
+    /**
+     * @param skipPrice true when the match comes from an override: that is a human decision, so the plausibility of the
+     *                  price is not second-guessed. The UNIT check still runs (the pack must be readable and fit).
+     */
+    static Verdict check(String itemUnit, StorePromotionService.Pack pack, double salePrice,
+                         int itemId, References references, boolean skipPrice) {
         String packFamily = packFamily(pack.unit());
         String itemFamily = itemFamily(itemUnit);
         if (itemFamily != null && packFamily != null && !itemFamily.equals(packFamily)) {
             return new Verdict(false, "unit: item unit '" + itemUnit + "' vs pack " + pack.size() + " " + pack.unit());
         }
-        if (packFamily == null || pack.size() <= 0 || salePrice <= 0) {
+        if (skipPrice || packFamily == null || pack.size() <= 0 || salePrice <= 0) {
             return Verdict.OK;
         }
         List<Double> refs = references.of(itemId, packFamily);
@@ -88,6 +97,7 @@ final class MatchGate {
             case "g", "kg", "mg" -> "g";
             case "ml", "cl", "l" -> "ml";
             case "stück", "stueck", "st", "stk" -> "stück";
+            case "wl" -> "WL";                                    // Waschladungen: a count unit of its own
             default -> null;
         };
     }

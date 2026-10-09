@@ -81,12 +81,13 @@ public class StoreDiscountService {
                     unmatchedRows.add(o.storeId() + "\t" + o.brand() + "\t" + o.name());
                     continue;
                 }
-                StorePromotionService.Pack pack = StorePromotionService.parseSize(o.salesUnit());
+                StorePromotionService.Pack pack = StorePromotionService.parseSize(o.salesUnit(), o.name());
                 if (pack == null) {
                     noSize++;
                     continue;
                 }
-                MatchGate.Verdict verdict = MatchGate.check(itemUnits.get(itemId), pack, o.salePrice(), itemId, references);
+                boolean viaOverride = matcher.overrideFor(o.name()) != null || matcher.overrideFor(matchName) != null;
+                MatchGate.Verdict verdict = MatchGate.check(itemUnits.get(itemId), pack, o.salePrice(), itemId, references, viaOverride);
                 if (!verdict.ok()) {
                     held++;
                     reviewRows.add(o.storeId() + "\t" + o.externalId() + "\t" + o.name() + "\t" + o.salesUnit() + "\t"

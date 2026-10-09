@@ -102,6 +102,7 @@ public class AldiNordClient {
             return;
         }
         JsonNode base = price.path("basePrice").path(0);
+        unit = deriveSalesUnit(unit, sale, number(base.path("basePriceValue")), text(base, "basePriceScale"));
         out.add(new StoreOffer(id, brand, name, unit, sale,
                 1, null,                                 // ALDI offers are single-unit, no multi-buy deal
                 number(price.path("strikePrice").path("strikePriceValue")),
@@ -109,6 +110,30 @@ public class AldiNordClient {
                 deposit,
                 text(price.path("priceTagLabels"), "promoText1"),
                 category, "", from, until));
+    }
+
+    private static final java.util.Set<String> CONTAINER_WORDS = java.util.Set.of(
+            "packung", "beutel", "becher", "dose", "glas", "flasche", "schale", "netz", "karton", "tüte", "box", "tray");
+
+    /**
+     * ALDI sometimes gives only a container word as the pack size ("Packung") but always the price per kg or l.
+     * Price / base price is the content: 2.99 EUR at 7.85 EUR/kg is 380 g. The result is rounded to the nearest
+     * 5 g (10 g above 1 kg), the precision the cent-rounded base price supports, and keeps the container word:
+     * "380-g-Packung". A pack size that already states a quantity is returned unchanged.
+     */
+    static String deriveSalesUnit(String unit, Double sale, Double basePrice, String baseScale) {
+        if (unit == null || !CONTAINER_WORDS.contains(unit.trim().toLowerCase(java.util.Locale.GERMAN))
+                || sale == null || basePrice == null || basePrice <= 0 || baseScale == null) {
+            return unit;
+        }
+        String scale = baseScale.trim().toLowerCase(java.util.Locale.GERMAN);
+        if (!scale.equals("kg") && !scale.equals("l")) {
+            return unit;
+        }
+        double small = sale / basePrice * 1000;                  // g or ml
+        long step = small >= 1000 ? 10 : 5;
+        long rounded = Math.round(small / step) * step;
+        return rounded > 0 ? rounded + "-" + (scale.equals("kg") ? "g" : "ml") + "-" + unit.trim() : unit;
     }
 
     // ---------------------------------------------------------------- full range

@@ -82,7 +82,7 @@ public class StoreMatchService {
      */
     private static final Set<String> TRAILING_QUALIFIERS = Set.of(
             "jung", "mittelalt", "alt", "dolce", "crudo", "natur", "naturell", "classic", "original", "extra",
-            "stange", "stangen", "sticks", "bio");
+            "stange", "stangen", "bio");
 
     /** Common German plural/inflection endings tried when folding a word onto a catalog term. */
     private static final List<String> INFLECTION_SUFFIXES = List.of("en", "er", "n", "e", "s");

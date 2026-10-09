@@ -245,7 +245,7 @@ class StoreMatchServiceTest {
 
         assertEquals(1, service.match("LINDENHOF Gouda jung", catalog));
         assertEquals(2, service.match("CUCINA Prosciutto Crudo Dolce", catalog));
-        assertEquals(3, service.match("JACOBS Kaffee-Sticks", catalog));
+        assertNull(service.match("JACOBS Kaffee-Sticks", catalog), "coffee sticks are their own items, not Kaffee");
         assertEquals(4, service.match("CUCINA Mozzarella-Stange", catalog));
     }
 
