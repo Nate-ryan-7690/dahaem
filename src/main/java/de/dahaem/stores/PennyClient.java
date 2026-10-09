@@ -151,7 +151,7 @@ public class PennyClient {
         }
     }
 
-    private StoreOffer toOffer(JsonNode tile, String category, String region, LocalDate from, LocalDate until) {
+    StoreOffer toOffer(JsonNode tile, String category, String region, LocalDate from, LocalDate until) {
         String title = text(tile, "title");
         Double sale = firstNumber(text(tile, "price"));          // may carry a footnote mark: "1.99²"
         if (title == null || sale == null) {
@@ -165,6 +165,9 @@ public class PennyClient {
         Double normal = firstNumber(text(tile, "listPrice"));
         if (normal == null) {
             normal = firstNumber(text(tile, "crossOutPrice"));
+        }
+        if (normal == null) {
+            normal = firstNumber(text(tile, "originalPrice"));   // the "offer" tile type, often an UVP
         }
         Double basePrice = null;
         String baseUnit = null;

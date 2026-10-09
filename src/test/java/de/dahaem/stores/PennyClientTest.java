@@ -52,4 +52,17 @@ class PennyClientTest {
     void weekStartIsTheIsoMonday() {
         assertEquals(LocalDate.of(2026, 10, 5), PennyClient.weekStart("2026-41"));
     }
+
+    @Test
+    void offerTilesTakeTheirNormalPriceFromOriginalPrice() throws Exception {
+        var tile = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                "{\"title\":\"MILKA Schokolade*\",\"price\":\"2.79\",\"originalPrice\":\"4.99\","
+                + "\"originalPriceType\":\"uvp\",\"uuid\":\"u1\"}");
+
+        StoreOffer offer = new PennyClient(null).toOffer(tile, "top-angebote", "15A-03-22",
+                LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 10));
+
+        assertEquals(4.99, offer.normalPrice());
+        assertEquals(2.79, offer.salePrice());
+    }
 }
