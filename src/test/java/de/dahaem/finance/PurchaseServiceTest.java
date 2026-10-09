@@ -1,6 +1,7 @@
 package de.dahaem.finance;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,24 +31,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PurchaseServiceTest {
 
-    private Path dbFile;
     private PurchaseRepository repository;
     private PurchaseService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-finance-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         repository = new PurchaseRepository();
         service = new PurchaseService(repository);
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -104,9 +100,11 @@ class PurchaseServiceTest {
     void recordPurchaseRollsBackBothWritesWhenTheStoreItemDoesNotExist() throws SQLException {
         seedInventoryItem(4, 5, "2026-10-01");
 
-        assertThrows(IllegalArgumentException.class, () ->
+        // purchase_history.store_item_id is a real foreign key, so the insert itself is rejected.
+        RuntimeException e = assertThrows(RuntimeException.class, () ->
                 service.recordPurchase(999, null, false, LocalDate.of(2026, 9, 25),
                         1, 1.00, LocalDate.of(2026, 10, 1)));
+        assertTrue(e.getCause() instanceof java.sql.SQLIntegrityConstraintViolationException);
 
         assertEquals(0, repository.findAll().size(), "the purchase row must not survive a failed transaction");
         assertEquals(5, inventoryQuantity(4), "inventory must be untouched when the transaction rolls back");
@@ -169,8 +167,8 @@ class PurchaseServiceTest {
     /** A store_item linked to the given inventory_item, the way store_item_item_id links to inventory_item. */
     private void seedStoreItem(int storeItemId, int inventoryItemId) throws SQLException {
         try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("INSERT INTO store VALUES (1, 'Aldi')");
-            st.execute("INSERT INTO brand VALUES (1, 'TestBrand')");
+            st.execute("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+            st.execute("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'TestBrand')");
         }
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
@@ -184,44 +182,4 @@ class PurchaseServiceTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY, " +
-                    "inventory_item_name_english TEXT NOT NULL, " +
-                    "inventory_item_quantity INTEGER NOT NULL DEFAULT 0, " +
-                    "inventory_item_unit TEXT NOT NULL, " +
-                    "inventory_item_category TEXT NOT NULL, " +
-                    "inventory_item_earliest_exp_date DATE)");
-
-            st.execute("CREATE TABLE store (" +
-                    "store_id INTEGER PRIMARY KEY, " +
-                    "store_name TEXT NOT NULL)");
-
-            st.execute("CREATE TABLE brand (" +
-                    "brand_id INTEGER PRIMARY KEY, " +
-                    "brand_name TEXT NOT NULL)");
-
-            st.execute("CREATE TABLE store_item (" +
-                    "store_item_id INTEGER PRIMARY KEY, " +
-                    "store_item_brand_id INTEGER NOT NULL REFERENCES brand(brand_id), " +
-                    "store_item_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_item_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "store_item_package_unit TEXT NOT NULL, " +
-                    "store_item_package_size INTEGER NOT NULL, " +
-                    "store_item_price REAL, " +
-                    "store_item_is_available BOOLEAN NOT NULL, " +
-                    "store_item_deposit REAL)");
-
-            st.execute("CREATE TABLE purchase_history (" +
-                    "purchase_history_purchase_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "purchase_history_store_item_id INTEGER NOT NULL, " +
-                    "purchase_history_discount_id INTEGER, " +
-                    "purchase_history_was_discounted BOOLEAN NOT NULL, " +
-                    "purchase_history_purchase_date DATE NOT NULL, " +
-                    "purchase_history_quantity_purchased INTEGER NOT NULL, " +
-                    "purchase_history_price_paid REAL NOT NULL, " +
-                    "purchase_history_expiration_date DATE NOT NULL)");
-        }
-    }
 }

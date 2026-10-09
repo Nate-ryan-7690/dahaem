@@ -1,6 +1,7 @@
 package de.dahaem.tags;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,24 +26,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TagServiceTest {
 
-    private Path dbFile;
     private TagRepository repository;
     private TagService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-tags-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchemaFromFile();
+        TestDatabase.reset();
         repository = new TagRepository();
         service = new TagService(repository);
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -104,15 +100,4 @@ class TagServiceTest {
         }
     }
 
-    private void createSchemaFromFile() throws IOException, SQLException {
-        String schema = Files.readString(Path.of("schema.sql"));
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            for (String rawStatement : schema.split(";")) {
-                String statement = rawStatement.replaceAll("--.*", "").trim();
-                if (!statement.isEmpty()) {
-                    st.execute(statement);
-                }
-            }
-        }
-    }
 }

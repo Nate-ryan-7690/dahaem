@@ -1,6 +1,7 @@
 package de.dahaem.mealplanner;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,24 +29,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RecipeReadTest {
 
-    private Path dbFile;
     private RecipeRepository repository;
     private RecipeService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-recipe-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         repository = new RecipeRepository();
         service = new RecipeService(repository);
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -55,16 +51,16 @@ class RecipeReadTest {
 
     @Test
     void totalRecipeCountMatchesTheNumberOfSeededRows() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (2, 'Eintopf', 2, 45, 15, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (2, 'Eintopf', 2, 45, 15, NULL, NULL, NULL, NULL, NULL, NULL)");
 
         assertEquals(2, service.totalRecipeCount());
     }
 
     @Test
     void allRecipesMapsEveryColumnIncludingNullableMacrosAndSortsByName() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Zwiebelsuppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (2, 'Apfelkuchen', 8, 60, 20, 350, 5, 45, 12, 3, 20)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Zwiebelsuppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (2, 'Apfelkuchen', 8, 60, 20, 350, 5, 45, 12, 3, 20)");
 
         List<Recipe> recipes = service.allRecipes();
 
@@ -91,7 +87,7 @@ class RecipeReadTest {
 
     @Test
     void findByIdReturnsTheMatchingRecipe() throws SQLException {
-        exec("INSERT INTO recipe VALUES (7, 'Pfannkuchen', 3, 15, 5, 220, 8, 30, 6, 1, 10)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (7, 'Pfannkuchen', 3, 15, 5, 220, 8, 30, 6, 1, 10)");
 
         Optional<Recipe> found = repository.findById(7);
 
@@ -107,11 +103,11 @@ class RecipeReadTest {
 
     @Test
     void findAllIngredientsJoinsInInventoryItemNames() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (10, 'Onion', 'Zwiebel', 2, 'pcs', 'Vegetables', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (11, 'Carrot', 'Karotte', 3, 'pcs', 'Vegetables', NULL, NULL)");
-        exec("INSERT INTO recipe_ingredient VALUES (10, 1, 'pcs', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (11, 1, 'pcs', 3)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (10, 'Onion', 'Zwiebel', 2, 'pcs', 'Vegetables', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (11, 'Carrot', 'Karotte', 3, 'pcs', 'Vegetables', NULL, NULL)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (10, 1, 'pcs', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (11, 1, 'pcs', 3)");
 
         List<RecipeIngredient> ingredients = service.findAllIngredients(1);
 
@@ -126,19 +122,19 @@ class RecipeReadTest {
 
     @Test
     void findAllIngredientsReturnsEmptyListForARecipeWithNoIngredients() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
 
         assertTrue(service.findAllIngredients(1).isEmpty());
     }
 
     @Test
     void findAllIngredientsOmitsRowsWhoseInventoryItemIsMissing() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
-        // foreign_keys is forced back ON by Database.getConnection() on every new connection,
-        // so the PRAGMA and the insert it protects must share one connection/statement.
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        // foreign_key_checks is per-session, so the SET and the insert it protects must share one connection.
         try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("PRAGMA foreign_keys = OFF");
-            st.execute("INSERT INTO recipe_ingredient VALUES (999, 1, 'pcs', 1)");
+            st.execute("SET foreign_key_checks = 0");
+            st.execute("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (999, 1, 'pcs', 1)");
+            st.execute("SET foreign_key_checks = 1");   // the connection goes back into the pool
         }
 
         assertTrue(service.findAllIngredients(1).isEmpty(),
@@ -147,9 +143,9 @@ class RecipeReadTest {
 
     @Test
     void findAllInstructionsReturnsStepsOrderedByStepNumber() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
-        exec("INSERT INTO recipe_instructions VALUES (1, 1, 2, 'Simmer for 10 minutes', NULL, 'Oma')");
-        exec("INSERT INTO recipe_instructions VALUES (2, 1, 1, 'Chop the onions', 'fine dice', 'Oma')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe_instructions (recipe_instructions_step_id, recipe_instructions_recipe_id, recipe_instructions_step_number, recipe_instructions_instruction, recipe_instructions_notes, recipe_instructions_source) VALUES (1, 1, 2, 'Simmer for 10 minutes', NULL, 'Oma')");
+        exec("INSERT INTO recipe_instructions (recipe_instructions_step_id, recipe_instructions_recipe_id, recipe_instructions_step_number, recipe_instructions_instruction, recipe_instructions_notes, recipe_instructions_source) VALUES (2, 1, 1, 'Chop the onions', 'fine dice', 'Oma')");
 
         List<RecipeInstruction> instructions = service.findAllInstructions(1);
 
@@ -164,7 +160,7 @@ class RecipeReadTest {
 
     @Test
     void findAllInstructionsReturnsEmptyListForARecipeWithNoSteps() throws SQLException {
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (1, 'Suppe', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
 
         assertTrue(service.findAllInstructions(1).isEmpty());
     }
@@ -175,50 +171,4 @@ class RecipeReadTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("PRAGMA foreign_keys = ON");
-
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY, " +
-                    "inventory_item_name_english TEXT NOT NULL, " +
-                    "inventory_item_name_deutsch TEXT, " +
-                    "inventory_item_quantity INTEGER NOT NULL DEFAULT 0, " +
-                    "inventory_item_unit TEXT NOT NULL, " +
-                    "inventory_item_category TEXT NOT NULL, " +
-                    "inventory_item_subcategory TEXT, " +
-                    "inventory_item_earliest_exp_date DATE)");
-
-            st.execute("CREATE TABLE recipe (" +
-                    "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT NOT NULL, " +
-                    "recipe_servings INTEGER NOT NULL, " +
-                    "recipe_cook_time INTEGER NOT NULL, " +
-                    "recipe_prep_time INTEGER NOT NULL, " +
-                    "recipe_calories INTEGER, " +
-                    "recipe_protein INTEGER, " +
-                    "recipe_carbs INTEGER, " +
-                    "recipe_fat INTEGER, " +
-                    "recipe_fibre INTEGER, " +
-                    "recipe_sugar INTEGER)");
-
-            st.execute("CREATE TABLE recipe_ingredient (" +
-                    "recipe_ingredient_item_id INTEGER NOT NULL, " +
-                    "recipe_ingredient_recipe_id INTEGER NOT NULL, " +
-                    "recipe_ingredient_unit TEXT NOT NULL, " +
-                    "recipe_ingredient_quantity_needed INTEGER NOT NULL, " +
-                    "PRIMARY KEY (recipe_ingredient_item_id, recipe_ingredient_recipe_id), " +
-                    "FOREIGN KEY (recipe_ingredient_item_id) REFERENCES inventory_item(inventory_item_id), " +
-                    "FOREIGN KEY (recipe_ingredient_recipe_id) REFERENCES recipe(recipe_id))");
-
-            st.execute("CREATE TABLE recipe_instructions (" +
-                    "recipe_instructions_step_id INTEGER PRIMARY KEY, " +
-                    "recipe_instructions_recipe_id INTEGER NOT NULL, " +
-                    "recipe_instructions_step_number INTEGER NOT NULL, " +
-                    "recipe_instructions_instruction TEXT NOT NULL, " +
-                    "recipe_instructions_notes TEXT, " +
-                    "recipe_instructions_source TEXT NOT NULL, " +
-                    "FOREIGN KEY (recipe_instructions_recipe_id) REFERENCES recipe(recipe_id))");
-        }
-    }
 }

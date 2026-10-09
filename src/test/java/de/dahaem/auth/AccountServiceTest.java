@@ -1,6 +1,7 @@
 package de.dahaem.auth;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Statement;
 import java.time.LocalDate;
 
@@ -30,17 +32,13 @@ class AccountServiceTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 9, 25);
     private static final String PASSWORD = "correct horse battery";
 
-    private Path dbFile;
     private AccountRepository repository;
     private BCryptPasswordEncoder encoder;
     private AccountService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-auth-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchemaFromFile();
+        TestDatabase.reset();
         repository = new AccountRepository();
         encoder = new BCryptPasswordEncoder();
         service = new AccountService(repository, encoder);
@@ -48,8 +46,7 @@ class AccountServiceTest {
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     // ---- Repository ----
@@ -79,9 +76,8 @@ class AccountServiceTest {
     void repositoryEnforcesUniqueEmail() throws SQLException {
         try (Connection con = repository.openTransaction()) {
             repository.insertUser(con, "anna@example.de", "Anna", "hash", TODAY);
-            SQLException e = assertThrows(SQLException.class,
+            assertThrows(SQLIntegrityConstraintViolationException.class,
                     () -> repository.insertUser(con, "anna@example.de", "Other Anna", "hash2", TODAY));
-            assertTrue(e.getMessage().contains("SQLITE_CONSTRAINT"), e.getMessage());
         }
     }
 
@@ -91,9 +87,8 @@ class AccountServiceTest {
             Household household = repository.insertHousehold(con, "Zuhause", TODAY);
             AppUser user = repository.insertUser(con, "anna@example.de", "Anna", "hash", TODAY);
             repository.insertMember(con, household.getId(), user.getId(), HouseholdRole.ADMIN);
-            SQLException e = assertThrows(SQLException.class,
+            assertThrows(SQLIntegrityConstraintViolationException.class,
                     () -> repository.insertMember(con, household.getId(), user.getId(), HouseholdRole.MEMBER));
-            assertTrue(e.getMessage().contains("SQLITE_CONSTRAINT"), e.getMessage());
         }
     }
 
@@ -180,15 +175,4 @@ class AccountServiceTest {
         assertTrue(repository.findFirstHousehold().isEmpty());
     }
 
-    private void createSchemaFromFile() throws IOException, SQLException {
-        String schema = Files.readString(Path.of("schema.sql"));
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            for (String rawStatement : schema.split(";")) {
-                String statement = rawStatement.replaceAll("--.*", "").trim();
-                if (!statement.isEmpty()) {
-                    st.execute(statement);
-                }
-            }
-        }
-    }
 }

@@ -3,6 +3,7 @@ package de.dahaem.shopping;
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,34 +33,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ShoppingListGenerationTest {
 
-    private Path dbFile;
     private ShoppingListService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-shopping-generation-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         service = new ShoppingListService(new ShoppingListRepository(), new MealPlanRepository(),
                 new InventoryRepository());
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
     void producesOnlyTheMissingQuantityAfterSubtractingInventory() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 100, 'g', 'Gemüse', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 250)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Onion', 'Zwiebel', 100, 'g', 'Gemüse', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Suppe', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 250)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'Bio')");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Bio')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -76,13 +72,13 @@ class ShoppingListGenerationTest {
 
     @Test
     void generateFromMealPlanScalesQuantitiesByPeopleOverRecipeServings() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 0, 'g', 'Gemüse', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Suppe', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 100)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Onion', 'Zwiebel', 0, 'g', 'Gemüse', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Suppe', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 100)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'Bio')");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Bio')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -97,16 +93,16 @@ class ShoppingListGenerationTest {
 
     @Test
     void excludesAnItemAlreadyFullyInStock() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 500, 'g', 'Gemüse', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (2, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 250)");
-        exec("INSERT INTO recipe_ingredient VALUES (2, 1, 'g', 400)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Onion', 'Zwiebel', 500, 'g', 'Gemüse', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 250)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (2, 1, 'g', 400)");
 
-        exec("INSERT INTO store VALUES (1, 'Aldi')");
-        exec("INSERT INTO brand VALUES (1, 'Bio')");
-        exec("INSERT INTO store_item VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
-        exec("INSERT INTO store_item VALUES (2, 1, 1, 2, 'g', 500, 1.49, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Bio')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (1, 1, 1, 1, 'g', 500, 0.99, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (2, 1, 1, 2, 'g', 500, 1.49, 1, NULL, NULL, NULL)");
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -124,14 +120,14 @@ class ShoppingListGenerationTest {
 
     @Test
     void persistsTheShoppingListLinkedToTheMealPlanWithItsItems() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 100, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Pasta', 'Nudeln', 100, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 500)");
 
-        exec("INSERT INTO store VALUES (2, 'Rewe')");
-        exec("INSERT INTO brand VALUES (2, 'Barilla')");
-        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
-        exec("INSERT INTO store_discount VALUES (1, 3, '2026-09-20', '2026-09-30', 0.99, 'promo', 1, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+        exec("INSERT INTO store_discount (store_discount_id, store_discount_store_item_id, store_discount_start_date, store_discount_end_date, store_discount_price, store_discount_notes, store_discount_deal_quantity, store_discount_deal_price) VALUES (1, 3, '2026-09-20', '2026-09-30', 0.99, 'promo', 1, NULL)");
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -161,13 +157,13 @@ class ShoppingListGenerationTest {
 
     @Test
     void selectingAStoreItemPersistsTheChoiceAndClearingItPersistsToo() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 500)");
 
-        exec("INSERT INTO store VALUES (2, 'Rewe')");
-        exec("INSERT INTO brand VALUES (2, 'Barilla')");
-        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -188,9 +184,9 @@ class ShoppingListGenerationTest {
 
     @Test
     void dropsAnItemNoStoreCurrentlySells() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Saffron', 'Safran', 0, 'g', 'Gewürze', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Paella', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 5)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Saffron', 'Safran', 0, 'g', 'Gewürze', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Paella', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 5)");
         // deliberately no store/brand/store_item: nothing currently sells this item
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
@@ -215,16 +211,16 @@ class ShoppingListGenerationTest {
 
     @Test
     void loadPersistedListReturnsNamesOptionsAndReflectsAPriorSelection() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 500)");
 
-        exec("INSERT INTO store VALUES (2, 'Rewe')");
-        exec("INSERT INTO brand VALUES (2, 'Barilla')");
-        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
-        exec("INSERT INTO store VALUES (3, 'Aldi')");
-        exec("INSERT INTO brand VALUES (3, 'Combino')");
-        exec("INSERT INTO store_item VALUES (4, 3, 3, 1, 'g', 500, 1.19, 1, NULL, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (3, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (3, 'Combino')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (4, 3, 3, 1, 'g', 500, 1.19, 1, NULL, NULL, NULL)");
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -255,15 +251,15 @@ class ShoppingListGenerationTest {
 
     @Test
     void selectStoreItemRejectsAStoreItemThatIsNotACandidateForTheLine() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (2, 'Milk', 'Milch', 0, 'ml', 'Milchprodukte', NULL, NULL)");
-        exec("INSERT INTO recipe VALUES (1, 'Pasta al Pomodoro', 2)");
-        exec("INSERT INTO recipe_ingredient VALUES (1, 1, 'g', 500)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Milk', 'Milch', 0, 'ml', 'Milchprodukte', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 500)");
 
-        exec("INSERT INTO store VALUES (2, 'Rewe')");
-        exec("INSERT INTO brand VALUES (2, 'Barilla')");
-        exec("INSERT INTO store_item VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)"); // pasta's own option
-        exec("INSERT INTO store_item VALUES (4, 2, 2, 2, 'ml', 500, 0.89, 1, NULL, NULL, NULL)"); // a different item
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)"); // pasta's own option
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (4, 2, 2, 2, 'ml', 500, 0.89, 1, NULL, NULL, NULL)"); // a different item
 
         int planId = createPlan(LocalDate.of(2026, 9, 28));
         addRecipeToPlan(planId, 1);
@@ -300,9 +296,20 @@ class ShoppingListGenerationTest {
                 + "meal_plan_recipe_meal_time) VALUES (" + recipeId + ", " + planId + ", 'dinner')");
     }
 
+    /**
+     * Seed rows only fill the columns these tests care about; the real schema has further NOT NULL
+     * columns without defaults, so strict mode is relaxed for the seed insert (and restored before the
+     * connection goes back into the pool). The code under test still runs under the server's strict mode.
+     */
     private void exec(String sql) throws SQLException {
         try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
+            st.execute("SET @previous_sql_mode = @@SESSION.sql_mode");
+            st.execute("SET SESSION sql_mode = ''");
+            try {
+                st.execute(sql);
+            } finally {
+                st.execute("SET SESSION sql_mode = @previous_sql_mode");
+            }
         }
     }
 
@@ -346,102 +353,4 @@ class ShoppingListGenerationTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("PRAGMA foreign_keys = ON");
-
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY, " +
-                    "inventory_item_name_english TEXT NOT NULL, " +
-                    "inventory_item_name_deutsch TEXT, " +
-                    "inventory_item_quantity INTEGER NOT NULL DEFAULT 0, " +
-                    "inventory_item_unit TEXT NOT NULL, " +
-                    "inventory_item_category TEXT NOT NULL, " +
-                    "inventory_item_subcategory TEXT, " +
-                    "inventory_item_earliest_exp_date DATE)");
-
-            st.execute("CREATE TABLE recipe (" +
-                    "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT NOT NULL, " +
-                    "recipe_servings INTEGER NOT NULL)");
-
-            st.execute("CREATE TABLE recipe_ingredient (" +
-                    "recipe_ingredient_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "recipe_ingredient_recipe_id INTEGER NOT NULL REFERENCES recipe(recipe_id), " +
-                    "recipe_ingredient_unit TEXT NOT NULL, " +
-                    "recipe_ingredient_quantity_needed INTEGER NOT NULL, " +
-                    "PRIMARY KEY (recipe_ingredient_item_id, recipe_ingredient_recipe_id))");
-
-            st.execute("CREATE TABLE meal_plan (" +
-                    "meal_plan_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "meal_plan_week_start_date DATE NOT NULL UNIQUE)");
-
-            st.execute("CREATE TABLE meal_plan_recipe (" +
-                    "meal_plan_recipe_id INTEGER NOT NULL REFERENCES recipe(recipe_id), " +
-                    "meal_plan_recipe_plan_id INTEGER NOT NULL REFERENCES meal_plan(meal_plan_id), " +
-                    "meal_plan_recipe_meal_time TEXT, " +
-                    "PRIMARY KEY (meal_plan_recipe_id, meal_plan_recipe_plan_id))");
-
-            st.execute("CREATE TABLE store (" +
-                    "store_id INTEGER PRIMARY KEY, " +
-                    "store_name TEXT NOT NULL UNIQUE)");
-
-            st.execute("CREATE TABLE brand (" +
-                    "brand_id INTEGER PRIMARY KEY, " +
-                    "brand_name TEXT NOT NULL UNIQUE)");
-
-            st.execute("CREATE TABLE store_product (" +
-                    "store_product_id INTEGER PRIMARY KEY, " +
-                    "store_product_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_product_external_id TEXT NOT NULL, " +
-                    "store_product_last_seen DATE NOT NULL, " +
-                    "store_product_is_available BOOLEAN NOT NULL)");
-
-            st.execute("CREATE TABLE store_item (" +
-                    "store_item_id INTEGER PRIMARY KEY, " +
-                    "store_item_brand_id INTEGER NOT NULL REFERENCES brand(brand_id), " +
-                    "store_item_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_item_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "store_item_package_unit TEXT NOT NULL, " +
-                    "store_item_package_size INTEGER NOT NULL, " +
-                    "store_item_price REAL, " +
-                    "store_item_is_available BOOLEAN NOT NULL, " +
-                    "store_item_deposit REAL, " +
-                    "store_item_store_product_id INTEGER REFERENCES store_product(store_product_id), " +
-                    "store_item_external_id TEXT)");
-
-            st.execute("CREATE TABLE store_discount (" +
-                    "store_discount_id INTEGER PRIMARY KEY, " +
-                    "store_discount_store_item_id INTEGER NOT NULL REFERENCES store_item(store_item_id), " +
-                    "store_discount_start_date DATE NOT NULL, " +
-                    "store_discount_end_date DATE NOT NULL, " +
-                    "store_discount_price REAL NOT NULL, " +
-                    "store_discount_notes TEXT, " +
-                    "store_discount_deal_quantity INTEGER NOT NULL DEFAULT 1, " +
-                    "store_discount_deal_price REAL)");
-
-            // Exact column definitions from schema.sql: the tables this feature persists to.
-            st.execute("CREATE TABLE \"shopping_list\" ( \"shopping_list_id\" INTEGER, " +
-                    "\"shopping_list_meal_plan_id\" INTEGER, " +
-                    "\"shopping_list_created_date\" DATE NOT NULL, " +
-                    "\"shopping_list_status\" BOOLEAN NOT NULL, " +
-                    "PRIMARY KEY(\"shopping_list_id\" AUTOINCREMENT), " +
-                    "FOREIGN KEY(\"shopping_list_meal_plan_id\") REFERENCES \"meal_plan\"(\"meal_plan_id\"))");
-
-            st.execute("CREATE TABLE \"shopping_list_item\"(\"shopping_list_item_id\" INTEGER, " +
-                    "\"shopping_list_id\" INTEGER NOT NULL, " +
-                    "\"shopping_list_item_store_item_id\" INTEGER, " +
-                    "\"shopping_list_item_inventory_item_id\" INTEGER, " +
-                    "\"shopping_list_item_store_section\" TEXT, " +
-                    "\"shopping_list_item_quantity_needed\" INTEGER NOT NULL, " +
-                    "\"shopping_list_item_is_discounted\" BOOLEAN, " +
-                    "\"shopping_list_item_purchase_status\" BOOLEAN NOT NULL, " +
-                    "\"shopping_list_item_is_manual\" BOOLEAN NOT NULL, " +
-                    "PRIMARY KEY(\"shopping_list_item_id\" AUTOINCREMENT), " +
-                    "FOREIGN KEY(\"shopping_list_id\") REFERENCES \"shopping_list\"(\"shopping_list_id\"), " +
-                    "FOREIGN KEY(\"shopping_list_item_store_item_id\") REFERENCES \"store_item\"(\"store_item_id\"), " +
-                    "FOREIGN KEY(\"shopping_list_item_inventory_item_id\") " +
-                    "REFERENCES \"inventory_item\"(\"inventory_item_id\"))");
-        }
-    }
 }

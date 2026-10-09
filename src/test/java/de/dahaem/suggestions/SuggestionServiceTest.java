@@ -1,6 +1,7 @@
 package de.dahaem.suggestions;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,22 +26,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SuggestionServiceTest {
 
-    private Path dbFile;
     private SuggestionService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-suggestions-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         service = new SuggestionService(new SuggestionRepository());
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -159,24 +155,24 @@ class SuggestionServiceTest {
     }
 
     private void seedRecipe(int id, String name) throws SQLException {
-        exec("INSERT INTO recipe VALUES (" + id + ", '" + name + "', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar) VALUES (" + id + ", '" + name + "', 4, 30, 10, NULL, NULL, NULL, NULL, NULL, NULL)");
     }
 
     private void seedInventoryItem(int id, String name, LocalDate earliestExpDate) throws SQLException {
         String exp = earliestExpDate == null ? "NULL" : "'" + earliestExpDate + "'";
-        exec("INSERT INTO inventory_item VALUES (" + id + ", '" + name + "', NULL, 1, 'pcs', 'Misc', NULL, " + exp + ")");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (" + id + ", '" + name + "', NULL, 1, 'pcs', 'Misc', NULL, " + exp + ")");
     }
 
     private void seedIngredient(int itemId, int recipeId) throws SQLException {
-        exec("INSERT INTO recipe_ingredient VALUES (" + itemId + ", " + recipeId + ", 'pcs', 1)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (" + itemId + ", " + recipeId + ", 'pcs', 1)");
     }
 
     private void seedStore(int id, String name) throws SQLException {
-        exec("INSERT INTO store VALUES (" + id + ", '" + name + "')");
+        exec("INSERT INTO store (store_id, store_name) VALUES (" + id + ", '" + name + "')");
     }
 
     private void seedBrand(int id, String name) throws SQLException {
-        exec("INSERT INTO brand VALUES (" + id + ", '" + name + "')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (" + id + ", '" + name + "')");
     }
 
     private void seedStoreItem(int storeItemId, int brandId, int storeId, int itemId) throws SQLException {
@@ -198,68 +194,4 @@ class SuggestionServiceTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("PRAGMA foreign_keys = ON");
-
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY, " +
-                    "inventory_item_name_english TEXT NOT NULL, " +
-                    "inventory_item_name_deutsch TEXT, " +
-                    "inventory_item_quantity INTEGER NOT NULL DEFAULT 0, " +
-                    "inventory_item_unit TEXT NOT NULL, " +
-                    "inventory_item_category TEXT NOT NULL, " +
-                    "inventory_item_subcategory TEXT, " +
-                    "inventory_item_earliest_exp_date DATE)");
-
-            st.execute("CREATE TABLE recipe (" +
-                    "recipe_id INTEGER PRIMARY KEY, " +
-                    "recipe_name TEXT NOT NULL, " +
-                    "recipe_servings INTEGER NOT NULL, " +
-                    "recipe_cook_time INTEGER NOT NULL, " +
-                    "recipe_prep_time INTEGER NOT NULL, " +
-                    "recipe_calories INTEGER, " +
-                    "recipe_protein INTEGER, " +
-                    "recipe_carbs INTEGER, " +
-                    "recipe_fat INTEGER, " +
-                    "recipe_fibre INTEGER, " +
-                    "recipe_sugar INTEGER)");
-
-            st.execute("CREATE TABLE recipe_ingredient (" +
-                    "recipe_ingredient_item_id INTEGER NOT NULL, " +
-                    "recipe_ingredient_recipe_id INTEGER NOT NULL, " +
-                    "recipe_ingredient_unit TEXT NOT NULL, " +
-                    "recipe_ingredient_quantity_needed INTEGER NOT NULL, " +
-                    "PRIMARY KEY (recipe_ingredient_item_id, recipe_ingredient_recipe_id), " +
-                    "FOREIGN KEY (recipe_ingredient_item_id) REFERENCES inventory_item(inventory_item_id), " +
-                    "FOREIGN KEY (recipe_ingredient_recipe_id) REFERENCES recipe(recipe_id))");
-
-            st.execute("CREATE TABLE store (" +
-                    "store_id INTEGER PRIMARY KEY, " +
-                    "store_name TEXT NOT NULL)");
-
-            st.execute("CREATE TABLE brand (" +
-                    "brand_id INTEGER PRIMARY KEY, " +
-                    "brand_name TEXT NOT NULL)");
-
-            st.execute("CREATE TABLE store_item (" +
-                    "store_item_id INTEGER PRIMARY KEY, " +
-                    "store_item_brand_id INTEGER NOT NULL REFERENCES brand(brand_id), " +
-                    "store_item_store_id INTEGER NOT NULL REFERENCES store(store_id), " +
-                    "store_item_item_id INTEGER NOT NULL REFERENCES inventory_item(inventory_item_id), " +
-                    "store_item_package_unit TEXT NOT NULL, " +
-                    "store_item_package_size INTEGER NOT NULL, " +
-                    "store_item_price REAL, " +
-                    "store_item_is_available BOOLEAN NOT NULL, " +
-                    "store_item_deposit REAL)");
-
-            st.execute("CREATE TABLE store_discount (" +
-                    "store_discount_id INTEGER PRIMARY KEY, " +
-                    "store_discount_store_item_id INTEGER NOT NULL REFERENCES store_item(store_item_id), " +
-                    "store_discount_start_date DATE NOT NULL, " +
-                    "store_discount_end_date DATE NOT NULL, " +
-                    "store_discount_price REAL NOT NULL, " +
-                    "store_discount_notes TEXT)");
-        }
-    }
 }

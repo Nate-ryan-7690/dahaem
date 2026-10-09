@@ -39,9 +39,9 @@ Importers are plain Java (`java.net.http`), meant to run on the server on a sche
 
 ## Architecture
 
-Java 17, Maven, SQLite via `sqlite-jdbc`, Jackson for JSON, Spring Boot (web + security) for the REST API and its login. `mvn package` builds one runnable jar with the maven-shade plugin, so the server needs only Java and that jar. Shade rather than Spring Boot's repackaged jar keeps the jar flat, so `java -cp` can still start the importers while `java -jar` starts the API.
+Java 17, Maven, MariaDB (`mariadb-java-client` + HikariCP), Jackson for JSON, Spring Boot (web + security) for the REST API and its login. `mvn package` builds one runnable jar with the maven-shade plugin, so the server needs only Java and that jar. Shade rather than Spring Boot's repackaged jar keeps the jar flat, so `java -cp` can still start the importers while `java -jar` starts the API.
 
-**SQLite instead of a client/server database** because the design target is a single self-hosted box for two users, not multi-tenant scale.
+**MariaDB** is the shared store: the Java engine owns the business logic behind the REST API, a separate PHP front end presents it, and both talk to the same database. Connection settings come from `DAHAEM_DB_URL`, `DAHAEM_DB_USER` and `DAHAEM_DB_PASSWORD`; nothing secret lives in the repo.
 
 **Package-by-feature**, with a strict per-feature layer rule:
 
@@ -85,18 +85,19 @@ review of the codebase's strengths and known issues.
 
 ## Getting started
 
-Requires Java 17+, Maven, and Python 3.
+Requires Java 17+, Maven, Docker (the tests start a throwaway MariaDB with Testcontainers) and a MariaDB to run against.
 
 ```bash
 mvn package
-python setup_db.py
+export DAHAEM_DB_URL=jdbc:mariadb://localhost:3306/dahaem
+export DAHAEM_DB_USER=...
+export DAHAEM_DB_PASSWORD=...
 ```
 
-`setup_db.py` builds `data/kitchen_organizer.db` (the default path `Database` opens) from
-`schema.sql`, `seed/inventory_catalog.sql`, the sample recipes, and `seed/demo_data.sql`, so a
-fresh clone has something to run against without any manual DB setup. It refuses to overwrite
-an existing database unless you pass `--force`, and takes `--db <path>` to build elsewhere. The
-store/brand/price/discount rows in `seed/demo_data.sql` are entirely fabricated for the demo —
+`schema.sql` is the MariaDB schema; `seed/inventory_catalog.sql`, the sample recipes and `seed/demo_data.sql`
+give a fresh database something to run against. Load them into a **new, empty** database as described in
+[`docs/DATABASE.md`](docs/DATABASE.md#loading-the-schema-and-seeds) — never over a database that holds real
+data. The store/brand/price/discount rows in `seed/demo_data.sql` are entirely fabricated for the demo —
 see the note at the top of that file — not real pulled store data.
 
 Run the console entry point from your IDE (`de.dahaem.Main`), or a store importer from the command line:
@@ -108,19 +109,19 @@ java --enable-native-access=ALL-UNNAMED -cp target/dahaem-1.0-SNAPSHOT.jar de.da
 Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) with:
 
 ```bash
-java -Ddahaem.db.path=data/kitchen_organizer.db -jar target/dahaem-1.0-SNAPSHOT.jar
+java -jar target/dahaem-1.0-SNAPSHOT.jar
 ```
 
 It is a thin layer over the existing services (no JPA; the services still use `Database`), on port 8080 by default (`--server.port=...` to change it).
 
 ### Logging in
 
-Every `/api/**` endpoint requires a login; the PWA shows a login screen and the static files stay public. There is no sign-up page: the operator creates the accounts on the server with `UserAdminRunner`, against the same database the API uses (on an existing database, apply `migrations/0002_add_household_and_app_user.sql` first):
+Every `/api/**` endpoint requires a login; the PWA shows a login screen and the static files stay public. There is no sign-up page: the operator creates the accounts on the server with `UserAdminRunner`, against the same database the API uses (`schema.sql` already contains the `household` / `app_user` tables):
 
 ```bash
-java -Ddahaem.db.path=data/kitchen_organizer.db -cp target/dahaem-1.0-SNAPSHOT.jar \
+java -cp target/dahaem-1.0-SNAPSHOT.jar \
      de.dahaem.auth.UserAdminRunner create-user anna@example.de Anna "Familie M"
-java -Ddahaem.db.path=data/kitchen_organizer.db -cp target/dahaem-1.0-SNAPSHOT.jar \
+java -cp target/dahaem-1.0-SNAPSHOT.jar \
      de.dahaem.auth.UserAdminRunner set-password anna@example.de
 ```
 
@@ -156,7 +157,7 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 
 Errors come back as `{"status", "error", "message"}`: 401 when not logged in, 403 for a missing CSRF token, 400 for invalid input, 404 for an unknown id, 409 when a write violates a database constraint (duplicate week, recipe already on the plan, unknown store item).
 
-The application uses a local SQLite database that is not committed to the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
+The database lives in MariaDB and is not part of the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
 
 ## Project status
 

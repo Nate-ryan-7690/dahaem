@@ -1,22 +1,20 @@
 # Database
 
-DAHÄM uses one SQLite file (`data/kitchen_organizer.db` by default, overridable
-via the `dahaem.db.path` system property — see `de.dahaem.shared.Database`). It
-is gitignored and not distributed with the repo.
+DAHÄM uses **MariaDB** (11.4) as its single source of truth. The Java backend connects
+through a HikariCP pool configured entirely from the environment — see
+`de.dahaem.shared.Database`:
 
-There is **no schema migration tool and no full `schema.sql`** in this repo.
-`de.dahaem.stores.StoreRepository.ensureSchema()` creates the raw-layer store
-tables and back-fills a few columns on the pre-existing verified-layer tables,
-and is called automatically at the start of any `StoreImportRunner` job. Every
-other table used by the app — `inventory_item`, `recipe`, `recipe_ingredient`,
-`recipe_instructions`, `store`, `brand`, `store_item`, `store_discount` — is
-assumed to already exist; nothing in the Java code creates them. **A genuinely
-fresh checkout has no way to create a working database from this repo alone**
-(see [Gaps](#gaps) below).
+| Variable | Example |
+|---|---|
+| `DAHAEM_DB_URL` | `jdbc:mariadb://db:3306/<dbname>` |
+| `DAHAEM_DB_USER` | the application user |
+| `DAHAEM_DB_PASSWORD` | its password — never committed |
 
-The column layout below is reverse-engineered from the SQL in the repositories
-(`InventoryRepository`, `RecipeRepository`, `StoreRepository`,
-`ShoppingListRepository`), not from a canonical schema file, since none exists.
+`schema.sql` is the MariaDB DDL (24 tables, InnoDB, foreign keys enforced). It is the
+canonical schema; nothing in the Java code creates or alters tables any more.
+
+The column layout below describes the tables the repositories read and write
+(`InventoryRepository`, `RecipeRepository`, `StoreRepository`, `ShoppingListRepository`, ...).
 
 ## Identity tables (`household`, `app_user`, `household_member`)
 
@@ -32,7 +30,7 @@ on an older database. All SQL for them is in `de.dahaem.auth.AccountRepository`.
 No other table references `household` yet: scoping inventory, recipes, meal
 plans, shopping lists and purchases per household is a later migration.
 
-## Tables the code assumes already exist
+## Core tables
 
 ### `inventory_item` — the catalog (food + non-food)
 
@@ -47,7 +45,7 @@ Read by `InventoryRepository`, joined by `RecipeRepository` and `StoreRepository
 | `inventory_item_unit` | |
 | `inventory_item_category` | |
 | `inventory_item_subcategory` | nullable |
-| `inventory_item_earliest_exp_date` | stored/read as ISO text, nullable |
+| `inventory_item_earliest_exp_date` | `DATE`, nullable (bound/read as `LocalDate`) |
 
 ### `recipe`, `recipe_ingredient`, `recipe_instructions`
 
@@ -103,7 +101,7 @@ adds: `store_discount_deal_quantity` (default `1`) and `store_discount_deal_pric
 `store_offer_source` defaults to `'STORE'` so rows pulled before the
 provenance column existed default to the direct-store source.
 
-## Tables this repo creates (`StoreRepository.SCHEMA`) — the raw layer
+## Store raw layer (`store_product`, `store_offer`, ...)
 
 All created with `CREATE TABLE IF NOT EXISTS` by `ensureSchema()`.
 
@@ -132,21 +130,33 @@ See `StoreRepository.java`'s `SCHEMA` array for the exact DDL (types,
 constraints, foreign keys) — it's the closest thing to a source of truth this
 repo has for these six tables.
 
+## Dates and times
+
+`DATE` columns are bound and read as `java.time.LocalDate`; `store_import_run`'s
+`DATETIME` columns as `java.time.LocalDateTime` (`setObject` / `getObject(col, Class)`),
+not as ISO strings. A `LocalDateTime.toString()` value (ISO `T` separator, up to nine
+fractional digits) is not a valid `DATETIME` literal.
+
+## Loading the schema and seeds
+
+Only ever load these into a **new, empty** database — never over the live one.
+Throwaway database example:
+
+```bash
+mariadb -u root -p -e "CREATE DATABASE dahaem_scratch CHARACTER SET utf8mb4"
+mariadb -u root -p dahaem_scratch < schema.sql
+mariadb -u root -p dahaem_scratch < seed/inventory_catalog.sql
+mariadb -u root -p dahaem_scratch < scripts/recipes/samples/sample_recipes.sql
+mariadb -u root -p dahaem_scratch < seed/demo_data.sql      # fabricated demo rows
+```
+
+The seed files use `INSERT IGNORE`, so re-running them against a scratch database
+is harmless. The test suite does the same thing automatically against a Testcontainers
+MariaDB.
+
 ## Gaps
 
-- **No way to bootstrap a fresh database.** `inventory_item`, `recipe`,
-  `recipe_ingredient`, `recipe_instructions`, `store`, `brand`, `store_item`, and
-  `store_discount` are never created by any code in this repo. A new contributor
-  following the README's "Getting started" section (`mvn package`, run `Main`)
-  will hit a `SQLException` on the very first query unless they already have a
-  database file with these tables from elsewhere. Consider committing a
-  `schema.sql` (or a repository-level `ensureSchema()` for these tables, the way
-  `StoreRepository` already does for its own) plus `scripts/recipes/samples/`
-  loaded against it, so `mvn package` really is enough to get started.
-- **No migration story.** `ensureSchema()`'s `CREATE TABLE IF NOT EXISTS` +
-  manual `addMissingColumns`/rebuild-table helpers work, but there's no version
-  tracking — if a column needs to change type or a table needs a real migration
-  beyond "add column" or "make nullable," each case needs its own hand-written
-  one-off method (as `makeStoreItemPriceNullable` already is). Worth a lighter
-  migration tool (even just numbered `.sql` files applied in order) before the
-  raw-layer schema grows much further.
+- **No migration tool.** `migrations/` holds numbered `.sql` files that were written for the old
+  SQLite file and are kept for history; MariaDB changes need to be written and applied by hand
+  (snapshot first — see `CLAUDE.md`). Worth a lightweight tool (e.g. Flyway) before the schema
+  changes much more.

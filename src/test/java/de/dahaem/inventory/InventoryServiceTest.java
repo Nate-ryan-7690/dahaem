@@ -1,6 +1,7 @@
 package de.dahaem.inventory;
 
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,22 +26,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class InventoryServiceTest {
 
-    private Path dbFile;
     private InventoryService service;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
-        dbFile = Files.createTempFile("dahaem-inventory-test", ".db");
-        Files.deleteIfExists(dbFile);
-        System.setProperty("dahaem.db.path", dbFile.toAbsolutePath().toString());
-        createSchema();
+        TestDatabase.reset();
         service = new InventoryService(new InventoryRepository());
     }
 
     @AfterEach
     void tearDown() throws IOException {
-        System.clearProperty("dahaem.db.path");
-        Files.deleteIfExists(dbFile);
+        TestDatabase.close();
     }
 
     @Test
@@ -50,16 +46,16 @@ class InventoryServiceTest {
 
     @Test
     void totalItemCountMatchesTheNumberOfSeededRows() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Onion', 'Zwiebel', 4, 'pcs', 'Vegetables', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (2, 'Milk', 'Milch', 1, 'l', 'Dairy', 'Fresh', NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Onion', 'Zwiebel', 4, 'pcs', 'Vegetables', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Milk', 'Milch', 1, 'l', 'Dairy', 'Fresh', NULL)");
 
         assertEquals(2, service.totalItemCount());
     }
 
     @Test
     void allItemsMapsEveryColumnAndSortsByEnglishName() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Zucchini', NULL, 3, 'pcs', 'Vegetables', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (2, 'Apple', 'Apfel', 6, 'pcs', 'Fruit', 'Pome', '2026-10-05')");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Zucchini', NULL, 3, 'pcs', 'Vegetables', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Apple', 'Apfel', 6, 'pcs', 'Fruit', 'Pome', '2026-10-05')");
 
         List<Item> items = service.allItems();
 
@@ -83,9 +79,9 @@ class InventoryServiceTest {
 
     @Test
     void lowStockKeepsItemsAtOrBelowTheThresholdAndExcludesItemsAboveIt() throws SQLException {
-        exec("INSERT INTO inventory_item VALUES (1, 'Flour', 'Mehl', 5, 'kg', 'Baking', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (2, 'Sugar', 'Zucker', 6, 'kg', 'Baking', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (3, 'Salt', 'Salz', 0, 'kg', 'Baking', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Flour', 'Mehl', 5, 'kg', 'Baking', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Sugar', 'Zucker', 6, 'kg', 'Baking', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (3, 'Salt', 'Salz', 0, 'kg', 'Baking', NULL, NULL)");
 
         List<Item> lowStock = service.lowStock(5);
 
@@ -98,10 +94,10 @@ class InventoryServiceTest {
     @Test
     void expiringWithinIgnoresItemsWithNoExpiryDateAndExcludesItemsPastTheWindow() throws SQLException {
         LocalDate today = LocalDate.now();
-        exec("INSERT INTO inventory_item VALUES (1, 'NoExpiry', NULL, 1, 'pcs', 'Misc', NULL, NULL)");
-        exec("INSERT INTO inventory_item VALUES (2, 'AtLimit', NULL, 1, 'pcs', 'Misc', NULL, '" + today.plusDays(7) + "')");
-        exec("INSERT INTO inventory_item VALUES (3, 'BeyondLimit', NULL, 1, 'pcs', 'Misc', NULL, '" + today.plusDays(8) + "')");
-        exec("INSERT INTO inventory_item VALUES (4, 'AlreadyExpired', NULL, 1, 'pcs', 'Misc', NULL, '" + today.minusDays(1) + "')");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'NoExpiry', NULL, 1, 'pcs', 'Misc', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'AtLimit', NULL, 1, 'pcs', 'Misc', NULL, '" + today.plusDays(7) + "')");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (3, 'BeyondLimit', NULL, 1, 'pcs', 'Misc', NULL, '" + today.plusDays(8) + "')");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (4, 'AlreadyExpired', NULL, 1, 'pcs', 'Misc', NULL, '" + today.minusDays(1) + "')");
 
         List<Item> expiring = service.expiringWithin(7);
 
@@ -118,17 +114,4 @@ class InventoryServiceTest {
         }
     }
 
-    private void createSchema() throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute("CREATE TABLE inventory_item (" +
-                    "inventory_item_id INTEGER PRIMARY KEY, " +
-                    "inventory_item_name_english TEXT NOT NULL, " +
-                    "inventory_item_name_deutsch TEXT, " +
-                    "inventory_item_quantity INTEGER NOT NULL DEFAULT 0, " +
-                    "inventory_item_unit TEXT NOT NULL, " +
-                    "inventory_item_category TEXT NOT NULL, " +
-                    "inventory_item_subcategory TEXT, " +
-                    "inventory_item_earliest_exp_date DATE)");
-        }
-    }
 }
