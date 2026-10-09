@@ -3,6 +3,7 @@ package de.dahaem.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.dahaem.auth.AccountService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 
@@ -34,6 +36,9 @@ import java.io.IOException;
  *       screen itself can load.</li>
  * </ul>
  *
+ * <p>When {@code INTERNAL_API_TOKEN} is set, {@link InternalTokenFilter} additionally requires it on
+ * every {@code /api/**} request and lets such requests through without a session or CSRF token.
+ *
  * <p>CSRF protection is on for every state-changing request, the login and logout included. The
  * token lives in the session; the frontend fetches it from {@code GET /api/auth/csrf} and sends it
  * back in the header that endpoint names. Logging in rotates both the session id and the token.
@@ -41,6 +46,14 @@ import java.io.IOException;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    /** The token filter belongs in the Spring Security chain only, not also in the servlet container's chain. */
+    @Bean
+    public FilterRegistrationBean<InternalTokenFilter> internalTokenFilterRegistration(InternalTokenFilter filter) {
+        FilterRegistrationBean<InternalTokenFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -59,8 +72,13 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
+                                                   InternalTokenFilter internalToken) throws Exception {
         http
+                // The PHP front end authenticates with the shared internal token instead of a browser
+                // session, so its calls carry no CSRF token. See InternalTokenFilter.
+                .csrf(csrf -> csrf.ignoringRequestMatchers(internalToken::hasValidToken))
+                .addFilterBefore(internalToken, CsrfFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/csrf").permitAll()
                         .requestMatchers("/api/**").authenticated()
