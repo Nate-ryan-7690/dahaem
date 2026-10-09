@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -433,6 +434,26 @@ public class StoreRepository {
             ins.executeUpdate();
         }
         return true;
+    }
+
+    /**
+     * Brands the stores themselves report (offer brands and range brands), unlike the brand table, which
+     * also holds names the old first-word heuristic invented. Used to recognise a brand inside a brandless name.
+     */
+    public Set<String> loadKnownOfferBrands() {
+        String sql = "SELECT store_offer_brand FROM store_offer WHERE store_offer_brand IS NOT NULL "
+                + "UNION SELECT store_product_brand FROM store_product WHERE store_product_brand IS NOT NULL";
+        Set<String> out = new LinkedHashSet<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(rs.getString(1));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load known brands", e);
+        }
+        return out;
     }
 
     /** All offers, newest validity first, for discount promotion. Optionally one store only. */

@@ -8,8 +8,11 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Turns pulled flyer offers into the verified layer: each matched offer becomes (or refreshes)
@@ -26,6 +29,12 @@ import java.util.Map;
  */
 public class StoreDiscountService {
 
+    /**
+     * brand_id is NOT NULL, so an offer without a recognisable brand (own-label / fresh produce such as
+     * "Fischstäbchen", "Zwiebeln") is filed under this neutral brand instead of an invented one.
+     */
+    static final String NO_BRAND = "Ohne Marke";
+
     private final StoreRepository repository;
     private final Map<String, Integer> overrides;
 
@@ -38,6 +47,7 @@ public class StoreDiscountService {
         List<CatalogItem> catalog = repository.loadCatalog();
         StoreMatchService matcher = new StoreMatchService(repository, overrides);
         List<OfferRow> offers = repository.loadOffersForPromotion(storeId);
+        Map<String, String> knownBrands = knownBrandsByKey(repository.loadKnownOfferBrands());
 
         int items = 0, discounts = 0, unmatched = 0, noSize = 0;
         List<String> unmatchedRows = new ArrayList<>();
@@ -45,14 +55,10 @@ public class StoreDiscountService {
         Connection con = repository.openTransaction();
         try {
             for (OfferRow o : offers) {
-                String brand = o.brand();
-                String matchName = o.name();
-                if ((brand == null || brand.isBlank()) && o.name() != null) {
-                    String[] parts = o.name().trim().split("\\s+", 2);   // aggregator: "Brand Rest"
-                    brand = parts[0];
-                    matchName = parts.length > 1 ? parts[1] : o.name();
-                }
-                if (brand == null || brand.isBlank() || matchName == null || matchName.isBlank()) {
+                BrandSplit split = resolveBrand(o.brand(), o.name(), knownBrands);
+                String brand = split.brand();
+                String matchName = split.matchName();
+                if (matchName == null || matchName.isBlank()) {
                     unmatched++;
                     continue;
                 }
@@ -67,7 +73,7 @@ public class StoreDiscountService {
                     noSize++;
                     continue;
                 }
-                int brandId = repository.findOrCreateBrand(con, brand.trim());
+                int brandId = repository.findOrCreateBrand(con, brand == null ? NO_BRAND : brand);
                 int storeItemId = repository.upsertStoreItemFromOffer(con, o.storeId(), o.externalId(), brandId,
                         itemId, pack.unit(), pack.size(), o.normalPrice(), true, o.deposit());
                 items++;
@@ -90,6 +96,41 @@ public class StoreDiscountService {
                 + "%d unmatched (-> %s), %d unparseable-size", offers.size(), items, discounts,
                 unmatched, reviewFile, noSize);
         return new ImportSummary("(offers)", "DISCOUNTS", "OK", 0, discounts, List.of(), notes);
+    }
+
+    /** Brand to file the offer under (null = no brand) and the text to match against the catalog. */
+    record BrandSplit(String brand, String matchName) {
+    }
+
+    /**
+     * A flyer brand wins. A brandless aggregator name only yields a brand when its first word is a brand
+     * we already know from the stores' own data (offer / range brands); otherwise it has no brand and is
+     * matched on its full name. The first word is never taken as a brand just because it comes first.
+     */
+    static BrandSplit resolveBrand(String brand, String name, Map<String, String> knownBrands) {
+        String cleanName = name == null ? null : name.trim();
+        if (brand != null && !brand.isBlank()) {
+            return new BrandSplit(brand.trim(), cleanName);
+        }
+        if (cleanName == null || cleanName.isEmpty()) {
+            return new BrandSplit(null, cleanName);
+        }
+        String[] parts = cleanName.split("\\s+", 2);
+        String known = parts.length > 1 ? knownBrands.get(parts[0].toLowerCase(Locale.GERMAN)) : null;
+        if (known != null) {
+            return new BrandSplit(known, parts[1]);
+        }
+        return new BrandSplit(null, cleanName);
+    }
+
+    private static Map<String, String> knownBrandsByKey(Set<String> brands) {
+        Map<String, String> byKey = new HashMap<>();
+        for (String b : brands) {
+            if (b != null && !b.isBlank() && !b.contains(" ")) {      // single-word brands only; first word is compared
+                byKey.putIfAbsent(b.trim().toLowerCase(Locale.GERMAN), b.trim());
+            }
+        }
+        return byKey;
     }
 
     private void writeReview(Path file, List<String> rows) {
