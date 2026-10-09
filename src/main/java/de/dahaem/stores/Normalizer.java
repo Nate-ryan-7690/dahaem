@@ -13,6 +13,7 @@ public final class Normalizer {
     private static final Pattern ALLERGEN = Pattern.compile("\\d+\\)");
     private static final Pattern ORIGIN = Pattern.compile("\\b[A-Z]{2}\\b(\\s*\\|\\s*[A-Z]{2}\\b)*");
     private static final Pattern NON_WORD = Pattern.compile("[^a-z0-9 ]");
+    private static final Pattern HYPHEN_BETWEEN_LETTERS = Pattern.compile("(?<=\\p{L})-(?=\\p{L})");
     private static final Pattern SPACES = Pattern.compile("\\s+");
 
     private Normalizer() {
@@ -23,13 +24,29 @@ public final class Normalizer {
         if (raw == null) {
             return "";
         }
-        String s = stripBrand(raw);
+        String s = stripBrand(dropInvisible(raw));
         s = ALLERGEN.matcher(s).replaceAll(" ");
         s = ORIGIN.matcher(s).replaceAll(" ");
         s = s.replace("**", " ");
         s = ascii(s.toLowerCase());
         s = NON_WORD.matcher(s).replaceAll(" ");
         return SPACES.matcher(s).replaceAll(" ").strip();
+    }
+
+    /**
+     * Like {@link #key}, but a hyphen between two letters is removed instead of becoming a space, so
+     * "Hähnchen-Brustfilets" gives "haehnchenbrustfilets" (one word) rather than "haehnchen brustfilets".
+     */
+    public static String joinedKey(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return key(HYPHEN_BETWEEN_LETTERS.matcher(dropInvisible(raw)).replaceAll(""));
+    }
+
+    /** Soft hyphens (U+00AD) and zero-width spaces are layout marks that some sites put inside words ("Walnuss­kerne"). */
+    private static String dropInvisible(String raw) {
+        return raw.replace("\u00ad", "").replace("\u200b", "");
     }
 
     /** Drops leading ALL-CAPS brand words ("MILSANI Streichfein" -> "Streichfein"); keeps all if every word is caps. */

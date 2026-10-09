@@ -75,6 +75,15 @@ public class StoreMatchService {
             "herzen", "herz", "scheiben", "scheibe", "wuerfel", "streifen", "viertel",
             "haelften", "haelfte", "spalten", "stuecke", "stueck", "halbiert", "geschnitten");
 
+    /**
+     * Words that may follow the product word without being the product ("Gouda jung", "Prosciutto Crudo Dolce",
+     * "Kaffee-Sticks"). Deliberately short and explicit: an unlisted trailing word ("Zitrone Plus", "Prosciutto Cotto",
+     * "Kartoffel Püree") still blocks the match, because it can name a different product.
+     */
+    private static final Set<String> TRAILING_QUALIFIERS = Set.of(
+            "jung", "mittelalt", "alt", "dolce", "crudo", "natur", "naturell", "classic", "original", "extra",
+            "stange", "stangen", "sticks", "bio");
+
     /** Common German plural/inflection endings tried when folding a word onto a catalog term. */
     private static final List<String> INFLECTION_SUFFIXES = List.of("en", "er", "n", "e", "s");
 
@@ -158,15 +167,54 @@ public class StoreMatchService {
             }
         }
 
+        List<String> words = significantWords(key);
+        if (words.isEmpty()) {
+            return null;                                          // descriptor/size-only leftover -> not a match
+        }
+        Lookup first = lookup(key, words, false, catalog);
+        if (first.id() != null || first.tie()) {
+            return first.id();
+        }
+
+        // Fallback 1: a known qualifier AFTER the product word ("Gouda jung") is not the head noun.
+        List<String> trimmed = new ArrayList<>(words);
+        while (trimmed.size() > 1 && TRAILING_QUALIFIERS.contains(trimmed.get(trimmed.size() - 1))) {
+            trimmed.remove(trimmed.size() - 1);
+        }
+        if (trimmed.size() < words.size()) {
+            Lookup l = lookup(key, trimmed, false, catalog);
+            if (l.id() != null || l.tie()) {
+                return l.id();
+            }
+        }
+
+        // Fallback 2: hyphenated compound ("Hähnchen-Brustfilets"): join the parts and accept only an EXACT hit
+        // on the joined word, so "Marzipan-Kartoffeln" can never reach "kartoffel" through this path.
+        String joined = Normalizer.joinedKey(storeName);
+        if (!joined.isEmpty() && !joined.equals(key)) {
+            List<String> joinedWords = significantWords(joined);
+            if (!joinedWords.isEmpty()) {
+                return lookup(joined, joinedWords, true, catalog).id();
+            }
+        }
+        return null;
+    }
+
+    private static List<String> significantWords(String key) {
         List<String> words = new ArrayList<>();
         for (String w : key.split(" ")) {
             if (!w.isEmpty() && !isNoiseWord(w)) {
                 words.add(w);
             }
         }
-        if (words.isEmpty()) {
-            return null;                                          // descriptor/size-only leftover -> not a match
-        }
+        return words;
+    }
+
+    /** id == null && !tie: no catalog term fits; tie: several equally good items, left unmatched. */
+    private record Lookup(Integer id, boolean tie) {
+    }
+
+    private Lookup lookup(String key, List<String> words, boolean exactOnly, List<CatalogItem> catalog) {
         String head = words.get(words.size() - 1);                // head noun: last significant token
         String padded = " " + key + " ";
 
@@ -181,7 +229,7 @@ public class StoreMatchService {
                     continue;
                 }
                 Tier tier = tierFor(norm, head, padded);
-                if (tier == Tier.NONE) {
+                if (tier == Tier.NONE || (exactOnly && tier != Tier.EXACT)) {
                     continue;
                 }
                 boolean exact = tier == Tier.EXACT;
@@ -197,7 +245,7 @@ public class StoreMatchService {
                 }
             }
         }
-        return tie ? null : best;
+        return tie ? new Lookup(null, true) : new Lookup(best, false);
     }
 
     /** True when the product's name or category carries a non-food marker (see NON_FOOD_MARKERS). */
@@ -244,7 +292,47 @@ public class StoreMatchService {
                 }
             }
         }
+        Tier umlaut = umlautPluralTier(norm, word);
+        if (umlaut != Tier.NONE) {
+            return umlaut;
+        }
         return matchAfterStrippingFusedDescriptor(norm, word);
+    }
+
+    /**
+     * "aepfel" -> "apfel", "erdnuesse" -> "erdnuss"+"e", "tafelaepfel" -> compound head "apfel": a plural umlaut
+     * written ae/oe/ue folds back to a/o/u before the same exact / compound-head comparison as for any other word.
+     */
+    private static Tier umlautPluralTier(String norm, String word) {
+        if (norm.length() < MIN_COMPOUND_TERM_LENGTH) {
+            return Tier.NONE;
+        }
+        Tier best = Tier.NONE;
+        for (String[] pair : new String[][]{{"ae", "a"}, {"oe", "o"}, {"ue", "u"}}) {
+            int i = word.indexOf(pair[0]);
+            while (i >= 0) {
+                String variant = word.substring(0, i) + pair[1] + word.substring(i + 2);
+                if (variant.equals(norm)) {
+                    return Tier.EXACT;
+                }
+                for (String suffix : INFLECTION_SUFFIXES) {
+                    if (variant.equals(norm + suffix)) {
+                        return Tier.EXACT;
+                    }
+                }
+                if (variant.endsWith(norm) && variant.length() > norm.length()) {
+                    best = Tier.COMPOUND;
+                }
+                for (String suffix : INFLECTION_SUFFIXES) {
+                    String inflected = norm + suffix;
+                    if (variant.endsWith(inflected) && variant.length() > inflected.length()) {
+                        best = Tier.COMPOUND;
+                    }
+                }
+                i = word.indexOf(pair[0], i + 1);
+            }
+        }
+        return best;
     }
 
     /** "Artischockenherzen" -> strip the fused descriptor suffix "herzen" -> "artischocken" folds onto "artischocke". */

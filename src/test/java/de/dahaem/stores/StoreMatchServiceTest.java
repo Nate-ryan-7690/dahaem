@@ -234,4 +234,68 @@ class StoreMatchServiceTest {
         assertEquals(ZITRONE, matchPrecision("Zitrone", "obst"));
         assertEquals(ZITRONE, matchPrecision("Zitronen", "obst"));
     }
+
+    // ---- matcher gaps: trailing qualifier, hyphenated compound, soft hyphen, umlaut plural ----
+
+    @Test
+    void trailingQualifierAfterTheProductWordIsIgnored() {
+        List<CatalogItem> catalog = List.of(item(1, "gouda", "gouda"), item(2, "prosciutto", "prosciutto"),
+                item(3, "coffee", "kaffee"), item(4, "mozzarella", "mozzarella"));
+        StoreMatchService service = new StoreMatchService(null, Map.of());
+
+        assertEquals(1, service.match("LINDENHOF Gouda jung", catalog));
+        assertEquals(2, service.match("CUCINA Prosciutto Crudo Dolce", catalog));
+        assertEquals(3, service.match("JACOBS Kaffee-Sticks", catalog));
+        assertEquals(4, service.match("CUCINA Mozzarella-Stange", catalog));
+    }
+
+    @Test
+    void unlistedTrailingWordStillBlocksTheMatch() {
+        List<CatalogItem> catalog = List.of(item(1, "prosciutto", "prosciutto"), item(2, "potato", "kartoffel"));
+        StoreMatchService service = new StoreMatchService(null, Map.of());
+
+        assertNull(service.match("CUCINA Prosciutto Cotto XXL", catalog));   // cooked ham is not prosciutto
+        assertNull(service.match("Kartoffel Püree", catalog));
+    }
+
+    @Test
+    void hyphenatedCompoundMatchesTheJoinedCatalogWord() {
+        List<CatalogItem> catalog = List.of(item(1, "chicken breast fillet", "hähnchenbrustfilet"),
+                item(2, "risotto rice", "risottoreis"));
+        StoreMatchService service = new StoreMatchService(null, Map.of());
+
+        assertEquals(1, service.match("Frische Hähnchen-Brustfilets", catalog));
+        assertEquals(2, service.match("CUCINA Risotto-Reis", catalog));
+    }
+
+    @Test
+    void hyphenJoinNeverReachesAShorterCatalogWordThroughACompoundHead() {
+        List<CatalogItem> catalog = List.of(item(1, "potato", "kartoffel"), item(2, "butter", "butter"));
+        StoreMatchService service = new StoreMatchService(null, Map.of());
+
+        // Joined: "kartoffelpueree" / "kraeutercreme" only count when they equal a catalog word.
+        assertNull(service.match("Kartoffel-Püree", catalog));
+        assertNull(service.match("Kartoffel-Taschen", catalog));
+        assertNull(service.match("Butter-Gebäck", catalog));
+    }
+
+    @Test
+    void softHyphenInsideAWordDoesNotSplitIt() {
+        List<CatalogItem> catalog = List.of(item(1, "walnut kernels", "walnusskern"));
+        StoreMatchService service = new StoreMatchService(null, Map.of());
+
+        assertEquals(1, service.match("Bio Walnuss\u00adkerne", catalog));
+        assertEquals("walnusskerne", Normalizer.key("Walnuss\u00adkerne"));
+    }
+
+    @Test
+    void pluralUmlautFoldsBackOntoTheSingularCatalogTerm() {
+        List<CatalogItem> catalog = List.of(item(1, "peanut", "erdnuss"), item(2, "apple", "apfel"));
+        StoreMatchService service = new StoreMatchService(null, Map.of());
+
+        assertEquals(1, service.match("Ültje Erdnüsse", catalog));
+        assertEquals(2, service.match("Deutsche rote Äpfel", catalog));
+        assertEquals(2, service.match("Tafeläpfel", catalog));
+        assertNull(service.match("Ärzte", catalog));
+    }
 }
