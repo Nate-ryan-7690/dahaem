@@ -68,7 +68,7 @@ public class StoreDiscountService {
                     unmatched++;
                     continue;
                 }
-                Integer itemId = matcher.overrideFor(o.name());          // full-name override wins over brand stripping
+                Integer itemId = matcher.overrideFor(o.brand(), o.name());          // full-name override wins over brand stripping
                 if (itemId == null) {
                     itemId = matcher.match(matchName, o.category(), catalog);
                 }
@@ -86,7 +86,7 @@ public class StoreDiscountService {
                     noSize++;
                     continue;
                 }
-                boolean viaOverride = matcher.overrideFor(o.name()) != null || matcher.overrideFor(matchName) != null;
+                boolean viaOverride = matcher.overrideFor(o.brand(), o.name()) != null || matcher.overrideFor(matchName) != null;
                 MatchGate.Verdict verdict = MatchGate.check(itemUnits.get(itemId), pack, o.salePrice(), itemId, references, viaOverride);
                 if (!verdict.ok()) {
                     held++;

@@ -171,6 +171,33 @@ public class StoreMatchService {
         return overrides.get(Normalizer.key(fullName));
     }
 
+    /**
+     * Like {@link #overrideFor(String)}, but first tries the brand-qualified name ("Volvic Mineralwasser"): store
+     * offers carry the brand in its own field, so several brands share the bare name "Mineralwasser" or "Cola" and
+     * a name-only key cannot tell them apart. The brand is written in normal case so {@link Normalizer} keeps it
+     * (it strips ALL-CAPS brand words).
+     */
+    Integer overrideFor(String brand, String fullName) {
+        if (brand != null && !brand.isBlank()) {
+            Integer qualified = overrides.get(Normalizer.key(normalCase(brand) + " " + fullName));
+            if (qualified != null) {
+                return qualified;
+            }
+        }
+        return overrideFor(fullName);
+    }
+
+    /** "VOLVIC" -> "Volvic", "DR PEPPER" -> "Dr Pepper", "COCA-COLA" -> "Coca-Cola". */
+    static String normalCase(String s) {
+        StringBuilder out = new StringBuilder();
+        boolean start = true;
+        for (char c : s.trim().toCharArray()) {
+            out.append(start ? Character.toUpperCase(c) : Character.toLowerCase(c));
+            start = c == ' ' || c == '-';
+        }
+        return out.toString();
+    }
+
     Integer match(String storeName, String category, List<CatalogItem> catalog) {
         String key = Normalizer.key(storeName);
         if (key.isEmpty()) {

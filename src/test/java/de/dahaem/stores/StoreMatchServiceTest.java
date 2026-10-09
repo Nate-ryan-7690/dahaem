@@ -309,4 +309,16 @@ class StoreMatchServiceTest {
         assertEquals(false, StoreMatchService.isExcluded(service.match("Butter", catalog)));
         assertEquals(false, StoreMatchService.isExcluded(null));
     }
+
+    @Test
+    void overrideForTriesTheBrandQualifiedNameBeforeTheBareName() {
+        StoreMatchService service = new StoreMatchService(null, Map.of(
+                Normalizer.key("Volvic Mineralwasser"), 10, Normalizer.key("Mineralwasser"), 20));
+
+        assertEquals(10, service.overrideFor("VOLVIC", "Mineralwasser"));
+        assertEquals(20, service.overrideFor("GEROLSTEINER", "Mineralwasser"));
+        assertEquals(20, service.overrideFor(null, "Mineralwasser"));
+        assertEquals("Dr Pepper", StoreMatchService.normalCase("DR PEPPER"));
+        assertEquals("Coca-Cola", StoreMatchService.normalCase("COCA-COLA"));
+    }
 }
