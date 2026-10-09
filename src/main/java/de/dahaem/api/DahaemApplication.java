@@ -1,7 +1,9 @@
 package de.dahaem.api;
 
 import org.springframework.boot.SpringApplication;
+import de.dahaem.stores.RefreshConfig;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
 
 /**
  * Entry point for the REST API. A thin web layer over the existing services: controllers
@@ -12,6 +14,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * and {@code DAHAEM_DB_PASSWORD} environment variables (see {@code de.dahaem.shared.Database}).
  */
 @SpringBootApplication
+@Import(RefreshConfig.class)   // opt-in scheduled store refresh (dahaem.refresh.enabled)
 public class DahaemApplication {
 
     public static void main(String[] args) {

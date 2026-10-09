@@ -17,6 +17,35 @@ individual CLI jobs already use (`offers aldi`, `offers penny`, `offers aggregat
 Run either from the app directory (the one containing `data/` and `config/`), same
 as any other `StoreImportRunner` job.
 
+## In-app scheduler (alternative to the CLI jobs)
+
+The same two flows can run inside the always-on `dahaem-api` container, so no systemd
+timer or host cron is needed. Both the CLI (`StoreImportRunner refresh ...`) and the
+scheduler call `RefreshService.refreshWeekly()` / `refreshMonthly()`, so they run
+identical steps in the same order.
+
+**It is opt-in and OFF by default** (the importers scrape external sites, personal use
+only; dev, tests and CI must never trigger them). Enable it in the `dahaem-api`
+environment:
+
+```
+REFRESH_ENABLED=true            # or the property dahaem.refresh.enabled=true
+```
+
+| Env var | Property | Default |
+|---|---|---|
+| `REFRESH_ENABLED` | `dahaem.refresh.enabled` | `false` |
+| `REFRESH_WEEKLY_CRON` | `dahaem.refresh.weekly-cron` | `0 0 6 * * MON` (Mondays 06:00) |
+| `REFRESH_MONTHLY_CRON` | `dahaem.refresh.monthly-cron` | `0 0 5 1 * *` (1st of month 05:00) |
+| `REFRESH_ZONE` | `dahaem.refresh.zone` | `Europe/Berlin` |
+
+Cron format is Spring's six fields: `second minute hour day-of-month month day-of-week`.
+
+Behaviour: weekly and monthly share one overlap guard (a run that starts while another
+is in progress is logged and skipped, not queued); scheduled methods never throw, so one
+failed run does not stop later ones; start, each step's result and the finish are logged.
+Use either the scheduler or the CLI timers, not both, or the flows run twice.
+
 ## `refresh weekly`
 
 ```

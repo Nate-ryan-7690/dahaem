@@ -1,13 +1,7 @@
 package de.dahaem.stores;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,16 +18,14 @@ import java.util.Map;
  *   refresh weekly   orchestrator: offers all -> offers aggregator all -> discounts
  *   refresh monthly  orchestrator: range aldi -> match aldi -> promote -> discounts
  *
- * The refresh jobs just chain the existing steps above in dependency order for a
- * scheduler (see docs/refresh.md); each step still runs independently of the
- * others' success, same as "offers all" already does.
+ * The refresh jobs delegate to {@link RefreshService} (shared with the in-app scheduler,
+ * see docs/refresh.md); each step still runs independently of the others' success.
  *
  * Exit code: 0 = all OK, 1 = something failed or was only partial, 2 = bad arguments.
  */
 public class StoreImportRunner {
 
     private static final int MAX_LISTED_CHANGES = 40;
-    private static final Path DATA_DIR = Path.of("data", "stores");
 
     public static void main(String[] args) {
         String job = String.join(" ", args).trim().toLowerCase();
@@ -43,6 +35,14 @@ public class StoreImportRunner {
         if (!fixedJob && !aggregatorJob) {
             printUsage();
             System.exit(2);
+        }
+
+        RefreshService refresh = RefreshService.create();
+        if (job.startsWith("refresh ")) {
+            RefreshSummary summary = job.equals("refresh weekly") ? refresh.refreshWeekly() : refresh.refreshMonthly();
+            summary.failures().forEach(f -> System.err.println("IMPORT FAILED: " + f));
+            summary.results().forEach(StoreImportRunner::print);
+            System.exit(summary.allOk() ? 0 : 1);
         }
 
         StoreConfig config = new StoreConfig();
@@ -71,35 +71,9 @@ public class StoreImportRunner {
             case "range aldi" -> jobs.add(() -> results.add(service.importAldiRange()));
             case "offers aldi" -> jobs.add(() -> results.add(service.importAldiOffers()));
             case "offers penny" -> jobs.add(() -> results.add(service.importPennyOffers()));
-            case "match aldi" -> jobs.add(() -> {
-                StoreMatchService matcher = new StoreMatchService(repository, loadOverrides());
-                results.add(matcher.matchStore(StoreImportService.ALDI, DATA_DIR.resolve("unmatched_aldi.tsv")));
-            });
+            case "match aldi" -> jobs.add(() -> results.add(refresh.matchAldi()));
             case "promote" -> jobs.add(() -> results.add(new StorePromotionService(repository).promote()));
-            case "discounts" -> jobs.add(() -> results.add(
-                    new StoreDiscountService(repository, loadOverrides())
-                            .promoteOffers(null, DATA_DIR.resolve("unmatched_offers.tsv"))));
-            case "refresh weekly" -> {                     // offers all -> offers aggregator all -> discounts
-                jobs.add(() -> results.add(service.importAldiOffers()));
-                jobs.add(() -> results.add(service.importPennyOffers()));
-                for (String s : AggregatorClient.STORES.keySet()) {
-                    jobs.add(() -> results.add(service.importAggregatorOffers(s)));
-                }
-                jobs.add(() -> results.add(
-                        new StoreDiscountService(repository, loadOverrides())
-                                .promoteOffers(null, DATA_DIR.resolve("unmatched_offers.tsv"))));
-            }
-            case "refresh monthly" -> {                    // range aldi -> match aldi -> promote -> discounts
-                jobs.add(() -> results.add(service.importAldiRange()));
-                jobs.add(() -> {
-                    StoreMatchService matcher = new StoreMatchService(repository, loadOverrides());
-                    results.add(matcher.matchStore(StoreImportService.ALDI, DATA_DIR.resolve("unmatched_aldi.tsv")));
-                });
-                jobs.add(() -> results.add(new StorePromotionService(repository).promote()));
-                jobs.add(() -> results.add(
-                        new StoreDiscountService(repository, loadOverrides())
-                                .promoteOffers(null, DATA_DIR.resolve("unmatched_offers.tsv"))));
-            }
+            case "discounts" -> jobs.add(() -> results.add(refresh.discounts()));
             default -> {                                   // "offers all"
                 jobs.add(() -> results.add(service.importAldiOffers()));
                 jobs.add(() -> results.add(service.importPennyOffers()));
@@ -136,24 +110,6 @@ public class StoreImportRunner {
         if (r.changes().size() > MAX_LISTED_CHANGES) {
             System.out.println("   ... all changes are in table store_catalog_change");
         }
-    }
-
-    /** config/store_overrides.json: {"exact": {"<normalized store name>": <inventory_item_id>}}. Optional. */
-    private static Map<String, Integer> loadOverrides() {
-        Map<String, Integer> map = new HashMap<>();
-        Path file = Path.of("config", "store_overrides.json");
-        if (!Files.exists(file)) {
-            return map;
-        }
-        try {
-            JsonNode exact = new ObjectMapper().readTree(file.toFile()).path("exact");
-            exact.fields().forEachRemaining(e -> map.put(e.getKey(), e.getValue().asInt()));
-        } catch (Exception e) {
-            // A present-but-malformed file must fail loudly: silently continuing with no overrides
-            // would quietly degrade match quality (everything lands in the unmatched review file).
-            throw new RuntimeException("Malformed config/store_overrides.json (fix or remove it): " + e.getMessage(), e);
-        }
-        return map;
     }
 
     private static void printUsage() {
