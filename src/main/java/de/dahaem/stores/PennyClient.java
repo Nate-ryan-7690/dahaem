@@ -3,6 +3,9 @@ package de.dahaem.stores;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -37,6 +40,7 @@ import static de.dahaem.stores.JsonUtil.text;
  */
 public class PennyClient {
 
+    private static final Logger log = LoggerFactory.getLogger(PennyClient.class);
     private static final String BASE = "https://www.penny.de";
     private static final Pattern CATEGORY = Pattern.compile("data-category-name=\"([^\"]+)\"");
     private static final Pattern CURRENT_WEEK = Pattern.compile("data-current-week=\"(\\d{4}-\\d{1,2})\"");
@@ -144,7 +148,9 @@ public class PennyClient {
             }
             for (JsonNode tile : body.path("offerTiles")) {
                 StoreOffer offer = toOffer(tile, category, region, from, saturday);
-                if (offer != null) {
+                if (offer == null && text(tile, "price") != null && text(tile, "price").contains("%")) {
+                    log.info("penny: skipped percentage tile \"{}\" ({})", text(tile, "title"), text(tile, "price"));
+                } else if (offer != null) {
                     offers.put(offer.externalId() + "|" + offer.validFrom(), offer);
                 }
             }
@@ -153,7 +159,11 @@ public class PennyClient {
 
     StoreOffer toOffer(JsonNode tile, String category, String region, LocalDate from, LocalDate until) {
         String title = text(tile, "title");
-        Double sale = firstNumber(text(tile, "price"));          // may carry a footnote mark: "1.99²"
+        String priceText = text(tile, "price");
+        if (priceText != null && priceText.contains("%")) {
+            return null;                                         // "20% Rabatt" is a discount rate, not a price
+        }
+        Double sale = firstNumber(priceText);                    // may carry a footnote mark: "1.99²"
         if (title == null || sale == null) {
             return null;
         }

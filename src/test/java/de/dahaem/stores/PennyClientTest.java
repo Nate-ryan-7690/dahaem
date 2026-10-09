@@ -85,4 +85,13 @@ class PennyClientTest {
 
         assertEquals(1.19, offer.normalPrice());
     }
+
+    @Test
+    void percentageTilesAreNotOffers() throws Exception {
+        var tile = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                "{\"title\":\"Ferrero-Kühlartikel\",\"price\":\"20% Rabatt\",\"uuid\":\"u4\"}");
+
+        assertNull(new PennyClient(null).toOffer(tile, "framstag", "15A-03-22",
+                LocalDate.of(2026, 10, 9), LocalDate.of(2026, 10, 10)));
+    }
 }
