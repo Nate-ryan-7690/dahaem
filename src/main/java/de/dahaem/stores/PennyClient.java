@@ -172,9 +172,19 @@ public class PennyClient {
         if (id == null) {
             id = title;                                          // fallback keeps the row unique per week
         }
-        Double normal = firstNumber(text(tile, "listPrice"));
+        // Reference price: the 30-day low if given, else Penny's own list / struck-through price.
+        // originalPrice is only Penny's own previous price when originalPriceType says so; a "uvp" is the
+        // manufacturer's recommended price, which Penny never charged, and would inflate the regular price
+        // shown in the frontend and used by the budget. Unknown types are left out as well.
+        Double normal = firstNumber(text(tile, "lowestPrice30Days"));
+        if (normal == null) {
+            normal = firstNumber(text(tile, "listPrice"));
+        }
         if (normal == null) {
             normal = firstNumber(text(tile, "crossOutPrice"));
+        }
+        if (normal == null && "striketrough".equals(text(tile, "originalPriceType"))) {   // sic, Penny's spelling
+            normal = firstNumber(text(tile, "originalPrice"));
         }
         Double basePrice = null;
         String baseUnit = null;

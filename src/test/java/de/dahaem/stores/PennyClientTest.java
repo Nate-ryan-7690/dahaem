@@ -54,6 +54,38 @@ class PennyClientTest {
         assertEquals(LocalDate.of(2026, 10, 5), PennyClient.weekStart("2026-41"));
     }
 
+    private static StoreOffer offerOf(String tileJson) throws Exception {
+        var tile = new com.fasterxml.jackson.databind.ObjectMapper().readTree(tileJson);
+        return new PennyClient(null).toOffer(tile, "top-angebote", "15A-03-22",
+                LocalDate.of(2026, 10, 5), LocalDate.of(2026, 10, 10));
+    }
+
+    @Test
+    void strikethroughOriginalPriceIsTheNormalPrice() throws Exception {
+        StoreOffer offer = offerOf("{\"title\":\"Feldsalat*\",\"price\":\"0.99\",\"originalPrice\":\"1.29\","
+                + "\"originalPriceType\":\"striketrough\",\"uuid\":\"u1\"}");
+
+        assertEquals(1.29, offer.normalPrice());
+        assertEquals(0.99, offer.salePrice());
+    }
+
+    @Test
+    void uvpOriginalPriceIsNotAPennyPrice() throws Exception {
+        StoreOffer offer = offerOf("{\"title\":\"MILKA Schokolade*\",\"price\":\"2.79\",\"originalPrice\":\"4.99\","
+                + "\"originalPriceType\":\"uvp\",\"uuid\":\"u2\"}");
+
+        assertNull(offer.normalPrice());
+        assertEquals(2.79, offer.salePrice());
+    }
+
+    @Test
+    void lowestPrice30DaysIsPreferredAsReferencePrice() throws Exception {
+        StoreOffer offer = offerOf("{\"title\":\"Feldsalat*\",\"price\":\"0.99\",\"originalPrice\":\"1.29\","
+                + "\"originalPriceType\":\"striketrough\",\"lowestPrice30Days\":\"1.19\",\"uuid\":\"u3\"}");
+
+        assertEquals(1.19, offer.normalPrice());
+    }
+
     @Test
     void percentageTilesAreNotOffers() throws Exception {
         var tile = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
