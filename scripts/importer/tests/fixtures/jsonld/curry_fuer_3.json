@@ -1,0 +1,30 @@
+{
+  "@context": "http://schema.org",
+  "@type": "Recipe",
+  "name": "Linsen-Curry für 3 Personen",
+  "recipeYield": "2 Portionen",
+  "totalTime": "PT30M",
+  "nutrition": {
+    "@type": "NutritionInformation",
+    "calories": "620 kcal",
+    "proteinContent": "32 g",
+    "carbohydrateContent": "70,5 g",
+    "fatContent": "21 g",
+    "fiberContent": "8 g",
+    "sugarContent": "9 g"
+  },
+  "recipeIngredient": [
+    "1 1/2 EL Honig",
+    "0,5 l Vollmilch"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToStep",
+      "text": "Alles vorbereiten."
+    },
+    {
+      "@type": "HowToStep",
+      "text": "Kochen und servieren."
+    }
+  ]
+}

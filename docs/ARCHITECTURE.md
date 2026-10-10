@@ -147,18 +147,21 @@ and run against a real, throwaway MariaDB (Testcontainers) rather than mocks —
 class) and `stores` (6 test classes, covering the pure-logic pieces:
 `Normalizer`, `VariantParser`, `JsonUtil`, `AggregatorClient`, `StoreMatchService`,
 `StorePromotionService`) have coverage. `inventory`, `mealplanner`, `finance` and
-`shared` have none. CI (`.github/workflows/ci.yml`) runs `mvn verify` on every
-push/PR to `main`.
+`shared` have none. CI (`.github/workflows/ci.yml`) runs `mvn verify` and the
+importer's Python tests on every push/PR to `main`.
 
 ## Data-prep scripts (`scripts/`)
 
 Not part of the Java application; run by hand, not on a schedule (see
 `docs/refresh.md` for why):
 
-- `scripts/importer/*.py` — recipe PDF extraction and matching (`extract.py`,
-  `rematch.py`, `load_recipes.py`), catalog maintenance (`add_ingredients.py`,
-  `dedup_catalog.py`, `scan_ingredients.py`), and store-page discovery
-  (`discover.py`).
+- `scripts/importer/*.py` — recipe import against MariaDB (`recipe_parse.py`,
+  `extract.py`, `rematch.py`, `load_recipes.py`, `load.py`, configured by the same
+  `DAHAEM_DB_*` variables as the API), the quantity repair tool
+  (`repair_quantities.py`), catalog maintenance (`add_ingredients.py`,
+  `dedup_catalog.py`, `scan_ingredients.py`), and recipe-page discovery
+  (`discover.py`). See `scripts/importer/README.md`; tests run with
+  `python3 -m unittest discover -s scripts/importer/tests`.
 - `scripts/recipes/samples/sample_recipes.sql` — the 15 original sample recipes
   shipped with the repo.
 - `config/store_overrides.json`, `config/stores.properties.example` — importer

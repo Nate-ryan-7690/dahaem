@@ -1,0 +1,232 @@
+{
+  "_comment": "Database state for the repair-tool test (ids and names as in seed/inventory_catalog.sql). RepairSqlTest (Java) loads the same file into a throwaway MariaDB and applies expected_repair_suspect.sql to it.",
+  "recipes": [
+    {
+      "id": 1,
+      "name": "Zitronen-Hähnchen",
+      "servings": 2,
+      "source_url": null
+    },
+    {
+      "id": 2,
+      "name": "Familien-Bolognese",
+      "servings": 2,
+      "source_url": null
+    },
+    {
+      "id": 3,
+      "name": "Ofengemüse",
+      "servings": 2,
+      "source_url": null
+    },
+    {
+      "id": 4,
+      "name": "Gnocchi-Pfanne",
+      "servings": 2,
+      "source_url": null
+    },
+    {
+      "id": 5,
+      "name": "Linsen-Dal",
+      "servings": 2,
+      "source_url": null
+    },
+    {
+      "id": 6,
+      "name": "Nudelsalat",
+      "servings": 2,
+      "source_url": null
+    }
+  ],
+  "ingredients": [
+    {
+      "recipe_id": 1,
+      "item_id": 186,
+      "unit": "Stück",
+      "quantity": 5,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 40,
+      "unit": "Stück",
+      "quantity": 2,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 125,
+      "unit": "Bund",
+      "quantity": 1,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 1148,
+      "unit": "Stück",
+      "quantity": 1,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 270,
+      "unit": "g",
+      "quantity": 250,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 675,
+      "unit": "g",
+      "quantity": 200,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 45,
+      "unit": "Stück",
+      "quantity": 1,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 2,
+      "item_id": 40,
+      "unit": "Stück",
+      "quantity": 667,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 2,
+      "item_id": 186,
+      "unit": "Stück",
+      "quantity": 1,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 2,
+      "item_id": 1061,
+      "unit": "Stück",
+      "quantity": 2,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 2,
+      "item_id": 675,
+      "unit": "g",
+      "quantity": 500,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 3,
+      "item_id": 1,
+      "unit": "Stück",
+      "quantity": 2,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 3,
+      "item_id": 40,
+      "unit": "Stück",
+      "quantity": 5,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 4,
+      "item_id": 186,
+      "unit": "Stück",
+      "quantity": 25,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 5,
+      "item_id": 40,
+      "unit": "Stück",
+      "quantity": 75,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 6,
+      "item_id": 675,
+      "unit": "g",
+      "quantity": 250,
+      "to_taste": false
+    }
+  ],
+  "items": [
+    [
+      1,
+      "carrots",
+      "karroten"
+    ],
+    [
+      31,
+      "potato",
+      "kartoffel"
+    ],
+    [
+      40,
+      "onion",
+      "zwiebel"
+    ],
+    [
+      45,
+      "garlic",
+      "knoblauch"
+    ],
+    [
+      59,
+      "mini cucumber",
+      "snackgurke"
+    ],
+    [
+      125,
+      "parsley",
+      "petersilie"
+    ],
+    [
+      186,
+      "lemon",
+      "zitrone"
+    ],
+    [
+      270,
+      "beef mince",
+      "rinderhackfleisch"
+    ],
+    [
+      356,
+      "whole milk",
+      "vollmilch"
+    ],
+    [
+      675,
+      "spaghetti",
+      "spaghetti"
+    ],
+    [
+      1022,
+      "olive oil",
+      "olivenöl"
+    ],
+    [
+      1061,
+      "white sugar",
+      "weißer zucker"
+    ],
+    [
+      1070,
+      "honey",
+      "honig"
+    ],
+    [
+      1148,
+      "table salt",
+      "speisesalz"
+    ],
+    [
+      1156,
+      "black pepper ground",
+      "schwarzer pfeffer gemahlen"
+    ]
+  ]
+}

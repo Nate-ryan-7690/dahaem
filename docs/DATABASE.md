@@ -54,11 +54,18 @@ Read by `RecipeRepository`.
 `recipe`: `recipe_id` (PK), `recipe_name`, `recipe_servings`, `recipe_cook_time`,
 `recipe_prep_time`, and nullable `recipe_calories` / `recipe_protein` /
 `recipe_carbs` / `recipe_fat` / `recipe_fibre` (`recipe_fiber` in the SQL —
-watch the spelling) / `recipe_sugar`.
+watch the spelling) / `recipe_sugar` (nutrition is per serving), and nullable
+`recipe_source_url` (the recipe page it was imported from, so refreshes match 1:1).
 
 `recipe_ingredient`: `recipe_ingredient_item_id` (FK -> `inventory_item`),
 `recipe_ingredient_recipe_id` (FK -> `recipe`), `recipe_ingredient_unit`,
-`recipe_ingredient_quantity_needed`.
+`recipe_ingredient_quantity_needed` (`DECIMAL(10,3)`, nullable: the exact amount for
+`recipe_servings` people, e.g. 0.5 Stück, 2 EL) and `recipe_ingredient_to_taste`
+(`BOOLEAN`, default FALSE). A CHECK keeps a row to exactly one of: a quantity, or
+`to_taste = TRUE` with quantity NULL and an empty unit ("Salz nach Geschmack": the recipe
+needs the item, no amount). To-taste rows never reach a shopping list. Changed by
+`migrations/0005_recipe_quantities.sql`; how the importer fills them is in
+`scripts/importer/README.md`.
 
 `recipe_instructions`: `recipe_instructions_step_id` (PK),
 `recipe_instructions_recipe_id` (FK -> `recipe`),

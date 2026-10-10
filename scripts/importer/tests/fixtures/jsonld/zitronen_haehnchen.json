@@ -1,0 +1,40 @@
+{
+  "@context": "http://schema.org",
+  "@type": "Recipe",
+  "name": "Zitronen-Hähnchen  mit Rosmarinkartoffeln",
+  "recipeYield": 2,
+  "totalTime": "PT30M",
+  "nutrition": {
+    "@type": "NutritionInformation",
+    "calories": "620 kcal",
+    "proteinContent": "32 g",
+    "carbohydrateContent": "70,5 g",
+    "fatContent": "21 g",
+    "fiberContent": "8 g",
+    "sugarContent": "9 g"
+  },
+  "recipeIngredient": [
+    "½ Stück Zitrone",
+    "1½ Stück Zwiebel",
+    "¼ Bund Petersilie",
+    "300 g Rinderhackfleisch",
+    "200 g Spaghetti",
+    "3 Esslöffel Olivenöl",
+    "1 EL Olivenöl",
+    "1 Teelöffel Honig",
+    "nach Geschmack Salz",
+    "Pfeffer",
+    "2 Stück Gurke",
+    "Wasser"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToStep",
+      "text": "Alles vorbereiten."
+    },
+    {
+      "@type": "HowToStep",
+      "text": "Kochen und servieren."
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import de.dahaem.mealplanner.RecipeIngredient;
 import de.dahaem.mealplanner.RecipeInstruction;
 import de.dahaem.shared.Portions;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -23,17 +24,26 @@ public record RecipeDetailDto(int id, String name, int servings, Integer people,
     }
 
     /**
-     * {@code quantity} is the stored amount for the recipe's {@code servings}; {@code scaledQuantity} is
-     * that amount for {@code people}, rounded to 2 decimals (equal to {@code quantity} when unscaled).
+     * {@code quantity} is the stored amount for the recipe's {@code servings}, as a decimal (0.5 Stück);
+     * {@code scaledQuantity} is that amount for {@code people}, rounded to 2 decimals (equal to
+     * {@code quantity} when unscaled). A "to taste" ingredient ({@code toTaste} true, e.g. salt) has
+     * no amount: {@code quantity} and {@code scaledQuantity} are both null and {@code unit} is empty.
      */
-    public record Ingredient(int itemId, String nameEnglish, String nameDeutsch, int quantity,
-                             double scaledQuantity, String unit) {
+    public record Ingredient(int itemId, String nameEnglish, String nameDeutsch, Double quantity,
+                             Double scaledQuantity, String unit, boolean toTaste) {
 
         static Ingredient from(RecipeIngredient ingredient, Integer people, int servings) {
-            int quantity = ingredient.getQuantityNeeded();
-            double scaled = people == null ? quantity : Portions.scaleRounded(quantity, people, servings);
+            BigDecimal quantity = ingredient.isToTaste() ? null : ingredient.getQuantityNeeded();
+            BigDecimal scaled = quantity == null || people == null
+                    ? quantity
+                    : Portions.scaleRounded(quantity, people, servings);
             return new Ingredient(ingredient.getItemId(), ingredient.getNameEnglish(), ingredient.getNameDeutsch(),
-                    quantity, scaled, ingredient.getUnit());
+                    toDouble(quantity), toDouble(scaled), ingredient.getUnit(), ingredient.isToTaste());
+        }
+
+        // JSON numbers without the column's trailing zeros: 0.5, 400.0 (not 0.500, 400.000).
+        private static Double toDouble(BigDecimal value) {
+            return value == null ? null : value.doubleValue();
         }
     }
 

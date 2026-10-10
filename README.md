@@ -71,7 +71,7 @@ src/main/java/de/dahaem/
   stores/       importers + raw/verified store model
   shopping/     shopping list (in progress)
   finance/      purchases (planned)
-scripts/importer/          Python data-prep tools (recipe import, matching, catalog build)
+scripts/importer/          Python data-prep tools (recipe import, quantity repair, catalog build; see its README)
 scripts/recipes/samples/   15 original sample recipes (SQL)
 config/                    importer settings templates
 ```
@@ -146,11 +146,11 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/inventory/expiring?days=7` | items expiring within N days |
 | GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
 | GET | `/api/recipes` | recipe list |
-| GET | `/api/recipes/{id}[?people=N]` | recipe with nutrition (per serving), ingredients, instructions; with `people` (>= 1, else 400) each ingredient also carries `scaledQuantity` = quantity × people / servings (2 decimals); `scalable` is false when servings is 0; 404 if unknown |
+| GET | `/api/recipes/{id}[?people=N]` | recipe with nutrition (per serving), ingredients, instructions. Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals); `scalable` is false when servings is 0; 404 if unknown |
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
 | POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |
-| GET | `/api/shopping-list?recipeIds=1,2` | build (not save) a shopping list; each line carries every current store option (cheapest till price first), never a pre-picked one |
+| GET | `/api/shopping-list?recipeIds=1,2[&people=N]` | build (not save) a shopping list; each line carries every current store option (cheapest till price first), never a pre-picked one; to-taste ingredients are left out |
 | PUT | `/api/shopping-lists/{listId}/items/{itemId}/store-item` | set the store product the user picked for a persisted line, `{"storeItemId": 5}`; `null` clears it |
 | GET / POST | `/api/purchases` | list / record `{"storeItemId", "quantityPurchased", "pricePaid", "expirationDate", ...}` |
 | GET | `/api/analytics/spending[?from=&to=]` | total spent, optionally in a date range |

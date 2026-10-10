@@ -8,7 +8,8 @@ import java.math.RoundingMode;
  * scaled to {@code people} by the factor {@code people / servings}. Used by the recipe detail
  * endpoint; the shopping list applies the same rule inside its aggregation SQL
  * (ShoppingListRepository.aggregateIngredients), with the same guards — people must be at
- * least 1, and a recipe whose servings is not positive is not scaled.
+ * least 1, and a recipe whose servings is not positive is not scaled. "To taste" ingredients have
+ * no quantity and are never scaled (nor put on a shopping list).
  */
 public final class Portions {
 
@@ -29,23 +30,21 @@ public final class Portions {
     }
 
     /**
-     * {@code quantity * people / servings}, multiplied before dividing exactly as the shopping list
-     * SQL does. Returns {@code quantity} unchanged when the recipe is not scalable.
+     * {@code quantity * people / servings} on exact decimals (the stored DECIMAL(10,3) amount),
+     * multiplied before dividing exactly as the shopping list SQL does, and rounded half-up to
+     * 2 decimals once, at the end (0.5 Stück at 4 people of 2 → 1.00; 1 Stück at 3 of 2 → 1.50).
+     * Returns {@code quantity} unchanged (not rounded) when the recipe is not scalable.
      *
      * @throws IllegalArgumentException if {@code people} is below 1
      */
-    public static double scale(double quantity, int people, int servings) {
+    public static BigDecimal scaleRounded(BigDecimal quantity, int people, int servings) {
         if (!isValidPeople(people)) {
             throw new IllegalArgumentException(INVALID_PEOPLE_MESSAGE);
         }
         if (!isScalable(servings)) {
             return quantity;
         }
-        return quantity * people / servings;
-    }
-
-    /** {@link #scale} rounded half-up to 2 decimals, for display (1 Stück at 3 people of 2 → 1.5). */
-    public static double scaleRounded(double quantity, int people, int servings) {
-        return BigDecimal.valueOf(scale(quantity, people, servings)).setScale(2, RoundingMode.HALF_UP).doubleValue();
+        return quantity.multiply(BigDecimal.valueOf(people))
+                .divide(BigDecimal.valueOf(servings), 2, RoundingMode.HALF_UP);
     }
 }

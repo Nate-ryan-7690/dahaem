@@ -45,7 +45,9 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_fibre INTEGER,
 
-	recipe_sugar INTEGER);
+	recipe_sugar INTEGER,
+
+	recipe_source_url TEXT);
 
 CREATE TABLE store ( store_id INTEGER PRIMARY KEY AUTO_INCREMENT, 
 
@@ -79,9 +81,14 @@ CREATE TABLE recipe_ingredient (recipe_ingredient_item_id INTEGER,
 
 	recipe_ingredient_unit TEXT NOT NULL,
 
-	recipe_ingredient_quantity_needed INTEGER NOT NULL,
+	recipe_ingredient_quantity_needed DECIMAL(10,3) NULL,
+
+	recipe_ingredient_to_taste BOOLEAN NOT NULL DEFAULT FALSE,
 
 	PRIMARY KEY(recipe_ingredient_item_id,recipe_ingredient_recipe_id),
+
+	CONSTRAINT recipe_ingredient_quantity_or_to_taste
+		CHECK ((recipe_ingredient_quantity_needed IS NULL) = (recipe_ingredient_to_taste <> 0)),
 
 	FOREIGN KEY(recipe_ingredient_item_id) REFERENCES inventory_item(inventory_item_id),
 

@@ -52,6 +52,19 @@ public final class TestDatabase {
                 "root", CONTAINER.getPassword());
     }
 
+    /** Runs SQL scripts against the current scratch database as it is (no reset), e.g. a migration. */
+    public static void apply(List<Path> scripts) {
+        try (Connection admin = DriverManager.getConnection(adminUrl(), "root", CONTAINER.getPassword());
+             Statement st = admin.createStatement()) {
+            st.execute("USE " + SCRATCH_DB);
+            for (Path script : scripts) {
+                st.execute(Files.readString(script, StandardCharsets.UTF_8));
+            }
+        } catch (SQLException | IOException e) {
+            throw new IllegalStateException("Could not apply " + scripts, e);
+        }
+    }
+
     /** Closes the pool; the container itself lives until the JVM exits. */
     public static void close() {
         Database.close();

@@ -1,0 +1,40 @@
+{
+  "@context": "http://schema.org",
+  "@type": "Recipe",
+  "name": "Bruch-Test",
+  "recipeYield": [
+    "2"
+  ],
+  "totalTime": "PT30M",
+  "nutrition": {
+    "@type": "NutritionInformation",
+    "calories": "620 kcal",
+    "proteinContent": "32 g",
+    "carbohydrateContent": "70,5 g",
+    "fatContent": "21 g",
+    "fiberContent": "8 g",
+    "sugarContent": "9 g"
+  },
+  "recipeIngredient": [
+    "½ Stück Zitrone",
+    "1½ Stück Zitrone",
+    "1 ½ Stück Zitrone",
+    "¼ Stück Zitrone",
+    "¾ Stück Zitrone",
+    "⅓ Stück Zitrone",
+    "⅔ Stück Zitrone",
+    "1/2 Stück Zitrone",
+    "0,5 Stück Zitrone",
+    "2.5 Stück Zitrone"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToStep",
+      "text": "Alles vorbereiten."
+    },
+    {
+      "@type": "HowToStep",
+      "text": "Kochen und servieren."
+    }
+  ]
+}

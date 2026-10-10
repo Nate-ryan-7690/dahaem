@@ -22,7 +22,7 @@ import argparse, glob, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from extract import Catalog, is_pantry, strip_lead_unit  # reuse the exact same matcher + rules
+from extract import Catalog, is_pantry, load_overrides, strip_lead_unit  # reuse the exact same matcher + rules
 
 DRAFTS = os.path.normpath(os.path.join(HERE, "..", "recipes", "_drafts"))
 
@@ -32,7 +32,7 @@ DRAFTS = os.path.normpath(os.path.join(HERE, "..", "recipes", "_drafts"))
 LINE = re.compile(
     r"^(?P<prefix>\s*\(\(SELECT recipe_id FROM recipe WHERE recipe_name='(?:[^']|'')*'\),\s*)"
     r"(?P<id>\d+)"
-    r"(?P<mid>,\s*'(?:[^']|'')*',\s*\d+\))"
+    r"(?P<mid>,\s*'(?:[^']|'')*',\s*(?:\d+(?:\.\d+)?|NULL)(?:,\s*[01])?\))"   # qty; to_taste in new drafts
     r"\s*[,;]?"                                       # terminator here in the rewritten format
     r"(?:\s*(?P<comment>--\s*REVIEW\b[^\n]*?))?"
     r"\s*[,;]?\s*$"                                   # ...or here in the original format
@@ -125,14 +125,17 @@ def rematch_file(path, cat, stats):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=os.path.normpath(os.path.join(HERE, "..", "..", "data", "kitchen_organizer.db")))
     ap.add_argument("--dir", default=DRAFTS)
     ap.add_argument("--limit", type=int, default=0, help="process only the first N drafts (testing)")
     ap.add_argument("--write", action="store_true", help="overwrite drafts in place (default is dry-run)")
     args = ap.parse_args()
 
-    overrides = json.load(open(os.path.join(HERE, "overrides.json"), encoding="utf-8"))
-    cat = Catalog(args.db, overrides)
+    import db                                   # catalog is read from MariaDB (DAHAEM_DB_* env vars)
+    con = db.connect()
+    try:
+        cat = Catalog.from_db(con, load_overrides())
+    finally:
+        con.close()
 
     files = sorted(glob.glob(os.path.join(args.dir, "*.sql")))
     if args.limit:
