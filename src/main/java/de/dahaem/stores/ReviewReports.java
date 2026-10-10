@@ -41,7 +41,7 @@ final class ReviewReports {
 
     /** unmatched_offers.tsv: store_id, brand, name, then the identification columns. */
     static String unmatched(OfferRow o, LocalDate today) {
-        return o.storeId() + "\t" + o.brand() + "\t" + o.name() + "\t" + tail(o, today);
+        return o.storeId() + "\t" + nz(o.brand()) + "\t" + o.name() + "\t" + tail(o, today);
     }
 
     /** review_matches.tsv: store_id, external_id, offer, sales_unit, sale_price, proposed_item, reason, then store..valid_until. */
