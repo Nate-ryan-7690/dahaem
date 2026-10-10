@@ -159,6 +159,35 @@ def parse_ingredient(raw):
     return Line(raw, qty, unit, name.strip(), False)
 
 
+# ---------- the OLD importer, replayed ----------
+# What extract.py did before the fixes, kept only so the repair tool can tell whether a stored row
+# is exactly what the old parser made of a page line (then a difference is a parser bug, not a
+# different line or a wrong item match). Bugs included on purpose: "½" -> 5, rounding, max(1).
+OLD_UNITS = {"g", "kg", "ml", "l", "Stück", "EL", "TL", "Bund", "Dose", "Packung", "Prise", "Zehe",
+             "Scheibe", "Scheiben"}
+_OLD_FRAC = {"½": ".5", "¼": ".25", "¾": ".75", "⅓": ".333", "⅔": ".667"}
+
+
+def _old_num(s):
+    for k, v in _OLD_FRAC.items():
+        s = s.replace(k, v)
+    m = re.search(r"\d+(?:\.\d+)?", s.replace(",", "."))
+    return float(m.group()) if m else None
+
+
+def old_parse(raw):
+    """(quantity, unit) the old importer stored for this page line."""
+    s = (raw or "").strip()
+    m = re.match(r"([\d.,½¼¾⅓⅔]+)\s*(\S+)?\s*(.*)", s)
+    if not m or _old_num(m.group(1)) is None:
+        parts = s.split(None, 1)
+        unit = parts[0] if len(parts) == 2 and parts[0] in OLD_UNITS else None
+        return Decimal(1), unit or "Stück"
+    qty = max(1, int(_old_num(m.group(1)) + 0.5))
+    tok = m.group(2) or ""
+    return Decimal(qty), (tok if tok in OLD_UNITS else "Stück")
+
+
 # ---------- titles and servings ----------
 def cut_title(name):
     """The stored recipe_name: JSON-LD name cut at the subtitle (double space) or a marketing blurb."""
@@ -189,24 +218,32 @@ def yield_people(recipe_yield):
     if recipe_yield is None:
         return None
     m = re.search(r"\d+", str(recipe_yield))
-    return int(m.group()) if m else None
+    return int(m.group()) if m and int(m.group()) > 0 else None
+
+
+# Where a servings number came from. Only the first two are facts about the recipe; DEFAULT is a
+# guess the importer needs for a new recipe, and must never overwrite a stored value.
+FROM_YIELD, FROM_BUNDLE_TITLE, DEFAULT = "recipeYield", "bundle title", "default"
+DEFAULT_SERVINGS = 2
 
 
 def servings_for(rec):
-    """(servings, notes). recipeYield, except a title marking a bundle for 4 wins (HelloFresh
-    bundles carry 4-person amounts but recipeYield 2). Any other disagreement is only reported."""
+    """(servings, notes, source). recipeYield, except a title marking a bundle for 4 wins
+    (HelloFresh bundles carry 4-person amounts but recipeYield 2). Without a readable
+    recipeYield (and no bundle title) servings is the default 2 with source DEFAULT.
+    Any other disagreement between title and yield is only reported."""
     notes = []
     from_yield = yield_people(rec.get("recipeYield"))
     from_title = title_people(rec.get("name"))
-    servings = from_yield if from_yield else 2
+    servings, source = (from_yield, FROM_YIELD) if from_yield else (DEFAULT_SERVINGS, DEFAULT)
     if from_yield is None:
-        notes.append("recipeYield missing -> 2")
+        notes.append(f"recipeYield missing or unreadable ({rec.get('recipeYield')!r})")
     if from_title == 4 and servings != 4:
         notes.append(f"bundle for 4 in title, recipeYield {from_yield} -> 4")
-        servings = 4
+        servings, source = 4, FROM_BUNDLE_TITLE
     elif from_title is not None and from_title != servings:
         notes.append(f"CONFLICT: title says {from_title} people, recipeYield {from_yield}; kept {servings}")
-    return servings, notes
+    return servings, notes, source
 
 
 # ---------- one recipe ----------
@@ -246,7 +283,7 @@ def parse_recipe(rec, catalog, is_pantry=None):
     """JSON-LD Recipe dict -> dict(title, servings, notes, lines). lines are merged per item and
     carry item_id/conf/note from catalog.match(name). is_pantry(name) lines (water) are skipped."""
     notes = []
-    servings, snotes = servings_for(rec)
+    servings, snotes, servings_source = servings_for(rec)
     notes += snotes
     items = []
     for raw in rec.get("recipeIngredient") or []:
@@ -258,7 +295,8 @@ def parse_recipe(rec, catalog, is_pantry=None):
                       "to_taste": line.to_taste, "item_id": iid, "conf": conf, "note": note})
     lines, mnotes = merge_lines(items)
     notes += mnotes
-    return {"title": cut_title(rec.get("name")), "servings": servings, "notes": notes, "lines": lines}
+    return {"title": cut_title(rec.get("name")), "servings": servings, "servings_source": servings_source,
+            "notes": notes, "lines": lines}
 
 
 def find_recipe(o):

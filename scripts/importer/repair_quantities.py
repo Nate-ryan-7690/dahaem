@@ -30,9 +30,17 @@ Steps:
 
 Every UPDATE is guarded on the row's current value (it does nothing if the row changed since
 this run read it), every INSERT on the row not existing yet, the servings UPDATE on the old
-servings and the URL UPDATE on the URL still being empty. Changes that are not one of the
-known bugs (the page simply says something else now), and new lines that are neither spoons
-nor to-taste, are only listed in the TSV unless --include-other is given.
+servings and the URL UPDATE on the URL still being empty.
+
+Only listed in the TSV, never in the SQL:
+  * any change to a row whose page line matches its item only uncertainly (like / multi):
+    review-uncertain-match. An earlier wrong match must not be "corrected" on a guess;
+  * a unit change the old parser cannot explain (the stored row is not exactly what the old
+    parser made of this page line): review-unit;
+  * servings from a page without a readable recipeYield (and no bundle-for-4 title): the 2 would
+    be a guess, so the stored value is kept: review-servings;
+  * changes that are not one of the known bugs, and new lines that are neither spoons nor
+    to-taste (review-held), unless --include-other is given.
 
 The database comes from DAHAEM_DB_URL / DAHAEM_DB_USER / DAHAEM_DB_PASSWORD (db.py). For tests
 and offline review, --state FILE.json replaces the database read with a JSON snapshot.
@@ -283,6 +291,18 @@ def classify(old, new):
     return OTHER
 
 
+def unit_change_explained(old, line):
+    """A unit change is a known equivalence only when the stored row is exactly what the old parser
+    made of this very page line: the old parser knew fewer unit words ("3 Esslöffel Olivenöl" ->
+    3 Stück; "2 Prisen Zucker" -> 2 Stück), so the new unit is a parser fix, not a guess."""
+    return recipe_parse.old_parse(line["raw"]) == (old["quantity"], old["unit"])
+
+
+def _old_str(raw):
+    q, unit = recipe_parse.old_parse(raw)
+    return f"{sql_decimal(q)} {unit}"
+
+
 def old_importer_value(q):
     """What the old importer stored for amount q: max(1, round_half_up(q))."""
     return max(Decimal(1), (q + Decimal("0.5")).to_integral_value(rounding="ROUND_FLOOR"))
@@ -332,12 +352,18 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
     for note in parsed["notes"]:
         plan.tsv_row(recipe, url, "note", note=note)
 
-    if parsed["servings"] != recipe["servings"]:
+    if parsed["servings_source"] == recipe_parse.DEFAULT:
+        # no readable recipeYield and no bundle title: 2 would only be a guess, never written
+        plan.counts["servings_held"] += 1
+        plan.tsv_row(recipe, url, "review-servings", "servings",
+                     note=f"recipeYield missing, stored {recipe['servings']} kept; " + "; ".join(parsed["notes"]))
+    elif parsed["servings"] != recipe["servings"]:
         plan.sql.append(f"UPDATE recipe SET recipe_servings = {parsed['servings']} "
                         f"WHERE recipe_id = {rid} AND recipe_servings = {recipe['servings']};")
         plan.counts["servings"] += 1
         plan.tsv_row(recipe, url, "update-servings", "servings",
-                     note=f"{recipe['servings']} -> {parsed['servings']}; " + "; ".join(parsed["notes"]))
+                     note=f"{recipe['servings']} -> {parsed['servings']} (from {parsed['servings_source']}); "
+                     + "; ".join(parsed["notes"]))
 
     if not recipe.get("source_url"):
         plan.sql.append(f"UPDATE recipe SET recipe_source_url = {sql_str(url)} "
@@ -360,6 +386,20 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
                 plan.counts["unchanged"] += 1
                 continue
             cls = classify(old, new)
+            if line["conf"] not in CONFIDENT:
+                # an uncertain item match is no ground for "correcting" a stored row: it may be
+                # an earlier wrong match ("g Bratapfelgewürz" -> Apfel), whatever the class
+                plan.counts["held_unconfident"] += 1
+                plan.tsv_row(recipe, url, "review-uncertain-match", cls, iid, old, new, line["raw"], line["conf"],
+                             f"uncertain item match: not in the SQL; {line['note']}", name)
+                continue
+            if cls == UNIT and not unit_change_explained(old, line):
+                plan.counts["held_unit"] += 1
+                plan.tsv_row(recipe, url, "review-unit", cls, iid, old, new, line["raw"], line["conf"],
+                             "unit differs and the stored row is not what the old parser made of this line "
+                             f"(it would have stored {_old_str(line['raw'])}): maybe a different line or a "
+                             "wrong item match, not in the SQL", name)
+                continue
             if cls == OTHER and not include_other:
                 plan.counts["held_other"] += 1
                 plan.tsv_row(recipe, url, "review-held", cls, iid, old, new, line["raw"], line["conf"],
@@ -474,9 +514,11 @@ def summary(plan, fetcher, selector, n_urls):
         f" | unit changed {c['update:' + UNIT]} | now to-taste {c['update:' + TO_TASTE]}"
         f" | other {c['update:' + OTHER]}",
         f"lines inserted: {ins} = EL/TL {c[INS_SPOON]} | to-taste {c[INS_TO_TASTE]} | other {c[INS_OTHER]}",
-        f"servings changed: {c['servings']}    source URLs set: {c['source_url']}",
+        f"servings changed: {c['servings']} | servings kept, recipeYield missing {c['servings_held']}"
+        f"    source URLs set: {c['source_url']}",
         f"held for review (TSV only): other changes {c['held_other']} | uncertain item match "
-        f"{c['held_unconfident']} | unmatched ingredient {c['unmatched_line']}",
+        f"{c['held_unconfident']} | unexplained unit change {c['held_unit']} | unmatched ingredient "
+        f"{c['unmatched_line']}",
         f"rows unchanged: {c['unchanged']}    stored rows not on the page (left as is): {c['db_only']}",
     ])
 

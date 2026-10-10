@@ -36,6 +36,12 @@
       "name": "Nudelsalat",
       "servings": 2,
       "source_url": null
+    },
+    {
+      "id": 7,
+      "name": "Kürbissuppe",
+      "servings": 2,
+      "source_url": null
     }
   ],
   "ingredients": [
@@ -150,6 +156,34 @@
       "unit": "g",
       "quantity": 250,
       "to_taste": false
+    },
+    {
+      "recipe_id": 1,
+      "item_id": 59,
+      "unit": "Stück",
+      "quantity": 5,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 2,
+      "item_id": 1070,
+      "unit": "Stück",
+      "quantity": 1,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 2,
+      "item_id": 143,
+      "unit": "Stück",
+      "quantity": 1,
+      "to_taste": false
+    },
+    {
+      "recipe_id": 7,
+      "item_id": 40,
+      "unit": "Stück",
+      "quantity": 5,
+      "to_taste": false
     }
   ],
   "items": [
@@ -227,6 +261,11 @@
       1156,
       "black pepper ground",
       "schwarzer pfeffer gemahlen"
+    ],
+    [
+      143,
+      "apple",
+      "apfel"
     ]
   ]
 }

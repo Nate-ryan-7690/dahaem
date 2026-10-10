@@ -55,7 +55,8 @@ ingredient the recipe needs without an amount (`migrations/0005_recipe_quantitie
 - **Servings** come from `recipeYield`. When the full page title marks a bundle for 4 (`4P`,
   `Bundle 4P`, `für 4 Personen`), servings are 4, because those recipes carry 4-person amounts
   but say `recipeYield: 2`. Any other disagreement between title and yield is reported, not
-  applied.
+  applied. Without a readable `recipeYield` (and no bundle title) a new import gets the default
+  2; the repair tool never writes that default over a stored value.
 - **Two lines on the same catalog item** (the primary key is item + recipe):
   - same unit: the quantities are summed;
   - a line with an amount beats a to-taste line;
@@ -128,9 +129,32 @@ Neither is changed.
 | bundle servings | 2 -> 4 |
 | `recipe_source_url` | set where empty |
 
+An update or insert is only written when the page line matches its item **confidently**
+(override, rule or exact). A unit change is only written when it is a **known equivalence**:
+the stored row is exactly what the old parser made of this very page line. The old parser knew
+fewer unit words, so "3 Esslöffel Olivenöl" was stored as 3 Stück and "2 Prisen Zucker" as
+2 Stück. The new unit then fixes a parser bug and is not a guess. If the stored row is
+something the old parser would *not* have made of the line, it came from somewhere else, often
+a wrong item match.
+
 These are listed in the TSV but **not** written to the SQL:
 
-- the page now simply says something else, e.g. 250 g -> 300 g (`--include-other` writes them);
-- new lines that are neither spoons nor to-taste;
-- lines whose item match is uncertain;
-- stored rows that are not on the page.
+| TSV action | Why it is held |
+|------------|----------------|
+| `review-uncertain-match` | any change (update or insert) where the item match is only `like`/`multi`, e.g. "1 Packung Bratapfelgewürz" fuzzily matched to Apfel. The TSV shows old and new values, the page line and the match |
+| `review-unit` | the unit differs and the old parser would have stored something else for this line (e.g. stored 1 Stück, but the old parser would have made "1 TL Honig" into 1 TL) |
+| `review-servings` | the page has no readable `recipeYield` and no bundle title; the stored servings are kept |
+| `review-held` | the page now simply says something else (250 g -> 300 g), or a new line that is neither a spoon nor to-taste. `--include-other` writes these |
+| `review-unmatched` | the page line matches no catalog item |
+| `db-only` | a stored row that is not on the page; left as is |
+| `ambiguous` / `unmatched` | the recipe itself could not be matched to exactly one page |
+
+### Reading the review TSV before applying the SQL
+
+1. Sort or filter by `action`. `update`, `insert` and `update-servings` rows are exactly what the
+   SQL does.
+2. Spot-check `update` rows per `class`: `half-bug` (old 5/25/75/333/667 -> new below 1),
+   `rounding`, `unit`, `to-taste`. Compare `page_line` with old and new.
+3. Read every `review-*` row. They change nothing. Fix them by hand later (or improve
+   `overrides.json` and re-run with `--offline`) if they matter.
+4. Only then apply the SQL in one transaction.

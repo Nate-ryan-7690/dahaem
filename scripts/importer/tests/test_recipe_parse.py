@@ -59,6 +59,13 @@ class AmountTest(unittest.TestCase):
     def test_range_keeps_first_value(self):
         self.assertEqual(Decimal(1), parse_ingredient("1-2 Stück Chili").quantity)
 
+    def test_old_parser_replay_reproduces_the_bugs(self):
+        self.assertEqual((Decimal(5), "Stück"), recipe_parse.old_parse("½ Stück Zitrone"))
+        self.assertEqual((Decimal(2), "Stück"), recipe_parse.old_parse("1½ Stück Zwiebel"))
+        self.assertEqual((Decimal(3), "Stück"), recipe_parse.old_parse("3 Esslöffel Olivenöl"))
+        self.assertEqual((Decimal(1), "TL"), recipe_parse.old_parse("1 TL Honig"))
+        self.assertEqual((Decimal(1), "Stück"), recipe_parse.old_parse("nach Geschmack Salz"))
+
     def test_nutrition_strings_still_parse(self):
         self.assertEqual(Decimal(620), num("620 kcal"))
         self.assertEqual(Decimal("70.5"), num("70,5 g"))
@@ -104,18 +111,30 @@ class ToTasteTest(unittest.TestCase):
 class ServingsTest(unittest.TestCase):
 
     def test_plain_recipe_uses_recipe_yield(self):
-        self.assertEqual((2, []), servings_for(fixture("zitronen_haehnchen.json")))
+        self.assertEqual((2, [], recipe_parse.FROM_YIELD), servings_for(fixture("zitronen_haehnchen.json")))
 
     def test_bundle_for_four_wins_over_recipe_yield(self):
-        servings, notes = servings_for(fixture("familien_bolognese_bundle.json"))
-        self.assertEqual(4, servings)
+        servings, notes, source = servings_for(fixture("familien_bolognese_bundle.json"))
+        self.assertEqual((4, recipe_parse.FROM_BUNDLE_TITLE), (servings, source))
         self.assertIn("bundle for 4", notes[0])
         self.assertEqual(4, servings_for({"name": "Pasta für 4 Personen", "recipeYield": 2})[0])
 
     def test_other_conflicts_are_reported_not_applied(self):
-        servings, notes = servings_for(fixture("curry_fuer_3.json"))   # title 3, recipeYield "2 Portionen"
-        self.assertEqual(2, servings)
+        servings, notes, source = servings_for(fixture("curry_fuer_3.json"))   # title 3, recipeYield "2 Portionen"
+        self.assertEqual((2, recipe_parse.FROM_YIELD), (servings, source))
         self.assertTrue(notes[0].startswith("CONFLICT"))
+
+    def test_missing_or_unreadable_yield_is_only_a_default(self):
+        for rec in [fixture("kuerbissuppe_ohne_yield.json"), {"name": "X", "recipeYield": "viele"},
+                    {"name": "X", "recipeYield": 0}]:
+            with self.subTest(rec=rec.get("recipeYield")):
+                servings, notes, source = servings_for(rec)
+                self.assertEqual((2, recipe_parse.DEFAULT), (servings, source))
+                self.assertIn("recipeYield missing", notes[0])
+
+    def test_bundle_title_is_reliable_even_without_yield(self):
+        servings, _notes, source = servings_for({"name": "Pasta  Bundle 4P"})
+        self.assertEqual((4, recipe_parse.FROM_BUNDLE_TITLE), (servings, source))
 
     def test_yield_shapes(self):
         self.assertEqual(2, recipe_parse.yield_people(["2"]))

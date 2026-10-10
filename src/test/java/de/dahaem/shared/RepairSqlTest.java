@@ -82,16 +82,20 @@ class RepairSqlTest {
         assertRow(1, 1156, null, "", true);            // Pfeffer, no amount: inserted to taste
         assertRow(1, 270, "250.000", "g", false);      // page says 300 g: held for review, untouched
         assertRow(1, 45, "1.000", "Stück", false);     // not on the page: left as is
-        assertEquals(0, count("SELECT COUNT(*) FROM recipe_ingredient WHERE recipe_ingredient_recipe_id = 1 "
-                + "AND recipe_ingredient_item_id = 59"));   // uncertain match: not inserted
+        assertRow(1, 59, "5.000", "Stück", false);     // "½ Stück Gurke" is only an uncertain match: no update
 
         assertEquals(4, count("SELECT recipe_servings FROM recipe WHERE recipe_id = 2"));   // bundle 4P
         assertRow(2, 40, "0.667", "Stück", false);     // ⅔-bug: 667 -> 0.667
-        assertRow(2, 1061, "2.000", "Prise", false);   // 2 Stück -> 2 Prise
+        assertRow(2, 1061, "2.000", "Prise", false);   // 2 Stück -> 2 Prise: the old parser's reading of "2 Prisen"
+        assertRow(2, 1070, "1.000", "Stück", false);   // "1 TL Honig": unit change the old parser can't explain: held
+        assertRow(2, 143, "1.000", "Stück", false);    // "Bratapfelgewürz" fuzzily matched to Apfel: held
+
+        assertRow(7, 40, "0.500", "Stück", false);     // ½-bug fixed even though ...
+        assertEquals(2, count("SELECT recipe_servings FROM recipe WHERE recipe_id = 7"));   // ... no recipeYield: kept
 
         assertEquals("https://www.hellofresh.de/recipes/zitronen-hahnchen-5f1a2b3c4d5e6f7a8b9c0d1e",
                 string("SELECT recipe_source_url FROM recipe WHERE recipe_id = 1"));
-        assertEquals(0, count("SELECT COUNT(*) FROM recipe WHERE recipe_id >= 3 AND recipe_source_url IS NOT NULL"));
+        assertEquals(0, count("SELECT COUNT(*) FROM recipe WHERE recipe_id BETWEEN 3 AND 6 AND recipe_source_url IS NOT NULL"));
         assertRow(3, 40, "5.000", "Stück", false);     // ambiguous recipe: untouched
         assertRow(4, 186, "25.000", "Stück", false);   // unmatched recipes: untouched
         assertRow(5, 40, "75.000", "Stück", false);
