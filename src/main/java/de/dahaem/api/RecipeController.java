@@ -2,6 +2,7 @@ package de.dahaem.api;
 
 import de.dahaem.mealplanner.Recipe;
 import de.dahaem.mealplanner.RecipeService;
+import de.dahaem.shared.Portions;
 import de.dahaem.tags.TagService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,10 +33,20 @@ public class RecipeController {
         return recipeService.allRecipes().stream().map(RecipeSummaryDto::from).toList();
     }
 
+    /**
+     * The recipe with its ingredients and instructions. An optional {@code ?people=N} adds each
+     * ingredient's quantity scaled by {@code people / servings} as {@code scaledQuantity}; the stored
+     * {@code quantity}, the instructions and the nutrition are never changed.
+     */
     @GetMapping("/{id}")
-    public RecipeDetailDto byId(@PathVariable("id") int id) {
+    public RecipeDetailDto byId(@PathVariable("id") int id,
+                                @RequestParam(name = "people", required = false) Integer people) {
+        if (people != null && !Portions.isValidPeople(people)) {
+            throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
+        }
         Recipe recipe = requireRecipe(id);
-        return RecipeDetailDto.from(recipe, recipeService.findAllIngredients(id), recipeService.findAllInstructions(id));
+        return RecipeDetailDto.from(recipe, recipeService.findAllIngredients(id), recipeService.findAllInstructions(id),
+                people);
     }
 
     @GetMapping("/{id}/tags")

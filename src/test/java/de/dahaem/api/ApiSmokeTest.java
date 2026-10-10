@@ -1,5 +1,7 @@
 package de.dahaem.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterAll;
@@ -26,6 +28,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
@@ -118,6 +122,102 @@ class ApiSmokeTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").isString());
+    }
+
+    @Test
+    void recipeDetailScalesIngredientsToPeople() throws Exception {
+        // Seeded with recipe_servings = 2: 400 g beef (270) and 1 Stück onion (40), among others.
+        int recipeId = recipeId("Klassische Rinder-Bolognese");
+
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.servings").value(2))
+                .andExpect(jsonPath("$.people").value(4))
+                .andExpect(jsonPath("$.scalable").value(true))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(400)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(800.0)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(2.0)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].unit", contains("g")))
+                .andExpect(jsonPath("$.instructions[0].instruction")
+                        .value("Zwiebel, Knoblauch und Karotte fein würfeln."));
+
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].quantity", contains(1)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(1.5)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(600.0)));
+
+        // people=1 of a 2-serving recipe: 1 Stück -> 0.5
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(0.5)));
+    }
+
+    @Test
+    void recipeDetailWithoutPeopleIsUnscaledAndInvalidPeopleIs400() throws Exception {
+        int recipeId = recipeId("Klassische Rinder-Bolognese");
+
+        mvc.perform(get("/api/recipes/{id}", recipeId))
+                .andExpect(status().isOk())
+                // jsonPath treats a null value as absent, so check the raw body for the explicit null.
+                .andExpect(content().string(containsString("\"people\":null")))
+                .andExpect(jsonPath("$.scalable").value(true))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(400)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(400.0)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(1.0)));
+
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("'people' must be at least 1"));
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "-2"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "abc"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/recipes/{id}", 999_999).param("people", "4"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void recipeWithZeroServingsIsNotScalable() throws Exception {
+        int recipeId = insertRecipe("Portionslos-Testrezept", 0);
+        try {
+            insertIngredient(recipeId, 270, "g", 300);
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.servings").value(0))
+                    .andExpect(jsonPath("$.people").value(4))
+                    .andExpect(jsonPath("$.scalable").value(false))
+                    .andExpect(jsonPath("$.ingredients[0].quantity").value(300))
+                    .andExpect(jsonPath("$.ingredients[0].scaledQuantity").value(300.0));
+        } finally {
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
+    void recipeScalingAgreesWithShoppingListScaling() throws Exception {
+        int recipeId = recipeId("Klassische Rinder-Bolognese");
+        ObjectMapper json = new ObjectMapper();
+
+        JsonNode recipe = json.readTree(mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "3"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode list = json.readTree(mvc.perform(get("/api/shopping-list")
+                        .param("recipeIds", String.valueOf(recipeId)).param("people", "3"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+
+        assertEquals(recipe.get("ingredients").size(), list.get("items").size());
+        for (JsonNode line : list.get("items")) {
+            double fromRecipe = -1;
+            for (JsonNode ingredient : recipe.get("ingredients")) {
+                if (ingredient.get("itemId").asInt() == line.get("inventoryItemId").asInt()
+                        && ingredient.get("unit").asText().equals(line.get("unit").asText())) {
+                    fromRecipe = ingredient.get("scaledQuantity").asDouble();
+                }
+            }
+            assertEquals(line.get("totalQuantity").asDouble(), fromRecipe, 0.005,
+                    "item " + line.get("inventoryItemId") + " scales differently on the recipe and the shopping list");
+        }
     }
 
     @Test
@@ -376,6 +476,46 @@ class ApiSmokeTest {
             throw new IllegalStateException("No totalQuantity found in " + shoppingListJson);
         }
         return Double.parseDouble(m.group(1));
+    }
+
+    private static int insertRecipe(String name, int servings) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("INSERT INTO recipe (recipe_name, recipe_servings, "
+                     + "recipe_cook_time, recipe_prep_time) VALUES (?, ?, 10, 0)", Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, name);
+            ps.setInt(2, servings);
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                keys.next();
+                return keys.getInt(1);
+            }
+        }
+    }
+
+    private static void insertIngredient(int recipeId, int itemId, String unit, int quantity) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, "
+                     + "recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) "
+                     + "VALUES (?, ?, ?, ?)")) {
+            ps.setInt(1, recipeId);
+            ps.setInt(2, itemId);
+            ps.setString(3, unit);
+            ps.setInt(4, quantity);
+            ps.executeUpdate();
+        }
+    }
+
+    // Throwaway test database only: removes the recipe this test inserted so other tests don't see it.
+    private static void deleteTestRecipe(int recipeId) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ingredients = con.prepareStatement(
+                     "DELETE FROM recipe_ingredient WHERE recipe_ingredient_recipe_id = ?");
+             PreparedStatement recipe = con.prepareStatement("DELETE FROM recipe WHERE recipe_id = ?")) {
+            ingredients.setInt(1, recipeId);
+            ingredients.executeUpdate();
+            recipe.setInt(1, recipeId);
+            recipe.executeUpdate();
+        }
     }
 
     private static int recipeId(String name) throws SQLException {
