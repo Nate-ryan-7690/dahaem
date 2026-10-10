@@ -247,10 +247,19 @@ def servings_for(rec):
 
 
 # ---------- one recipe ----------
+CONFIDENT = ("override", "rule", "exact")        # item matches that may be acted on without a human
+
+
 def merge_lines(items):
     """Two lines on the same catalog item (PK is item+recipe). items: dicts with item_id,
-    quantity, unit, to_taste, name. Same unit -> quantities summed; a quantity beats a to_taste
-    line; different units -> the first is kept. Returns (merged, notes)."""
+    quantity, unit, to_taste, name, conf. Same unit -> quantities summed; a quantity beats a
+    to_taste line; different units -> the first is kept. Returns (merged, notes).
+
+    Lines are only combined when BOTH matched the item confidently (conf in CONFIDENT). If
+    either match is uncertain ("160 pikante Paprikasoße" fuzzily matched to Paprika next to "1 rote
+    Paprika"), nothing is added up: the first line stays as it is and the later one is passed
+    through on its own, marked "held_collision", so the repair tool lists it for review instead of
+    writing a sum nobody checked."""
     out, by_id, notes = [], {}, []
     for it in items:
         iid = it["item_id"]
@@ -262,6 +271,11 @@ def merge_lines(items):
             out.append(by_id[iid])
             continue
         kept = by_id[iid]
+        if kept.get("conf") not in CONFIDENT or it.get("conf") not in CONFIDENT:
+            out.append(dict(it, held_collision=True))
+            notes.append(f"REVIEW item #{iid}: '{it['name']}' ({it.get('conf')}) not combined with "
+                         f"'{kept['name']}' ({kept.get('conf')}), an uncertain match is never added up")
+            continue
         if kept["to_taste"] and it["to_taste"]:
             notes.append(f"duplicate to-taste item #{iid} ('{it['name']}') merged")
         elif kept["to_taste"] and not it["to_taste"]:

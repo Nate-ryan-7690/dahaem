@@ -16,12 +16,14 @@ and records each matched page in recipe.recipe_source_url.
 
 Steps:
   1. select recipes: "suspect" (non-g/ml rows with quantity 5, 25, 75, 333 or 667) or "all"
-  2. match each to a page: URL slug ~ recipe name, confirmed by the JSON-LD name cut the
-     way the importer cut titles; reports matched / ambiguous / unmatched
-  3. fetch politely: --delay seconds between requests (default 2), a normal browser user
-     agent, robots.txt respected; every page is cached on disk (--cache), so a re-run (after
-     a crash, Ctrl-C or a network outage) skips what it already has: resumable, can run for
-     hours in the background (see README.md)
+  2. fetch politely: EVERY page of the URL lists (--delay seconds between requests, default 2, a
+     normal browser user agent, robots.txt respected); every page is cached on disk (--cache),
+     so a re-run (after a crash, Ctrl-C or a network outage) skips what it already has:
+     resumable, runs for hours in the background (see README.md)
+  3. match each selected recipe to a page BY NAME: the JSON-LD name cut the way the importer cut
+     titles must equal the stored name (cut the same way, umlaut spelling and punctuation
+     ignored). URL slugs play no part: they are often shorter than the title, spelled
+     differently or from an older title. Reports matched / ambiguous / unmatched
   4. parse with recipe_parse + the importer's catalog/overrides matching, compare with the
      stored rows, write:
        _repair/repair_<selector>_<stamp>.sql   guarded statements, NO BEGIN/COMMIT
@@ -50,7 +52,7 @@ Usage:
   python repair_quantities.py --select all                     # overnight; same cache, resumable
   python repair_quantities.py --select suspect --offline       # rebuild the files from cache only
 """
-import argparse, bisect, hashlib, json, os, re, sys, time, unicodedata
+import argparse, hashlib, json, os, re, sys, time, unicodedata
 import urllib.error, urllib.request, urllib.robotparser
 from collections import Counter
 from datetime import datetime
@@ -140,37 +142,28 @@ def name_key(text):
     return "-".join(re.findall(r"[a-z0-9]+", t))
 
 
-def same_title(a, b):
-    norm = lambda s: re.sub(r"\s+", " ", (s or "").strip()).casefold()
-    return norm(a) == norm(b)
+def title_key(name):
+    """Key for 'is this the same recipe name': both the stored name and a page's JSON-LD name are
+    cut the way the importer cut titles (subtitle after a double space, marketing blurb, 120
+    characters) and then compared without caring for umlaut spelling, case or punctuation."""
+    return name_key(recipe_parse.cut_title(name))
 
 
-class UrlIndex:
-    def __init__(self, urls):
-        self.urls = urls
-        self.by_key = {}
-        for u in urls:
-            self.by_key.setdefault(self.slug_key(u), []).append(u)
-        self.keys = sorted(self.by_key)
-
-    @staticmethod
-    def slug_key(url):
-        slug = url.rstrip("/").rsplit("/", 1)[-1]
-        slug = HASH_RE.sub("", slug)
-        return name_key(slug)
-
-    def candidates(self, name, limit):
-        """URLs whose slug equals the name, then URLs whose slug starts with it (a subtitle
-        follows). Returns (urls, truncated)."""
-        key = name_key(name)
-        if not key:
-            return [], False
-        out = list(self.by_key.get(key, []))
-        lo = bisect.bisect_left(self.keys, key + "-")
-        hi = bisect.bisect_left(self.keys, key + "-￿")
-        for k in self.keys[lo:hi]:
-            out.extend(self.by_key[k])
-        return out[:limit], len(out) > limit
+def build_page_index(urls, fetcher, log=None, every=200):
+    """Fetch (or read from the cache) every page and index it by title_key of its JSON-LD name.
+    -> ({title_key: [url, ...]}, Counter of page statuses). Resumable: cached pages cost nothing."""
+    log = log or (lambda msg: None)
+    by_name, statuses = {}, Counter()
+    started = time.monotonic()
+    for n, url in enumerate(urls, 1):
+        status, rec = fetcher.get(url)
+        statuses[status] += 1
+        if status == "ok" and rec.get("name"):
+            by_name.setdefault(title_key(rec["name"]), []).append(url)
+        if n % every == 0:
+            log(f"  pages {n}/{len(urls)}, {time.monotonic() - started:.0f}s, fetched {fetcher.stats['fetched']}, "
+                f"cached {fetcher.stats['cache']}, 404 {statuses['404']}, errors {statuses['error']}")
+    return by_name, statuses
 
 
 def read_url_files(paths):
@@ -265,6 +258,16 @@ class Fetcher:
         self.stats["error"] += 1
         self.log(f"  fetch failed (will retry on the next run): {url} ({last})")
         return "error", last
+
+    def cached(self, url):
+        """A page already fetched by this or an earlier run, without touching the statistics:
+        -> (status, recipe) or ('uncached', None)."""
+        try:
+            with open(self._path(url), encoding="utf-8") as f:
+                c = json.load(f)
+            return c["status"], c.get("recipe")
+        except OSError:
+            return "uncached", None
 
     def _store(self, path, url, status, rec):
         tmp = path + ".tmp"
@@ -375,6 +378,14 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
         iid = line["item_id"]
         name = state.item_names.get(iid, "")
         new = {"quantity": line["quantity"], "unit": line["unit"], "to_taste": line["to_taste"]}
+        if line.get("held_collision"):
+            # same item as another line of this page and at least one of the two matches is uncertain:
+            # not summed into it, not written; listed on its own
+            plan.counts["held_unconfident"] += 1
+            plan.tsv_row(recipe, url, "review-uncertain-match", "", iid, None, new, line["raw"], line["conf"],
+                         "second line for an item already on this page, uncertain match: not summed, not in the SQL; "
+                         + (line["note"] or ""), name)
+            continue
         if iid is None:
             plan.counts["unmatched_line"] += 1
             plan.tsv_row(recipe, url, "review-unmatched", "", "", None, new, line["raw"], line["conf"], line["note"])
@@ -452,51 +463,55 @@ def _comment(text):
 
 
 # ---------- the run ----------
-def run(state, urls, selector, fetcher, catalog, include_other=False, limit=0, max_candidates=5, log=None):
+def run(state, urls, selector, fetcher, catalog, include_other=False, limit=0, log=None):
     log = log or (lambda msg: print(msg, file=sys.stderr, flush=True))
-    index = UrlIndex(urls)
     plan = Plan()
-    selected = state.select(selector)
+    by_name, statuses = build_page_index(urls, fetcher, log)
+    plan.counts["page_404"] = statuses["404"]
+    unreadable = statuses["error"] + statuses["uncached"]
+    stored_names = Counter(title_key(r["name"]) for r in state.recipes.values())
+    selected = state.select(selector)                 # the selector looks at DB rows, after pages are known
     if limit:
         selected = selected[:limit]
     plan.counts["selected"] = len(selected)
     pantry = lambda n: is_pantry(n, n)
-    started = time.monotonic()
-    for n, rid in enumerate(selected, 1):
+    for rid in selected:
         recipe = state.recipes[rid]
+        key = title_key(recipe["name"])
         if recipe.get("source_url"):
-            cands, truncated = [recipe["source_url"]], False
+            cands = [recipe["source_url"]]
         else:
-            cands, truncated = index.candidates(recipe["name"], max_candidates)
-        confirmed, statuses = [], Counter()
+            cands = by_name.get(key, [])
+        confirmed = []
         for url in cands:
-            status, rec = fetcher.get(url)
-            statuses[status] += 1
-            if status == "ok" and same_title(recipe_parse.cut_title(rec.get("name")), recipe["name"]):
+            status, rec = fetcher.cached(url)         # read back from the cache
+            if status == "ok" and title_key(rec.get("name")) == key:
                 confirmed.append((url, recipe_parse.parse_recipe(rec, catalog, is_pantry=pantry)))
-        plan.counts["page_404"] += statuses["404"]
         if not confirmed:
-            why = "no URL slug matches the name" if not cands else \
-                f"no page confirmed the name ({', '.join(f'{k} {v}' for k, v in sorted(statuses.items()))})"
-            if statuses["error"] or statuses["uncached"]:
+            why = "no page has this name"
+            if unreadable:
                 plan.counts["incomplete"] += 1
-                why += "; some pages could not be read yet, re-run to retry"
+                why += f"; {unreadable} pages could not be read yet, re-run to retry"
             plan.counts["unmatched"] += 1
             plan.tsv_row(recipe, "", "unmatched", note=why)
             continue
-        if len({lines_signature(p) for _u, p in confirmed}) > 1:
+        if len(confirmed) > 1:
+            same = len({lines_signature(p) for _u, p in confirmed}) == 1
             plan.counts["ambiguous"] += 1
             plan.tsv_row(recipe, " ".join(u for u, _p in confirmed), "ambiguous",
-                         note=f"{len(confirmed)} pages with this name disagree; nothing changed")
+                         note=f"{len(confirmed)} pages have this name"
+                         + (" (same ingredient lines)" if same else " (ingredient lines differ)")
+                         + "; nothing changed")
+            continue
+        if not recipe.get("source_url") and stored_names[key] > 1:
+            plan.counts["ambiguous"] += 1
+            plan.tsv_row(recipe, confirmed[0][0], "ambiguous",
+                         note=f"{stored_names[key]} stored recipes have this name, so the page cannot be "
+                         "assigned to one of them; nothing changed")
             continue
         url, parsed = confirmed[0]
-        if truncated:
-            parsed["notes"].append(f"more than {max_candidates} URL candidates; first {max_candidates} checked")
         plan.counts["matched"] += 1
         plan_recipe(plan, state, recipe, url, parsed, include_other)
-        if n % 50 == 0:
-            log(f"  {n}/{len(selected)} recipes, {time.monotonic() - started:.0f}s, "
-                f"fetched {fetcher.stats['fetched']}, cached {fetcher.stats['cache']}")
     return plan
 
 
@@ -562,7 +577,6 @@ def main(argv=None):
     ap.add_argument("--out", default=DEFAULT_OUT, help="where the .sql/.tsv/.txt go")
     ap.add_argument("--delay", type=float, default=2.0, help="seconds between requests (default 2)")
     ap.add_argument("--limit", type=int, default=0, help="only the first N selected recipes")
-    ap.add_argument("--max-candidates", type=int, default=5, help="pages checked per recipe at most")
     ap.add_argument("--offline", action="store_true", help="never touch the network; cached pages only")
     ap.add_argument("--include-other", action="store_true",
                     help="also write changes that are not a known bug, and new non-spoon/non-to-taste lines")
@@ -586,7 +600,7 @@ def main(argv=None):
     catalog = Catalog(state.items, load_overrides())
     fetcher = Fetcher(args.cache, delay=args.delay, offline=args.offline)
     plan = run(state, urls, args.select, fetcher, catalog, include_other=args.include_other,
-               limit=args.limit, max_candidates=args.max_candidates)
+               limit=args.limit)
     text = summary(plan, fetcher, args.select, len(urls))
     stamp = args.stamp or datetime.now().strftime("%Y%m%d-%H%M%S")
     base = write_outputs(plan, args.out, args.select, stamp, text)

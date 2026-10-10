@@ -103,18 +103,45 @@ It writes three files to `scripts/importer/_repair/` and **never changes the dat
 
 ### Matching recipes to pages
 
-The recipe table had no URL before, so recipes are matched by name:
+The recipe table had no URL before, so recipes are matched **by name, never by URL slug**:
 
-1. The URL slug must equal the recipe name, or start with it. Umlaut spelling is ignored.
-2. The page's JSON-LD name, cut the way the importer cut titles, must equal the stored name.
-3. A recipe that already has `recipe_source_url` uses that page.
+1. Every page of the URL lists is fetched (or read from the cache) and indexed by its JSON-LD name.
+2. Page name and stored name are both cut the way the importer cut titles (subtitle after a double
+   space, marketing blurb, 120 characters) and compared ignoring case, umlaut spelling and
+   punctuation.
+3. A recipe that already has `recipe_source_url` uses that page (the name must still agree).
 
 The summary counts matched, ambiguous and unmatched recipes:
 
-- **Ambiguous**: several pages with this name that disagree on their ingredients.
-- **Unmatched**: no slug or no confirmed page.
+- **Ambiguous**: several pages have this name (even with identical lines), or several stored
+  recipes share the name so a page cannot be assigned to one of them. Nothing is written.
+- **Unmatched**: no page has this name. When some pages could not be read yet, the summary says
+  "incomplete, re-run to retry".
 
-Neither is changed.
+Why not slugs: they are often just the first half of the title ("…-tacos" for "… Tacos mit selbst
+gemachter Salsa und Mayonnaise"), spelled differently ("&" is "and", "Harissabaguette" is
+"harissabagutte") or come from an older title. In a sample of 20 unmatched recipes, 14 had a page
+with exactly the stored name behind a shorter slug.
+
+Because every page has to be known, the selector (`suspect` / `all`) is applied to the database
+rows after matching, and **both selectors need the full fetch once**; the cache serves the second.
+If two lines of a page land on the same catalog item they are only added up when both matches are
+confident; an uncertain line is listed on its own (`review-uncertain-match`) and never summed.
+
+### Overnight run
+
+```bash
+# from the PHP project folder; credentials come from the containers' environment
+docker run --rm --network php-sandbox_default --user 1000:1000 --env-file <env file with DAHAEM_DB_*> \
+  -e HOME=/tmp -e PYTHONUSERBASE=/tmp/pyl -v /home/nate/dahaem/scripts/importer:/work -w /work python:3.12-slim \
+  sh -c 'pip install -q --user -r requirements.txt && python repair_quantities.py --select suspect --delay 2'
+```
+
+1. The first run fetches all ~12,162 pages (about 7 hours at 2 s) into `_cache/pages/`; the run
+   can be stopped and started again, cached pages and 404s are skipped.
+2. It then writes the `suspect` files. Review the TSV and apply the SQL as described below.
+3. `--select all` reads the same cache (no new requests) and writes its own set of files. Review
+   and apply them separately, after the `suspect` repair.
 
 ### What goes into the SQL
 

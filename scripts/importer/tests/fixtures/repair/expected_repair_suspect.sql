@@ -8,8 +8,8 @@
 -- The client stops at the first error, so COMMIT is never reached and nothing is kept.
 --
 -- selector: suspect    recipes selected: 6    URLs loaded: 8
--- recipes: matched 3 | ambiguous 1 | unmatched 2
--- pages: fetched 0 | from cache 7 | 404 1 | fetch errors 0 | robots.txt-disallowed 0 | not cached (offline) 0
+-- recipes: matched 3 | ambiguous 1 | unmatched 2 (of which 2 incomplete, re-run to retry)
+-- pages: fetched 0 | from cache 7 | 404 1 | fetch errors 0 | robots.txt-disallowed 0 | not cached (offline) 1
 -- rows updated: 7 = ½-bug fixed 3 | rounding fixed 2 | unit changed 1 | now to-taste 1 | other 0
 -- lines inserted: 3 = EL/TL 2 | to-taste 1 | other 0
 -- servings changed: 1 | servings kept, recipeYield missing 1    source URLs set: 3
