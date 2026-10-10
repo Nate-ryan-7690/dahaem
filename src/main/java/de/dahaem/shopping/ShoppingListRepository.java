@@ -1,6 +1,7 @@
 package de.dahaem.shopping;
 
 import de.dahaem.shared.Database;
+import de.dahaem.shared.Portions;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -52,11 +53,12 @@ public class ShoppingListRepository {
      * Same as {@link #aggregateIngredients(List)}, but scales each recipe's ingredient quantities
      * by {@code people / recipe_servings} before summing across recipes — so a 2-serving recipe's
      * ingredients double at {@code people=4}. Only recipes with a positive recipe_servings
-     * contribute (division-by-zero guard); {@code people} must be at least 1.
+     * contribute (division-by-zero guard); {@code people} must be at least 1. The factor and both
+     * guards are the ones {@link Portions} defines for the recipe endpoint; keep them in step.
      */
     public List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds, int people) {
-        if (people < 1) {
-            throw new IllegalArgumentException("people must be at least 1");
+        if (!Portions.isValidPeople(people)) {
+            throw new IllegalArgumentException(Portions.INVALID_PEOPLE_MESSAGE);
         }
         if (recipeIds.isEmpty()) {
             return Collections.emptyList();

@@ -1,6 +1,7 @@
 package de.dahaem.api;
 
 import de.dahaem.mealplanner.RecipeService;
+import de.dahaem.shared.Portions;
 import de.dahaem.shopping.ShoppingList;
 import de.dahaem.shopping.ShoppingListService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,8 +36,8 @@ public class ShoppingListController {
         if (ids.isEmpty() || ids.contains(null)) {
             throw new BadRequestException("'recipeIds' must list at least one recipe id");
         }
-        if (people != null && people < 1) {
-            throw new BadRequestException("'people' must be at least 1");
+        if (people != null && !Portions.isValidPeople(people)) {
+            throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
         }
         ids.forEach(id -> RecipeController.findRecipe(recipeService, id));
         ShoppingList list = people == null

@@ -146,7 +146,7 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/inventory/expiring?days=7` | items expiring within N days |
 | GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
 | GET | `/api/recipes` | recipe list |
-| GET | `/api/recipes/{id}` | recipe with nutrition, ingredients, instructions; 404 if unknown |
+| GET | `/api/recipes/{id}[?people=N]` | recipe with nutrition (per serving), ingredients, instructions; with `people` (>= 1, else 400) each ingredient also carries `scaledQuantity` = quantity × people / servings (2 decimals); `scalable` is false when servings is 0; 404 if unknown |
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
 | POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |

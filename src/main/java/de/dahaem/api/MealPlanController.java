@@ -3,6 +3,7 @@ package de.dahaem.api;
 import de.dahaem.mealplanner.MealPlan;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.RecipeService;
+import de.dahaem.shared.Portions;
 import de.dahaem.shopping.ShoppingListService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -98,8 +99,8 @@ public class MealPlanController {
                 .filter(p -> p.getId() == id)
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("No meal plan with id " + id));
-        if (people != null && people < 1) {
-            throw new BadRequestException("'people' must be at least 1");
+        if (people != null && !Portions.isValidPeople(people)) {
+            throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
         }
         int shoppingListId = people == null
                 ? shoppingListService.generateFromMealPlan(id)
