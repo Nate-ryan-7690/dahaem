@@ -163,13 +163,27 @@ class RecipeTest(unittest.TestCase):
 
     def test_same_item_different_units_keeps_first_and_reports(self):
         merged, notes = recipe_parse.merge_lines([
-            {"item_id": 1022, "name": "Olivenöl", "quantity": Decimal(2), "unit": "EL", "to_taste": False},
-            {"item_id": 1022, "name": "Olivenöl", "quantity": Decimal(50), "unit": "ml", "to_taste": False},
-            {"item_id": 1148, "name": "Salz", "quantity": None, "unit": "", "to_taste": True},
-            {"item_id": 1148, "name": "Salz", "quantity": Decimal(1), "unit": "Prise", "to_taste": False},
+            {"item_id": 1022, "name": "Olivenöl", "quantity": Decimal(2), "unit": "EL", "to_taste": False, "conf": "exact"},
+            {"item_id": 1022, "name": "Olivenöl", "quantity": Decimal(50), "unit": "ml", "to_taste": False, "conf": "exact"},
+            {"item_id": 1148, "name": "Salz", "quantity": None, "unit": "", "to_taste": True, "conf": "override"},
+            {"item_id": 1148, "name": "Salz", "quantity": Decimal(1), "unit": "Prise", "to_taste": False, "conf": "override"},
         ])
         self.assertEqual([(Decimal(2), "EL"), (Decimal(1), "Prise")], [(m["quantity"], m["unit"]) for m in merged])
         self.assertTrue(notes[0].startswith("REVIEW item #1022"))
+
+    def test_uncertain_lines_are_never_summed(self):
+        # "160 pikante Paprikasoße" (fuzzy match to Paprika) next to "1 rote Paprika" (exact)
+        def line(raw, qty, conf):
+            return {"item_id": 54, "name": raw, "raw": raw, "quantity": Decimal(qty), "unit": "Stück",
+                    "to_taste": False, "conf": conf, "note": ""}
+        for first, second in (("exact", "like"), ("like", "exact"), ("like", "like"), ("multi", "override")):
+            merged, notes = recipe_parse.merge_lines([line("rote Paprika", 1, first), line("pikante Paprikasoße", 160, second)])
+            self.assertEqual([Decimal(1), Decimal(160)], [m["quantity"] for m in merged], (first, second))
+            self.assertFalse(merged[0].get("held_collision"))
+            self.assertTrue(merged[1]["held_collision"])        # listed on its own, never added up
+            self.assertFalse(any("summed" in n for n in notes))
+        merged, _ = recipe_parse.merge_lines([line("rote Paprika", 1, "exact"), line("Paprika", 2, "override")])
+        self.assertEqual([Decimal(3)], [m["quantity"] for m in merged])       # both confident: summed
 
     def test_recipe_from_saved_page(self):
         with open(os.path.join(FIXTURES, "jsonld", "page.html"), encoding="utf-8") as f:

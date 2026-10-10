@@ -161,7 +161,7 @@ def strip_lead_unit(name):
     """'Stück Gemüsebrühe' -> ('Stück', 'Gemüsebrühe'); kept for rematch.py. Returns (unit_or_None, name)."""
     return recipe_parse.split_unit(name)
 
-CONFIDENT = ("override", "rule", "exact")
+CONFIDENT = recipe_parse.CONFIDENT
 
 # ---------- per recipe ----------
 def process(hash_id, pdf_path, cat, rename, delay):
@@ -192,6 +192,9 @@ def process(hash_id, pdf_path, cat, rename, delay):
 
     matched, reviews = [], []
     for ln in parsed["lines"]:
+        if ln.get("held_collision"):             # same item as an earlier line, uncertain: never summed, never a 2nd row
+            reviews.append((ln["name"], ln["item_id"], ln["conf"], "not combined with the earlier line of this item"))
+            continue
         matched.append((ln["name"], ln["unit"], ln["quantity"], ln["to_taste"], ln["item_id"], ln["conf"], ln["note"]))
         if ln["conf"] not in CONFIDENT:
             reviews.append((ln["name"], ln["item_id"], ln["conf"], ln["note"]))

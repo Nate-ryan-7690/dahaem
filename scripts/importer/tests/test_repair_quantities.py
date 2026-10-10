@@ -11,13 +11,14 @@ import shutil
 import sys
 import tempfile
 import unittest
+from decimal import Decimal
 from contextlib import redirect_stderr, redirect_stdout
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 import repair_quantities  # noqa: E402
-from repair_quantities import Fetcher, UrlIndex, name_key  # noqa: E402
+from repair_quantities import Fetcher, build_page_index, name_key, title_key  # noqa: E402
 
 FIXTURES = os.path.join(HERE, "fixtures")
 REPAIR = os.path.join(FIXTURES, "repair")
@@ -88,8 +89,8 @@ class RepairToolTest(unittest.TestCase):
         out = self.run_tool("--select", "suspect")
         for expected in [
             "selector: suspect    recipes selected: 6    URLs loaded: 8",
-            "recipes: matched 3 | ambiguous 1 | unmatched 2",
-            "pages: fetched 0 | from cache 7 | 404 1 | fetch errors 0",
+            "recipes: matched 3 | ambiguous 1 | unmatched 2 (of which 2 incomplete, re-run to retry)",
+            "pages: fetched 0 | from cache 7 | 404 1 | fetch errors 0 | robots.txt-disallowed 0 | not cached (offline) 1",
             "rows updated: 7 = ½-bug fixed 3 | rounding fixed 2 | unit changed 1 | now to-taste 1 | other 0",
             "lines inserted: 3 = EL/TL 2 | to-taste 1 | other 0",
             "servings changed: 1 | servings kept, recipeYield missing 1    source URLs set: 3",
@@ -199,8 +200,109 @@ class RepairToolTest(unittest.TestCase):
     def test_offline_run_reports_uncached_pages_as_incomplete(self):
         os.remove(os.path.join(self.cache, "5f1a2b3c4d5e6f7a8b9c0d1e.json"))
         out = self.run_tool("--select", "suspect")
-        self.assertIn("not cached (offline) 1", out)
+        self.assertIn("not cached (offline) 2", out)
         self.assertIn("incomplete, re-run to retry", out)
+
+
+class NameMatchingRunTest(unittest.TestCase):
+    """End to end on a tiny database: matching goes by page name, never by URL slug."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.cache = os.path.join(self.tmp, "cache")
+        self.out = os.path.join(self.tmp, "out")
+        with open(os.path.join(REPAIR, "state.json"), encoding="utf-8") as f:
+            full = json.load(f)
+        self.items = full["items"]
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def page(self, name, lines):
+        return {"@type": "Recipe", "name": name, "recipeYield": 2, "totalTime": "PT20M", "recipeIngredient": lines}
+
+    def run_tool(self, recipes, ingredients, pages):
+        """recipes: [(id, name)], ingredients: [(recipe_id, item_id, unit, qty)], pages: {slug: json-ld}."""
+        state = {"recipes": [{"id": i, "name": n, "servings": 2, "source_url": None} for i, n in recipes],
+                 "ingredients": [{"recipe_id": r, "item_id": i, "unit": u, "quantity": q, "to_taste": False}
+                                 for r, i, u, q in ingredients],
+                 "items": self.items}
+        state_path = os.path.join(self.tmp, "state.json")
+        urls_path = os.path.join(self.tmp, "urls.txt")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        fetcher = Fetcher(self.cache, offline=True)
+        with open(urls_path, "w", encoding="utf-8") as f:
+            for n, (slug, rec) in enumerate(pages.items()):
+                url = f"https://www.hellofresh.de/recipes/{slug}-{n:024x}"
+                f.write(url + "\n")
+                fetcher._store(fetcher._path(url), url, "ok", rec)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            repair_quantities.main(["--state", state_path, "--urls", urls_path, "--cache", self.cache,
+                                    "--out", self.out, "--offline", "--stamp", "T", "--select", "suspect"])
+        with open(os.path.join(self.out, "repair_suspect_T.tsv"), encoding="utf-8") as f:
+            header, *rows = [l.rstrip("\n").split("\t") for l in f]
+        with open(os.path.join(self.out, "repair_suspect_T.sql"), encoding="utf-8") as f:
+            sql = f.read()
+        return stdout.getvalue(), [dict(zip(header, r)) for r in rows], sql
+
+    def test_slug_that_has_nothing_to_do_with_the_name_still_matches(self):
+        out, rows, sql = self.run_tool(
+            [(10, "Käsespätzle all‘italiana mit Mozzarella und Pinienkernen")],
+            [(10, 186, "Stück", 5)],
+            {"spaetzle-pfanne-zufaellig": self.page(
+                "Käsespätzle all‘Italiana mit Mozzarella und Pinienkernen  Geschmolzen", ["½ Stück Zitrone"]),
+             "kaesespaetzle-all-italiana-mit-mozzarella": self.page("Etwas ganz anderes", ["1 Stück Zitrone"])})
+        self.assertIn("recipes: matched 1 | ambiguous 0 | unmatched 0", out)
+        self.assertIn("quantity_needed = 0.5, recipe_ingredient_unit = 'Stück'", sql)
+
+    def test_umlaut_spelling_and_the_title_cut_on_the_stored_name(self):
+        out, rows, sql = self.run_tool(
+            [(10, "Haehnchen-Curry verzehrfertiges Gericht enthält max. 20% Kohlenhydrate")],
+            [(10, 186, "Stück", 5)],
+            {"x": self.page("Hähnchen-Curry  mit Reis", ["½ Stück Zitrone"])})
+        self.assertIn("matched 1 |", out)
+
+    def test_two_pages_with_one_name_are_ambiguous_and_write_nothing(self):
+        out, rows, sql = self.run_tool(
+            [(10, "Ofengemüse")], [(10, 186, "Stück", 5)],
+            {"a": self.page("Ofengemüse", ["½ Stück Zitrone"]),
+             "b": self.page("Ofengemüse  mit Feta", ["½ Stück Zitrone"])})      # same lines: still held
+        self.assertIn("matched 0 | ambiguous 1 | unmatched 0", out)
+        self.assertEqual(["ambiguous"], [r["action"] for r in rows])
+        self.assertNotIn("UPDATE recipe_ingredient", sql)
+        self.assertNotIn("INSERT", sql)
+
+    def test_two_stored_recipes_with_one_name_are_ambiguous(self):
+        out, rows, sql = self.run_tool(
+            [(10, "Ofengemüse"), (11, "ofengemuese")], [(10, 186, "Stück", 5), (11, 186, "Stück", 5)],
+            {"a": self.page("Ofengemüse", ["½ Stück Zitrone"])})
+        self.assertIn("matched 0 | ambiguous 2", out)
+        self.assertNotIn("UPDATE recipe_ingredient", sql)
+
+    def test_no_page_with_the_name_is_unmatched(self):
+        out, rows, _sql = self.run_tool(
+            [(10, "Saftiges Rumpsteak")], [(10, 186, "Stück", 5)],
+            {"saftiges-rumpsteak": self.page("Saftiges Rindersteak", ["½ Stück Zitrone"])})   # right slug, wrong name
+        self.assertIn("matched 0 | ambiguous 0 | unmatched 1", out)
+        self.assertEqual("no page has this name", rows[0]["note"])
+
+    def test_uncertain_second_line_is_listed_on_its_own_not_in_the_sql(self):
+        state = repair_quantities.State.from_json(os.path.join(REPAIR, "state.json"))
+        plan = repair_quantities.Plan()
+        recipe = state.recipes[1]
+        line = lambda raw, qty, conf, held=False: {
+            "raw": raw, "name": raw, "item_id": 59, "quantity": Decimal(qty), "unit": "Stück", "to_taste": False,
+            "conf": conf, "note": "", **({"held_collision": True} if held else {})}
+        parsed = {"servings": 2, "servings_source": "recipeYield", "notes": [],
+                  "lines": [line("1 rote Paprika", 1, "exact"), line("160 pikante Paprikasoße", 160, "like", True)]}
+        repair_quantities.plan_recipe(plan, state, recipe, "https://x/recipes/p-" + "0" * 24, parsed, False)
+        self.assertNotIn("161", "\n".join(plan.sql))
+        self.assertNotIn("160", "\n".join(plan.sql))
+        held = [r for r in plan.tsv if r[3] == "review-uncertain-match"]
+        self.assertEqual(1, len(held))
+        self.assertIn("160 pikante Paprikasoße", held[0])
 
 
 class FetcherTest(unittest.TestCase):
@@ -256,20 +358,35 @@ class FetcherTest(unittest.TestCase):
 
 
 class MatchingTest(unittest.TestCase):
+    """Recipes are matched to pages by name, not by URL slug."""
 
     def test_name_keys_ignore_umlaut_spelling(self):
         self.assertEqual(name_key("Hähnchen-Curry"), name_key("haehnchen-curry"))
-        self.assertEqual(name_key("Ofengemüse"), UrlIndex.slug_key(
-            "https://www.hellofresh.de/recipes/ofengemuse-7a1b2c3d4e5f6a7b8c9d0e1f"))
 
-    def test_candidates_exact_first_then_with_subtitle(self):
-        index = UrlIndex(["https://x/recipes/ofengemuse-mit-feta-7b1b2c3d4e5f6a7b8c9d0e1f",
-                          "https://x/recipes/ofengemuse-7a1b2c3d4e5f6a7b8c9d0e1f",
-                          "https://x/recipes/ofengemusesuppe-7c1b2c3d4e5f6a7b8c9d0e1f"])
-        urls, truncated = index.candidates("Ofengemüse", 5)
-        self.assertEqual(["https://x/recipes/ofengemuse-7a1b2c3d4e5f6a7b8c9d0e1f",
-                          "https://x/recipes/ofengemuse-mit-feta-7b1b2c3d4e5f6a7b8c9d0e1f"], urls)
-        self.assertFalse(truncated)
+    def test_title_key_cuts_both_sides_like_the_importer(self):
+        # page name: subtitle after a double space; stored name from an older import: marketing blurb kept
+        page = "Käsige Bio-Hackbällchen  mit Rahmkohlrabi"
+        self.assertEqual(title_key("Käsige Bio-Hackbällchen"), title_key(page))
+        self.assertEqual(title_key("Käsige Bio-Hackbällchen verzehrfertiges Gericht enthält max. 20% Kohlenhydrate"),
+                         title_key("Käsige Bio-Hackbällchen  mit Rahmkohlrabi verzehrfertiges Gericht"))
+        self.assertEqual(title_key("Ofengemüse"), title_key("OFENGEMUESE"))
+        self.assertNotEqual(title_key("Ofengemüse"), title_key("Ofengemüse mit Feta"))
+        self.assertEqual(title_key("x" * 130), title_key("x" * 125))      # 120-character cut
+
+    def test_index_is_built_from_the_page_names(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            fill_cache(tmp)
+            urls = [l.strip() for l in open(os.path.join(REPAIR, "recipe_urls.txt"), encoding="utf-8")
+                    if l.strip() and not l.startswith("#")]
+            by_name, statuses = build_page_index(urls, Fetcher(tmp, offline=True))
+        finally:
+            shutil.rmtree(tmp)
+        self.assertEqual(2, len(by_name[title_key("Ofengemüse")]))          # two pages, one name
+        # the slug says "zitronen-hahnchen-mit-reis" but the page is called "Zitronen-Hähnchen mit Reis"
+        self.assertIn(title_key("Zitronen-Hähnchen mit Reis"), by_name)
+        self.assertEqual(1, statuses["404"])
+        self.assertEqual(1, statuses["uncached"])
 
 
 if __name__ == "__main__":
