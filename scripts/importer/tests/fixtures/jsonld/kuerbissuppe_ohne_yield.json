@@ -1,0 +1,28 @@
+{
+  "@context": "http://schema.org",
+  "@type": "Recipe",
+  "name": "Kürbissuppe",
+  "totalTime": "PT30M",
+  "nutrition": {
+    "@type": "NutritionInformation",
+    "calories": "620 kcal",
+    "proteinContent": "32 g",
+    "carbohydrateContent": "70,5 g",
+    "fatContent": "21 g",
+    "fiberContent": "8 g",
+    "sugarContent": "9 g"
+  },
+  "recipeIngredient": [
+    "½ Stück Zwiebel"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToStep",
+      "text": "Alles vorbereiten."
+    },
+    {
+      "@type": "HowToStep",
+      "text": "Kochen und servieren."
+    }
+  ]
+}

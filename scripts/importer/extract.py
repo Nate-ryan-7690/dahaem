@@ -11,31 +11,40 @@ full nutrition (incl. fibre), ingredient strings and numbered steps, so there is
 no fragile PDF-layout parsing. Ingredient german names are matched to the
 inventory_item catalog via overrides.json (see that file).
 
-Nothing is written to the DB here. Per PDF it writes:
+Nothing is written to the DB here (the catalog is READ from MariaDB, configured by the
+DAHAEM_DB_* environment variables, see db.py). Per PDF it writes:
   - scripts/recipes/_drafts/<Title>.sql   (review, then load.py)
   - a line in the match report (stdout + _drafts/_report.txt)
 and renames the source PDF to <Title>.pdf.
+
+Ingredient parsing lives in recipe_parse.py: exact decimal amounts (½ -> 0.5), spoons as
+EL/TL, "nach Geschmack"/amountless lines as to-taste rows, bundle-for-4 servings.
 
 Usage:
   python extract.py                 # default folder, only *-de-DE.pdf
   python extract.py --no-rename     # don't rename the PDFs
   python extract.py --delay 1.5     # seconds between fetches (be polite)
 """
-import argparse, glob, html as htmllib, json, math, os, re, sqlite3, sys, time
+import argparse, glob, html as htmllib, json, math, os, re, sys, time
 import urllib.request as urlreq
+
+import recipe_parse
+from recipe_parse import find_recipe as _find_recipe, num, sql_decimal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.abspath(os.path.join(HERE, "..", ".."))
 DEFAULT_IN = r"C:\Users\Schüler\Documents\Akademie Überlingen\IT umschulng Module 1\Projekte\Kitchen Organizer DB\Recipe Scans"
-DEFAULT_DB = os.path.join(PROJECT, "data", "kitchen_organizer.db")
 DRAFTS = os.path.join(PROJECT, "scripts", "recipes", "_drafts")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-UNITS = {"g", "kg", "ml", "l", "Stück", "EL", "TL", "Bund", "Dose", "Packung", "Prise", "Zehe", "Scheibe", "Scheiben"}
+UNITS = recipe_parse.UNITS
 
 # ---------- fetch + JSON-LD ----------
+def recipe_url(hash_id):
+    return "https://www.hellofresh.de/recipes/r-" + hash_id
+
 def fetch_recipe(hash_id, retries=4):
     """Returns Recipe dict, or None if fetched-but-empty. Raises after `retries` network failures."""
-    url = "https://www.hellofresh.de/recipes/r-" + hash_id
+    url = recipe_url(hash_id)
     last = None
     for attempt in range(retries):
         try:
@@ -53,35 +62,10 @@ def fetch_recipe(hash_id, retries=4):
             time.sleep(min(30, 3 * (attempt + 1)))   # 3s,6s,9s,12s backoff
     raise last
 
-def _find_recipe(o):
-    if isinstance(o, dict):
-        t = o.get("@type")
-        if t == "Recipe" or (isinstance(t, list) and "Recipe" in t):
-            return o
-        for v in o.values():
-            r = _find_recipe(v)
-            if r:
-                return r
-    elif isinstance(o, list):
-        for v in o:
-            r = _find_recipe(v)
-            if r:
-                return r
-    return None
-
 # ---------- helpers ----------
 UML = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "Ä": "ae", "Ö": "oe", "Ü": "ue"})
-FRAC = {"½": ".5", "¼": ".25", "¾": ".75", "⅓": ".333", "⅔": ".667"}
-
 def round_half_up(x):
     return int(math.floor(x + 0.5))
-
-def num(s):
-    for k, v in FRAC.items():
-        s = s.replace(k, v)
-    s = s.replace(",", ".")
-    m = re.search(r"\d+(?:\.\d+)?", s)
-    return float(m.group()) if m else None
 
 def normalize(label):
     s = re.sub(r"\d+\)", " ", label)
@@ -112,7 +96,7 @@ def nut_int(nut, key):
     if not v:
         return None
     n = num(str(v))
-    return round_half_up(n) if n is not None else None
+    return round_half_up(float(n)) if n is not None else None
 
 def strip_html(s):
     s = htmllib.unescape(s)
@@ -123,11 +107,9 @@ def strip_html(s):
 
 # ---------- ingredient parsing + matching ----------
 class Catalog:
-    def __init__(self, db, overrides):
-        con = sqlite3.connect(db)
-        self.rows = [(i, normalize(de or ""), en) for i, en, de in con.execute(
-            "SELECT inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch FROM inventory_item")]
-        con.close()
+    """Matches an ingredient name to an inventory_item id. items: (id, name_english, name_deutsch)."""
+    def __init__(self, items, overrides):
+        self.rows = [(i, normalize(de or ""), en) for i, en, de in items]
         self.exact = overrides.get("exact", {})
         self.rules = overrides.get("contains_rules", [])
         self.by_norm = {}
@@ -151,6 +133,17 @@ class Catalog:
             return subs[0][0], "like-multi", "; ".join(f"#{i} {en}" for i, en in subs[:4])
         return None, "none", "NO MATCH -> add to catalog or overrides.json"
 
+    @classmethod
+    def from_db(cls, con, overrides):
+        with con.cursor() as cur:
+            cur.execute("SELECT inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch "
+                        "FROM inventory_item")
+            return cls(list(cur.fetchall()), overrides)
+
+def load_overrides():
+    with open(os.path.join(HERE, "overrides.json"), encoding="utf-8") as f:
+        return json.load(f)
+
 # Only WATER is used-but-never-bought, so only it is dropped. Salt, pepper, oil, sugar,
 # flour, vinegar etc. ARE tracked ingredients in this app: users own and re-buy them, so
 # they belong in the pantry and on the shopping list. (A meal-kit omits them because they
@@ -165,31 +158,14 @@ def is_pantry(raw, name):
     return any(tok in PANTRY for tok in normalize(name).split())
 
 def strip_lead_unit(name):
-    """'Stück Gemüsebrühe' -> ('Stück', 'Gemüsebrühe'). Some HelloFresh lines give a
-    unit with no number; without this the unit stays glued to the name and never
-    matches. Returns (unit_or_None, cleaned_name)."""
-    parts = name.split(None, 1)
-    if len(parts) == 2 and parts[0] in UNITS:
-        return parts[0], parts[1].strip()
-    return None, name
+    """'Stück Gemüsebrühe' -> ('Stück', 'Gemüsebrühe'); kept for rematch.py. Returns (unit_or_None, name)."""
+    return recipe_parse.split_unit(name)
 
-def parse_ingredient(s):
-    """'100 g Raclette-Käse' -> (qty, unit, name)."""
-    s = s.strip()
-    m = re.match(r"([\d.,½¼¾⅓⅔]+)\s*(\S+)?\s*(.*)", s)
-    if not m or num(m.group(1)) is None:
-        unit, name = strip_lead_unit(s)         # no number: still peel a leading unit
-        return 1, (unit or "Stück"), name       # "Stück Gemüsebrühe" -> unit Stück, name Gemüsebrühe
-    qty = max(1, round_half_up(num(m.group(1))))
-    tok, rest = (m.group(2) or ""), (m.group(3) or "")
-    if tok in UNITS:
-        unit, name = tok, rest
-    else:
-        unit, name = "Stück", (tok + " " + rest).strip()
-    return qty, unit, name.strip()
+CONFIDENT = ("override", "rule", "exact")
 
 # ---------- per recipe ----------
 def process(hash_id, pdf_path, cat, rename, delay):
+    """Fetch one recipe and write its draft .sql. Returns (result, flags, kind)."""
     try:
         rec = fetch_recipe(hash_id)
     except Exception as e:
@@ -199,20 +175,14 @@ def process(hash_id, pdf_path, cat, rename, delay):
     if not rec:
         return None, ["fetched but no Recipe data (empty)"], "empty"
     flags = []
-    name = (rec.get("name") or "").strip()
-    # drop the subtitle half (double-space separated) and any marketing blurb glued on
-    title = re.split(r"\s{2,}|\s+Bei diesem Gericht|\s+verzehrfertiges", name)[0].strip()
-    if len(title) > 120:
-        title = title[:120].rstrip()
+    parsed = recipe_parse.parse_recipe(rec, cat, is_pantry=lambda n: is_pantry(n, n))
+    title, servings = parsed["title"], parsed["servings"]
     if not title:
-        return None, ["no title in JSON-LD"]
+        return None, ["no title in JSON-LD"], "empty"
+    flags += parsed["notes"]
     cook = iso_minutes(rec.get("totalTime"))
     if cook is None:
         flags.append("time missing"); cook = 0
-    try:
-        servings = int(rec.get("recipeYield") or 2)
-    except Exception:
-        servings = 2
     nut = rec.get("nutrition") or {}
     nutvals = {"cal": nut_int(nut, "calories"), "prot": nut_int(nut, "proteinContent"),
                "carb": nut_int(nut, "carbohydrateContent"), "fat": nut_int(nut, "fatContent"),
@@ -221,14 +191,10 @@ def process(hash_id, pdf_path, cat, rename, delay):
         flags.append("kcal missing")
 
     matched, reviews = [], []
-    for raw in (rec.get("recipeIngredient") or []):
-        qty, unit, iname = parse_ingredient(raw)
-        if is_pantry(raw, iname):
-            continue
-        iid, conf, note = cat.match(iname)
-        matched.append((iname, unit, qty, iid, conf, note))
-        if conf not in ("override", "rule", "exact"):
-            reviews.append((iname, iid, conf, note))
+    for ln in parsed["lines"]:
+        matched.append((ln["name"], ln["unit"], ln["quantity"], ln["to_taste"], ln["item_id"], ln["conf"], ln["note"]))
+        if ln["conf"] not in CONFIDENT:
+            reviews.append((ln["name"], ln["item_id"], ln["conf"], ln["note"]))
     if not matched:
         flags.append("no ingredients parsed")
 
@@ -247,7 +213,7 @@ def process(hash_id, pdf_path, cat, rename, delay):
         if not steps: why.append("no steps")
         return None, [f"empty recipe ({', '.join(why)}) - skipped, nothing to import"], "empty"
 
-    sql = build_sql(title, servings, cook, nutvals, matched, steps)
+    sql = build_sql(title, servings, cook, nutvals, matched, steps, recipe_url(hash_id))
     os.makedirs(DRAFTS, exist_ok=True)
     fn = pascal(title) + ".sql"
     open(os.path.join(DRAFTS, fn), "w", encoding="utf-8").write(sql)
@@ -258,17 +224,19 @@ def process(hash_id, pdf_path, cat, rename, delay):
     return ({"title": title, "file": fn, "cook": cook, "servings": servings, "nut": nutvals,
              "ings": matched, "reviews": reviews, "steps": len(steps), "flags": flags}, flags, "ok")
 
-def build_sql(title, servings, cook, nut, matched, steps):
+def build_sql(title, servings, cook, nut, matched, steps, source_url=None):
+    """Draft SQL for one recipe. matched: (name, unit, qty Decimal|None, to_taste, item_id, conf, note)."""
     n = {k: ("NULL" if v is None else v) for k, v in nut.items()}
     sub = f"(SELECT recipe_id FROM recipe WHERE recipe_name='{sql_str(title)}')"
+    url = "NULL" if not source_url else f"'{sql_str(source_url)}'"
     L = ["BEGIN;",
-         "INSERT INTO recipe (recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar)",
-         f"VALUES ('{sql_str(title)}', {servings}, {cook}, 0, {n['cal']}, {n['prot']}, {n['carb']}, {n['fat']}, {n['fibre']}, {n['sugar']});",
-         "INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES"]
+         "INSERT INTO recipe (recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar, recipe_source_url)",
+         f"VALUES ('{sql_str(title)}', {servings}, {cook}, 0, {n['cal']}, {n['prot']}, {n['carb']}, {n['fat']}, {n['fibre']}, {n['sugar']}, {url});",
+         "INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed, recipe_ingredient_to_taste) VALUES"]
     rows = []
-    for name, unit, qty, iid, conf, note in matched:
-        tag = "" if conf in ("override", "rule", "exact") else f"   -- REVIEW ({conf}): {name} | {note}"
-        rows.append((f"  ({sub}, {iid if iid is not None else 0}, '{sql_str(unit)}', {qty})", tag))
+    for name, unit, qty, to_taste, iid, conf, note in matched:
+        tag = "" if conf in CONFIDENT else f"   -- REVIEW ({conf}): {name} | {note}"
+        rows.append((f"  ({sub}, {iid if iid is not None else 0}, '{sql_str(unit)}', {sql_decimal(qty)}, {1 if to_taste else 0})", tag))
     # terminator MUST precede the '--' comment, else the row-separating comma is
     # swallowed by the comment and the INSERT is a syntax error.
     L.append("\n".join(core + (";" if i == len(rows) - 1 else ",") + tag
@@ -310,7 +278,6 @@ def main():
     ap.add_argument("--in", dest="indir", default=DEFAULT_IN)
     ap.add_argument("--glob", default="*-de-DE.pdf")
     ap.add_argument("--list", dest="listfile", default=None, help="text file of recipe URLs or bare hashes (from discover.py), one per line")
-    ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--no-rename", action="store_true")
     ap.add_argument("--delay", type=float, default=1.0)
     ap.add_argument("--limit", type=int, default=0)
@@ -318,8 +285,12 @@ def main():
     ap.add_argument("--reverse", action="store_true", help="process the list newest-first (sitemap is oldest-first)")
     args = ap.parse_args()
 
-    overrides = json.load(open(os.path.join(HERE, "overrides.json"), encoding="utf-8"))
-    cat = Catalog(args.db, overrides)
+    import db
+    con = db.connect()
+    try:
+        cat = Catalog.from_db(con, load_overrides())
+    finally:
+        con.close()
     os.makedirs(DRAFTS, exist_ok=True)
     done_path, fail_path = os.path.join(DRAFTS, "_done.txt"), os.path.join(DRAFTS, "_failed.txt")
     done = load_set(done_path) if args.resume else set()
@@ -367,7 +338,7 @@ def main():
             open(fail_path, "a", encoding="utf-8").write(h + "\n")
             rep.append(f"## {h}: SKIPPED - {flags}\n"); continue
         open(done_path, "a", encoding="utf-8").write(h + "\n")
-        auto = sum(1 for *_x, c, _n in res["ings"] if c in ("override", "rule", "exact"))
+        auto = sum(1 for *_x, c, _n in res["ings"] if c in CONFIDENT)
         rep.append(f"## {res['title']}  ->  _drafts/{res['file']}")
         rep.append(f"   servings={res['servings']} time={res['cook']} steps={res['steps']} nutrition={res['nut']}")
         rep.append(f"   ingredients: {len(res['ings'])} ({auto} auto, {len(res['reviews'])} to review)")

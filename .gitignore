@@ -35,3 +35,7 @@ Thumbs.db
 
 # Internal working log (kept local, not part of the public repo)
 HANDOFF.md
+
+# Recipe repair tool: cached recipe pages (third-party content) and generated SQL/TSV (real data)
+scripts/importer/_cache/
+scripts/importer/_repair/

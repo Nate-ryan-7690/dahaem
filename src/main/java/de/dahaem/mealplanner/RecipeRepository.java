@@ -51,7 +51,7 @@ public class RecipeRepository {
 
     public List<RecipeIngredient> findAllIngredients(int recipeId){
         String sql = "SELECT ri.recipe_ingredient_item_id, ri.recipe_ingredient_recipe_id" +
-                ", ri.recipe_ingredient_unit, ri.recipe_ingredient_quantity_needed" +
+                ", ri.recipe_ingredient_unit, ri.recipe_ingredient_quantity_needed, ri.recipe_ingredient_to_taste" +
                 ", ii.inventory_item_name_english, ii.inventory_item_name_deutsch " +
                 "FROM recipe_ingredient ri " +
                 "INNER JOIN inventory_item ii ON ri.recipe_ingredient_item_id = ii.inventory_item_id " +
@@ -139,7 +139,8 @@ public class RecipeRepository {
                 rs.getInt("recipe_ingredient_item_id"),
                 rs.getInt("recipe_ingredient_recipe_id"),
                 rs.getString("recipe_ingredient_unit"),
-                rs.getInt("recipe_ingredient_quantity_needed"),
+                rs.getBigDecimal("recipe_ingredient_quantity_needed"),
+                rs.getBoolean("recipe_ingredient_to_taste"),
                 rs.getString("inventory_item_name_english"),
                 rs.getString("inventory_item_name_deutsch")
         );

@@ -49,7 +49,8 @@ public class Main {
         int sampleRecipeId = allRecipes.get(0).getId();
         System.out.println("\nIngredients for recipe " + sampleRecipeId + ":");
         for (RecipeIngredient ing : recipes.findAllIngredients(sampleRecipeId)) {
-            System.out.println("  " + ing.getQuantityNeeded() + " " + ing.getUnit()
+            String amount = ing.isToTaste() ? "nach Geschmack" : ing.getQuantityNeeded().stripTrailingZeros().toPlainString();
+            System.out.println("  " + amount + " " + ing.getUnit()
                     + " " + ing.getNameEnglish()
                     + " (item #" + ing.getItemId() + ")");
         }

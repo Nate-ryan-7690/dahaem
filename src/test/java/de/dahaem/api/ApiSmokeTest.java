@@ -15,6 +15,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,7 +36,9 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -134,7 +137,7 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.servings").value(2))
                 .andExpect(jsonPath("$.people").value(4))
                 .andExpect(jsonPath("$.scalable").value(true))
-                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(400)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(400.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(800.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(2.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].unit", contains("g")))
@@ -143,7 +146,7 @@ class ApiSmokeTest {
 
         mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "3"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].quantity", contains(1)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].quantity", contains(1.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(1.5)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(600.0)));
 
@@ -162,7 +165,7 @@ class ApiSmokeTest {
                 // jsonPath treats a null value as absent, so check the raw body for the explicit null.
                 .andExpect(content().string(containsString("\"people\":null")))
                 .andExpect(jsonPath("$.scalable").value(true))
-                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(400)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(400.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(400.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(1.0)));
 
@@ -182,13 +185,13 @@ class ApiSmokeTest {
     void recipeWithZeroServingsIsNotScalable() throws Exception {
         int recipeId = insertRecipe("Portionslos-Testrezept", 0);
         try {
-            insertIngredient(recipeId, 270, "g", 300);
+            insertIngredient(recipeId, 270, "g", "300");
             mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.servings").value(0))
                     .andExpect(jsonPath("$.people").value(4))
                     .andExpect(jsonPath("$.scalable").value(false))
-                    .andExpect(jsonPath("$.ingredients[0].quantity").value(300))
+                    .andExpect(jsonPath("$.ingredients[0].quantity").value(300.0))
                     .andExpect(jsonPath("$.ingredients[0].scaledQuantity").value(300.0));
         } finally {
             deleteTestRecipe(recipeId);
@@ -197,16 +200,81 @@ class ApiSmokeTest {
 
     @Test
     void recipeScalingAgreesWithShoppingListScaling() throws Exception {
-        int recipeId = recipeId("Klassische Rinder-Bolognese");
-        ObjectMapper json = new ObjectMapper();
+        assertRecipeAndShoppingListAgree(recipeId("Klassische Rinder-Bolognese"), 3);
 
-        JsonNode recipe = json.readTree(mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "3"))
+        int recipeId = insertDecimalRecipe();
+        try {
+            for (int people = 1; people <= 5; people++) {
+                assertRecipeAndShoppingListAgree(recipeId, people);
+            }
+        } finally {
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
+    void recipeDetailHasDecimalQuantitiesAndToTasteIngredients() throws Exception {
+        int recipeId = insertDecimalRecipe();
+        try {
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 186)].quantity", contains(0.5)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 186)].scaledQuantity", contains(1.0)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 186)].toTaste", contains(false)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].quantity", contains(0.333)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(0.67)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1022)].unit", contains("EL")))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1022)].scaledQuantity", contains(4.0)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1148)].toTaste", contains(true)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1148)].quantity", contains(nullValue())))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1148)].scaledQuantity", contains(nullValue())))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1148)].unit", contains("")));
+
+            mvc.perform(get("/api/recipes/{id}", recipeId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 186)].scaledQuantity", contains(0.5)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(0.333)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 1148)].scaledQuantity", contains(nullValue())));
+        } finally {
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
+    void shoppingListLeavesToTasteIngredientsOut() throws Exception {
+        int recipeId = insertDecimalRecipe();
+        try {
+            mvc.perform(get("/api/shopping-list").param("recipeIds", String.valueOf(recipeId)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items", hasSize(4)))
+                    .andExpect(jsonPath("$.items[*].inventoryItemId", not(hasItem(1148))))
+                    .andExpect(jsonPath("$.items[?(@.inventoryItemId == 186)].totalQuantity", contains(0.5)));
+            mvc.perform(get("/api/shopping-list").param("recipeIds", String.valueOf(recipeId)).param("people", "4"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items", hasSize(4)))
+                    .andExpect(jsonPath("$.items[*].inventoryItemId", not(hasItem(1148))))
+                    .andExpect(jsonPath("$.items[?(@.inventoryItemId == 186)].totalQuantity", contains(1.0)));
+        } finally {
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    /** Every shopping-list line equals the recipe's scaledQuantity; to-taste ingredients are on neither side's list. */
+    private void assertRecipeAndShoppingListAgree(int recipeId, int people) throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        JsonNode recipe = json.readTree(mvc.perform(get("/api/recipes/{id}", recipeId).param("people", String.valueOf(people)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         JsonNode list = json.readTree(mvc.perform(get("/api/shopping-list")
-                        .param("recipeIds", String.valueOf(recipeId)).param("people", "3"))
+                        .param("recipeIds", String.valueOf(recipeId)).param("people", String.valueOf(people)))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
 
-        assertEquals(recipe.get("ingredients").size(), list.get("items").size());
+        int withQuantity = 0;
+        for (JsonNode ingredient : recipe.get("ingredients")) {
+            if (!ingredient.get("toTaste").asBoolean()) {
+                withQuantity++;
+            }
+        }
+        assertEquals(withQuantity, list.get("items").size());
         for (JsonNode line : list.get("items")) {
             double fromRecipe = -1;
             for (JsonNode ingredient : recipe.get("ingredients")) {
@@ -492,17 +560,38 @@ class ApiSmokeTest {
         }
     }
 
-    private static void insertIngredient(int recipeId, int itemId, String unit, int quantity) throws SQLException {
+    private static void insertIngredient(int recipeId, int itemId, String unit, String quantity) throws SQLException {
+        insertIngredient(recipeId, itemId, unit, new BigDecimal(quantity), false);
+    }
+
+    private static void insertToTaste(int recipeId, int itemId) throws SQLException {
+        insertIngredient(recipeId, itemId, "", null, true);
+    }
+
+    private static void insertIngredient(int recipeId, int itemId, String unit, BigDecimal quantity, boolean toTaste)
+            throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement("INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, "
-                     + "recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) "
-                     + "VALUES (?, ?, ?, ?)")) {
+                     + "recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed, "
+                     + "recipe_ingredient_to_taste) VALUES (?, ?, ?, ?, ?)")) {
             ps.setInt(1, recipeId);
             ps.setInt(2, itemId);
             ps.setString(3, unit);
-            ps.setInt(4, quantity);
+            ps.setBigDecimal(4, quantity);
+            ps.setBoolean(5, toTaste);
             ps.executeUpdate();
         }
+    }
+
+    /** A 2-serving recipe with decimal amounts, a spoon line and a to-taste line, as the fixed importer stores them. */
+    private static int insertDecimalRecipe() throws SQLException {
+        int recipeId = insertRecipe("Zitronen-Hähnchen-Testrezept", 2);
+        insertIngredient(recipeId, 186, "Stück", "0.5");    // ½ Stück Zitrone
+        insertIngredient(recipeId, 40, "Stück", "0.333");   // ⅓ Stück Zwiebel
+        insertIngredient(recipeId, 1022, "EL", "2");        // 2 EL Olivenöl
+        insertIngredient(recipeId, 270, "g", "250");
+        insertToTaste(recipeId, 1148);                      // Salz nach Geschmack
+        return recipeId;
     }
 
     // Throwaway test database only: removes the recipe this test inserted so other tests don't see it.

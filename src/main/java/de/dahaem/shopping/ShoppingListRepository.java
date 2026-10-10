@@ -28,7 +28,9 @@ public class ShoppingListRepository {
      * Sums recipe_ingredient_quantity_needed per (inventory item, unit) across the given recipes,
      * and collects which recipes contributed. Quantities are only combined when the unit matches,
      * so the same item can come back as more than one row if recipes disagree on unit. No scaling:
-     * each recipe's own quantities are summed as written.
+     * each recipe's own (decimal) quantities are summed as written. "To taste" rows (salt, pepper
+     * without an amount) are left out entirely: they never add a quantity to a shopping list, the
+     * inventory's low-stock view covers restocking them.
      */
     public List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds) {
         if (recipeIds.isEmpty()) {
@@ -43,6 +45,7 @@ public class ShoppingListRepository {
                 + "FROM recipe_ingredient ri "
                 + "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id "
                 + "WHERE ri.recipe_ingredient_recipe_id IN (" + placeholders + ") "
+                + "AND ri.recipe_ingredient_to_taste = FALSE "
                 + "GROUP BY ri.recipe_ingredient_item_id, ri.recipe_ingredient_unit "
                 + "ORDER BY ii.inventory_item_name_deutsch";
 
@@ -53,7 +56,8 @@ public class ShoppingListRepository {
      * Same as {@link #aggregateIngredients(List)}, but scales each recipe's ingredient quantities
      * by {@code people / recipe_servings} before summing across recipes — so a 2-serving recipe's
      * ingredients double at {@code people=4}. Only recipes with a positive recipe_servings
-     * contribute (division-by-zero guard); {@code people} must be at least 1. The factor and both
+     * contribute (division-by-zero guard); {@code people} must be at least 1. To-taste rows are
+     * left out, as above. The factor and both
      * guards are the ones {@link Portions} defines for the recipe endpoint; keep them in step.
      */
     public List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds, int people) {
@@ -74,6 +78,7 @@ public class ShoppingListRepository {
                 + "JOIN recipe r ON r.recipe_id = ri.recipe_ingredient_recipe_id "
                 + "WHERE ri.recipe_ingredient_recipe_id IN (" + placeholders + ") "
                 + "AND r.recipe_servings > 0 "
+                + "AND ri.recipe_ingredient_to_taste = FALSE "
                 + "GROUP BY ri.recipe_ingredient_item_id, ri.recipe_ingredient_unit "
                 + "ORDER BY ii.inventory_item_name_deutsch";
 

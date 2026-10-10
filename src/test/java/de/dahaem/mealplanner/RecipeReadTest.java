@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,9 +117,28 @@ class RecipeReadTest {
         RecipeIngredient onion = ingredients.stream().filter(i -> i.getItemId() == 10).findFirst().orElseThrow();
         assertEquals(1, onion.getRecipeId());
         assertEquals("pcs", onion.getUnit());
-        assertEquals(2, onion.getQuantityNeeded());
+        assertEquals(0, new BigDecimal("2").compareTo(onion.getQuantityNeeded()));
+        assertFalse(onion.isToTaste());
         assertEquals("Onion", onion.getNameEnglish());
         assertEquals("Zwiebel", onion.getNameDeutsch());
+    }
+
+    @Test
+    void findAllIngredientsReadsDecimalAndToTasteRows() throws SQLException {
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time) VALUES (1, 'Suppe', 2, 30, 10)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category) VALUES (10, 'Lemon', 'Zitrone', 0, 'Stück', 'fruit')");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category) VALUES (11, 'Salt', 'Salz', 0, 'g', 'spices')");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (10, 1, 'Stück', 0.5)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed, recipe_ingredient_to_taste) VALUES (11, 1, '', NULL, TRUE)");
+
+        List<RecipeIngredient> ingredients = service.findAllIngredients(1);
+
+        RecipeIngredient lemon = ingredients.stream().filter(i -> i.getItemId() == 10).findFirst().orElseThrow();
+        assertEquals(0, new BigDecimal("0.5").compareTo(lemon.getQuantityNeeded()));
+        assertFalse(lemon.isToTaste());
+        RecipeIngredient salt = ingredients.stream().filter(i -> i.getItemId() == 11).findFirst().orElseThrow();
+        assertNull(salt.getQuantityNeeded());
+        assertTrue(salt.isToTaste());
     }
 
     @Test

@@ -1,0 +1,34 @@
+{
+  "@context": "http://schema.org",
+  "@type": "Recipe",
+  "name": "Familien-Bolognese  Bundle 4P - für die ganze Familie",
+  "recipeYield": 2,
+  "totalTime": "PT30M",
+  "nutrition": {
+    "@type": "NutritionInformation",
+    "calories": "620 kcal",
+    "proteinContent": "32 g",
+    "carbohydrateContent": "70,5 g",
+    "fatContent": "21 g",
+    "fiberContent": "8 g",
+    "sugarContent": "9 g"
+  },
+  "recipeIngredient": [
+    "⅔ Stück Zwiebel",
+    "1 Stück Zitrone",
+    "2 Prisen Zucker",
+    "500 g Spaghetti",
+    "1 TL Honig",
+    "1 Packung Bratapfelgewürz"
+  ],
+  "recipeInstructions": [
+    {
+      "@type": "HowToStep",
+      "text": "Alles vorbereiten."
+    },
+    {
+      "@type": "HowToStep",
+      "text": "Kochen und servieren."
+    }
+  ]
+}
