@@ -40,6 +40,11 @@ public class AldiNordClient {
     private static final Pattern NEXT_DATA = Pattern.compile(
             "<script id=\"__NEXT_DATA__\" type=\"application/json\">(.*?)</script>", Pattern.DOTALL);
 
+    /** The ALDI page the offers come from: this week's or the preview page. */
+    static String flyerUrl(boolean nextWeek) {
+        return BASE + OFFER_PAGES.get(nextWeek ? 1 : 0);
+    }
+
     private final HttpFetcher http;
     private final ObjectMapper json = new ObjectMapper();
 

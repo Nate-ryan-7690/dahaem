@@ -80,6 +80,39 @@ class StoreDiscountServiceOverrideTest {
                 "'Mars Ice Cream' resolved through its full-name override, not as the bare 'Ice Cream'");
     }
 
+    @Test
+    void aPriceOfZeroIsNeverPromotedAndLandsInThePriceReport(@TempDir Path dir) throws Exception {
+        int store = repository.findOrCreateStore("Edeka");
+        repository.saveOffers(store, List.of(
+                offer("A", null, "Butter", "250 g", 1.99),
+                offer("K", null, "Kilbeggan", "0,7l", 0.00)), LocalDate.now(), "AGGREGATOR");
+        StoreDiscountService service = new StoreDiscountService(repository, Map.of(Normalizer.key("Kilbeggan"), 2));
+
+        ImportSummary summary = service.promoteOffers(null, dir.resolve("unmatched.tsv"));
+
+        assertEquals(1, count("SELECT COUNT(*) FROM store_item"), "only the butter offer is promoted");
+        assertTrue(summary.notes().contains("1 with a price of 0 or less"), summary.notes());
+        String prices = Files.readString(dir.resolve("review_prices.tsv"));
+        assertTrue(prices.contains("Kilbeggan") && prices.contains("Edeka") && prices.contains("AGGREGATOR")
+                && prices.contains("aktionspreis.de") && prices.contains("\t0.0\t"), prices);
+        assertFalse(Files.readString(dir.resolve("unmatched.tsv")).contains("Kilbeggan"));
+    }
+
+    @Test
+    void reviewReportsCarryEverythingNeededToFindTheOfferInTheFlyer(@TempDir Path dir) throws Exception {
+        int store = repository.findOrCreateStore("Lidl");
+        repository.saveOffers(store, List.of(offer("mystery-500g", null, "Mystery Bundle", "500 g", 2.49)),
+                LocalDate.now(), "AGGREGATOR");
+
+        new StoreDiscountService(repository, Map.of()).promoteOffers(null, dir.resolve("unmatched.tsv"));
+
+        List<String> lines = Files.readAllLines(dir.resolve("unmatched.tsv"));
+        assertTrue(lines.get(0).contains("store_id\tbrand\tname\tstore\tsource\texternal_id\tflyer_url\tsales_unit\tprice\tvalid_from\tvalid_until"), lines.get(0));
+        String row = lines.get(1);
+        assertTrue(row.startsWith(store + "\t") && row.contains("Mystery Bundle") && row.contains("\tLidl\tAGGREGATOR\tmystery-500g\t")
+                && row.contains("aktionspreis.de/prospekt/lidl-angebote") && row.contains("\t500 g\t2.49\t" + LocalDate.now()), row);
+    }
+
     private static int count(String sql) throws SQLException {
         try (Connection con = Database.getConnection(); Statement st = con.createStatement();
              ResultSet rs = st.executeQuery(sql)) {
@@ -93,4 +126,5 @@ class StoreDiscountServiceOverrideTest {
             st.execute(sql);
         }
     }
+
 }

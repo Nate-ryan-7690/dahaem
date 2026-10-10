@@ -500,7 +500,8 @@ public class StoreRepository {
         String sql = "SELECT store_offer_store_id, store_offer_external_id, store_offer_brand, store_offer_name, "
                 + "store_offer_category, store_offer_sales_unit, store_offer_sale_price, store_offer_deal_quantity, "
                 + "store_offer_deal_price, store_offer_normal_price, store_offer_deposit, store_offer_promo_text, "
-                + "store_offer_valid_from, store_offer_valid_until, store_offer_source FROM store_offer "
+                + "store_offer_valid_from, store_offer_valid_until, store_offer_source, store_name "
+                + "FROM store_offer JOIN store ON store_id = store_offer_store_id "
                 + "WHERE store_offer_valid_until >= ?"
                 + (storeId != null ? " AND store_offer_store_id = ?" : "");
         List<OfferRow> out = new ArrayList<>();
@@ -515,7 +516,7 @@ public class StoreRepository {
                     out.add(new OfferRow(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
                             rs.getString(5), rs.getString(6), rs.getDouble(7), rs.getInt(8), getNullableDouble(rs, 9),
                             getNullableDouble(rs, 10), getNullableDouble(rs, 11), rs.getString(12),
-                            rs.getString(13), rs.getString(14), rs.getString(15)));
+                            rs.getString(13), rs.getString(14), rs.getString(15), rs.getString(16)));
                 }
             }
         } catch (SQLException e) {
