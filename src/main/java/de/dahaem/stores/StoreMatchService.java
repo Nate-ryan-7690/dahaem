@@ -82,7 +82,7 @@ public class StoreMatchService {
      */
     private static final Set<String> TRAILING_QUALIFIERS = Set.of(
             "jung", "mittelalt", "alt", "dolce", "crudo", "natur", "naturell", "classic", "original", "extra",
-            "stange", "stangen", "sticks", "bio");
+            "stange", "stangen", "bio");
 
     /** Common German plural/inflection endings tried when folding a word onto a catalog term. */
     private static final List<String> INFLECTION_SUFFIXES = List.of("en", "er", "n", "e", "s");
@@ -130,9 +130,12 @@ public class StoreMatchService {
 
         Map<Integer, Integer> matches = new HashMap<>();       // storeProductId -> inventoryItemId
         List<StoreProductRef> unmatched = new ArrayList<>();
+        int excluded = 0;
         for (StoreProductRef p : products) {
             Integer itemId = match(p.name(), p.category(), catalog);
-            if (itemId != null) {
+            if (isExcluded(itemId)) {
+                excluded++;                                       // override value 0: left out on purpose
+            } else if (itemId != null) {
                 matches.put(p.id(), itemId);
             } else {
                 unmatched.add(p);
@@ -141,13 +144,58 @@ public class StoreMatchService {
         repository.saveMatches(matches);
 
         writeReview(reviewFile, storeName, unmatched);
-        String notes = String.format("%d matched, %d unmatched -> %s", matches.size(), unmatched.size(), reviewFile);
+        String notes = String.format("%d matched, %d unmatched -> %s, %d excluded by override", matches.size(),
+                unmatched.size(), reviewFile, excluded);
         return new ImportSummary(storeName, "MATCH", "OK", 0, matches.size(), List.of(), notes);
     }
 
     /** Convenience overload for callers with no category available (guard is skipped). */
     Integer match(String storeName, List<CatalogItem> catalog) {
         return match(storeName, null, catalog);
+    }
+
+    /** Override value that means "never match this name": the offer is left out on purpose (see {@link #isExcluded}). */
+    static final int EXCLUDED = 0;
+
+    /** True for an override value of 0 (or below): the name is excluded from matching on purpose. */
+    static boolean isExcluded(Integer itemId) {
+        return itemId != null && itemId <= EXCLUDED;
+    }
+
+    /**
+     * The override for the offer's FULL name, if any. Discount promotion looks here before it strips a leading
+     * brand word: "Mars Ice Cream" would otherwise be matched as the bare "Ice Cream", so an override written for
+     * the real name could never fire. May return {@link #EXCLUDED}.
+     */
+    Integer overrideFor(String fullName) {
+        return overrides.get(Normalizer.key(fullName));
+    }
+
+    /**
+     * Like {@link #overrideFor(String)}, but first tries the brand-qualified name ("Volvic Mineralwasser"): store
+     * offers carry the brand in its own field, so several brands share the bare name "Mineralwasser" or "Cola" and
+     * a name-only key cannot tell them apart. The brand is written in normal case so {@link Normalizer} keeps it
+     * (it strips ALL-CAPS brand words).
+     */
+    Integer overrideFor(String brand, String fullName) {
+        if (brand != null && !brand.isBlank()) {
+            Integer qualified = overrides.get(Normalizer.key(normalCase(brand) + " " + fullName));
+            if (qualified != null) {
+                return qualified;
+            }
+        }
+        return overrideFor(fullName);
+    }
+
+    /** "VOLVIC" -> "Volvic", "DR PEPPER" -> "Dr Pepper", "COCA-COLA" -> "Coca-Cola". */
+    static String normalCase(String s) {
+        StringBuilder out = new StringBuilder();
+        boolean start = true;
+        for (char c : s.trim().toCharArray()) {
+            out.append(start ? Character.toUpperCase(c) : Character.toLowerCase(c));
+            start = c == ' ' || c == '-';
+        }
+        return out.toString();
     }
 
     Integer match(String storeName, String category, List<CatalogItem> catalog) {

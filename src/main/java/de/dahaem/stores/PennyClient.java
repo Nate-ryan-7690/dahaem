@@ -58,6 +58,11 @@ public class PennyClient {
     public record Market(String id, String name, String sellingRegion, String nextWeekSellingRegion) {
     }
 
+    /** Penny's offers page. */
+    static String flyerUrl() {
+        return BASE + "/angebote";
+    }
+
     private final HttpFetcher http;
     private final ObjectMapper json = new ObjectMapper();
 

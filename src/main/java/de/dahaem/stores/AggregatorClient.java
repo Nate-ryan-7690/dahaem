@@ -82,6 +82,16 @@ public class AggregatorClient {
         return STORES.containsKey(storeKey);
     }
 
+    /** The flyer page a chain's aggregator offers were read from (current or next week), or null for an unknown chain. */
+    public static String flyerUrl(String storeName, boolean nextWeek) {
+        for (String[] s : STORES.values()) {
+            if (s[0].equalsIgnoreCase(storeName)) {
+                return nextWeek ? NEXT_BASE + s[1] + "-angebote-naechsteWoche" : BASE + s[1] + "-angebote";
+            }
+        }
+        return null;
+    }
+
     public String displayName(String storeKey) {
         return STORES.get(storeKey)[0];
     }

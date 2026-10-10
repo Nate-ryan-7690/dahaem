@@ -245,7 +245,7 @@ class StoreMatchServiceTest {
 
         assertEquals(1, service.match("LINDENHOF Gouda jung", catalog));
         assertEquals(2, service.match("CUCINA Prosciutto Crudo Dolce", catalog));
-        assertEquals(3, service.match("JACOBS Kaffee-Sticks", catalog));
+        assertNull(service.match("JACOBS Kaffee-Sticks", catalog), "coffee sticks are their own items, not Kaffee");
         assertEquals(4, service.match("CUCINA Mozzarella-Stange", catalog));
     }
 
@@ -297,5 +297,28 @@ class StoreMatchServiceTest {
         assertEquals(2, service.match("Deutsche rote Äpfel", catalog));
         assertEquals(2, service.match("Tafeläpfel", catalog));
         assertNull(service.match("Ärzte", catalog));
+    }
+
+    @Test
+    void anOverrideOfZeroMeansExcludedAndSkipsTheRules() {
+        List<CatalogItem> catalog = List.of(item(1, "butter", "butter"));
+        StoreMatchService service = new StoreMatchService(null, Map.of(Normalizer.key("Butter Gebäck"), 0));
+
+        assertEquals(0, service.match("Butter Gebäck", catalog));
+        assertEquals(true, StoreMatchService.isExcluded(service.match("Butter Gebäck", catalog)));
+        assertEquals(false, StoreMatchService.isExcluded(service.match("Butter", catalog)));
+        assertEquals(false, StoreMatchService.isExcluded(null));
+    }
+
+    @Test
+    void overrideForTriesTheBrandQualifiedNameBeforeTheBareName() {
+        StoreMatchService service = new StoreMatchService(null, Map.of(
+                Normalizer.key("Volvic Mineralwasser"), 10, Normalizer.key("Mineralwasser"), 20));
+
+        assertEquals(10, service.overrideFor("VOLVIC", "Mineralwasser"));
+        assertEquals(20, service.overrideFor("GEROLSTEINER", "Mineralwasser"));
+        assertEquals(20, service.overrideFor(null, "Mineralwasser"));
+        assertEquals("Dr Pepper", StoreMatchService.normalCase("DR PEPPER"));
+        assertEquals("Coca-Cola", StoreMatchService.normalCase("COCA-COLA"));
     }
 }

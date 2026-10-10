@@ -66,4 +66,19 @@ class MatchGateTest {
     void tooFewReferencesMeansNoPriceJudgement() {
         assertTrue(MatchGate.check("g", StorePromotionService.parseSize("100 g"), 99.0, 999, references()).ok());
     }
+
+    @Test
+    void anOverrideSkipsThePriceCheckButNotTheUnitCheck() {
+        StorePromotionService.Pack marzipan = StorePromotionService.parseSize("125 g");
+        assertFalse(MatchGate.check("g", marzipan, 0.99, KARTOFFEL, references()).ok(), "price outlier is held");
+        assertTrue(MatchGate.check("g", marzipan, 0.99, KARTOFFEL, references(), true).ok(), "override: price not judged");
+        assertFalse(MatchGate.check("g", StorePromotionService.parseSize("0,75-L-Flasche"), 0.49, ZITRONE,
+                references(), true).ok(), "override: the unit still has to fit");
+    }
+
+    @Test
+    void washLoadsFormAFamilyOfTheirOwn() {
+        assertTrue(MatchGate.check("WL", StorePromotionService.parseSize("46-50 WL"), 6.99, 1669, references()).ok());
+        assertFalse(MatchGate.check("WL", StorePromotionService.parseSize("4,95 kg"), 6.99, 1669, references()).ok());
+    }
 }
