@@ -31,6 +31,8 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_servings INTEGER NOT NULL,
 
+	recipe_servings_max INTEGER,
+
 	recipe_cook_time INTEGER NOT NULL,
 
 	recipe_prep_time INTEGER NOT NULL,
@@ -47,7 +49,10 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_sugar INTEGER,
 
-	recipe_source_url TEXT);
+	recipe_source_url TEXT,
+
+	CONSTRAINT recipe_servings_max_not_below_servings
+		CHECK (recipe_servings_max IS NULL OR recipe_servings_max >= recipe_servings));
 
 CREATE TABLE store ( store_id INTEGER PRIMARY KEY AUTO_INCREMENT, 
 

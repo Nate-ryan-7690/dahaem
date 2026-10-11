@@ -12,6 +12,8 @@ needs the item, but names no quantity (quantity None, to_taste True).
 import re
 from decimal import Decimal
 
+import step_amounts
+
 # ---------- amounts ----------
 # Vulgar-fraction characters HelloFresh uses (and a few more for safety). Values are what the
 # DECIMAL(10,3) column can hold: thirds are 0.333 / 0.667.
@@ -119,6 +121,9 @@ _TO_TASTE = [
 ]
 
 
+_NACH_GESCHMACK = re.compile(r"nach\s+geschmack|^\s*etwas\s", re.I)   # "to taste" whatever the item
+
+
 class Line:
     """One parsed ingredient line. quantity is a Decimal, or None when to_taste is True."""
     __slots__ = ("raw", "quantity", "unit", "name", "to_taste")
@@ -200,10 +205,24 @@ _TITLE_PEOPLE = [
     re.compile(r"\bfür\s+(\d+)\s+Personen\b", re.I),    # "für 4 Personen"
     re.compile(r"\b(\d+)\s+Personen\b", re.I),
 ]
+# "für 3 – 4 Personen", "2 – 4 Personen": a range of people, only when it says Personen
+_TITLE_RANGE = re.compile(r"\b(\d+)\s*[–-]\s*(\d+)\s+Personen\b", re.I)
+_TITLE_PORTIONS = re.compile(r"\b(\d+)\s+Portionen?\b", re.I)
+
+
+def title_range(full_name):
+    """(low, high) of a 'N – M Personen' title with low < high, else None."""
+    m = _TITLE_RANGE.search(full_name or "")
+    if m and int(m.group(1)) < int(m.group(2)):
+        return int(m.group(1)), int(m.group(2))
+    return None
 
 
 def title_people(full_name):
-    """Head count the full (uncut) JSON-LD name announces, e.g. 'Bundle 4P' -> 4, else None."""
+    """Head count the full (uncut) JSON-LD name announces, e.g. 'Bundle 4P' -> 4, else None.
+    A range ('3 – 4 Personen') has no single head count: None (see title_range)."""
+    if title_range(full_name) or _TITLE_RANGE.search(full_name or ""):
+        return None
     for pattern in _TITLE_PEOPLE:
         m = pattern.search(full_name or "")
         if m:
@@ -221,29 +240,57 @@ def yield_people(recipe_yield):
     return int(m.group()) if m and int(m.group()) > 0 else None
 
 
-# Where a servings number came from. Only the first two are facts about the recipe; DEFAULT is a
-# guess the importer needs for a new recipe, and must never overwrite a stored value.
-FROM_YIELD, FROM_BUNDLE_TITLE, DEFAULT = "recipeYield", "bundle title", "default"
+# Where a servings number came from. Only the first three are facts about the recipe; DEFAULT is a
+# guess the importer needs for a new recipe, and must never overwrite a stored value; REVIEW means
+# the title contradicts itself and a human decides.
+FROM_YIELD, FROM_BUNDLE_TITLE, FROM_RANGE_TITLE, DEFAULT, REVIEW = \
+    "recipeYield", "bundle title", "range title", "default", "review"
 DEFAULT_SERVINGS = 2
 
 
-def servings_for(rec):
-    """(servings, notes, source). recipeYield, except a title marking a bundle for 4 wins
-    (HelloFresh bundles carry 4-person amounts but recipeYield 2). Without a readable
-    recipeYield (and no bundle title) servings is the default 2 with source DEFAULT.
+def servings_info(rec):
+    """dict(servings, servings_max, notes, source) for a recipe.
+
+    Rules (Nate, 2026-10-11): all scraped recipes are 2-person, so recipeYield wins, except
+      * "N – M Personen" in the title is kept as a range: servings = N (the lower bound, used for
+        scaling by default), servings_max = M;
+      * a title naming 4 people ("für 4 Personen", "Bundle 4P", "OTP 4P") means 4 (HelloFresh bundles
+        carry 4-person amounts but recipeYield 2);
+      * such a 4-person title that also says "2 Portionen" contradicts itself: REVIEW, nothing written.
+    Without a readable recipeYield (and no title rule) servings is the default 2 with source DEFAULT.
     Any other disagreement between title and yield is only reported."""
     notes = []
     from_yield = yield_people(rec.get("recipeYield"))
-    from_title = title_people(rec.get("name"))
+    name = rec.get("name")
+    rng = title_range(name)
+    from_title = title_people(name)
     servings, source = (from_yield, FROM_YIELD) if from_yield else (DEFAULT_SERVINGS, DEFAULT)
+    smax = None
     if from_yield is None:
         notes.append(f"recipeYield missing or unreadable ({rec.get('recipeYield')!r})")
-    if from_title == 4 and servings != 4:
+    if rng:
+        servings, smax, source = rng[0], rng[1], FROM_RANGE_TITLE
+        notes.append(f"title says {rng[0]} – {rng[1]} Personen, recipeYield {from_yield} -> {rng[0]} (max {rng[1]})")
+    elif from_title == 4 and servings != 4:
+        portions = [int(p) for p in _TITLE_PORTIONS.findall(name or "")]
+        if any(p != 4 for p in portions):
+            notes.append(f"REVIEW: title says 4 people but also {portions[0]} Portionen; servings not written")
+            return {"servings": servings, "servings_max": None, "notes": notes, "source": REVIEW}
         notes.append(f"bundle for 4 in title, recipeYield {from_yield} -> 4")
         servings, source = 4, FROM_BUNDLE_TITLE
     elif from_title is not None and from_title != servings:
         notes.append(f"CONFLICT: title says {from_title} people, recipeYield {from_yield}; kept {servings}")
-    return servings, notes, source
+    elif source == FROM_YIELD:
+        other = [int(p) for p in _TITLE_PORTIONS.findall(name or "") if int(p) != servings]
+        if other:
+            notes.append(f"title says {other[0]} Portionen, recipeYield {from_yield}; kept {servings}")
+    return {"servings": servings, "servings_max": smax, "notes": notes, "source": source}
+
+
+def servings_for(rec):
+    """(servings, notes, source): servings_info without the range's upper bound."""
+    info = servings_info(rec)
+    return info["servings"], info["notes"], info["source"]
 
 
 # ---------- one recipe ----------
@@ -279,7 +326,7 @@ def merge_lines(items):
         if kept["to_taste"] and it["to_taste"]:
             notes.append(f"duplicate to-taste item #{iid} ('{it['name']}') merged")
         elif kept["to_taste"] and not it["to_taste"]:
-            kept.update({k: it[k] for k in ("quantity", "unit", "to_taste", "name", "raw", "conf", "note")
+            kept.update({k: it[k] for k in ("quantity", "unit", "to_taste", "name", "raw", "conf", "note", "origin")
                          if k in it})
             notes.append(f"item #{iid}: '{it['name']}' has an amount, replaces the to-taste line")
         elif it["to_taste"]:
@@ -293,24 +340,76 @@ def merge_lines(items):
     return out, notes
 
 
+def _strip_html(text):
+    import html as _html
+    text = re.sub(r"</p>\s*<p>|<br\s*/?>", "\n", text or "")
+    return _html.unescape(re.sub(r"<[^>]+>", "", text)).replace("\\*", "*")
+
+
+def instruction_steps(rec):
+    """The cooking steps of a JSON-LD Recipe as plain text (some pages have none: instructions = 0)."""
+    ins = rec.get("recipeInstructions")
+    if not isinstance(ins, list):
+        return []
+    return [s for s in (_strip_html(i.get("text") if isinstance(i, dict) else str(i)) for i in ins) if s]
+
+
+def _resolve_amountless(raw, line, steps, numbered_families):
+    """Rules of 2026-10-11 for a line without a number that is not 'nach Geschmack':
+    amount from the steps (several mentions added up) > salt / pepper / oil / vinegar -> to taste >
+    'Stück X' -> 1 Stück (not for uncountable things like sugar) > review.
+    Returns (line, origin, review_reason): origin 'steps' / 'one' / None; a review reason means the
+    line is NOT written. A line whose kind of ingredient already has a numbered line has no row of its own."""
+    words, fam = step_amounts.ingredient_key(line.name)
+    if fam and fam in numbered_families:
+        return None, None, "no row of its own: a numbered line of the same kind exists"
+    status, amount, unit, notes = step_amounts.step_amount(line.name, steps)
+    if status == "found":
+        return Line(raw, amount, unit, line.name, False), "steps", "; ".join(notes)
+    if status in ("uncertain", "mixed"):
+        why = "mentions with different wording" if status == "uncertain" else "mentions in different units"
+        return line, None, f"REVIEW: step amount unsure ({why}): {notes[0]}"
+    if fam in step_amounts.TO_TASTE_FAMILIES:
+        return line, None, None
+    if re.match(r"\s*Stück\s", raw or "", re.I) and fam not in step_amounts.UNCOUNTABLE_FAMILIES:
+        return Line(raw, Decimal(1), DEFAULT_UNIT, line.name, False), "one", None
+    return line, None, "REVIEW: no amount in the ingredient list or the steps"
+
+
 def parse_recipe(rec, catalog, is_pantry=None):
-    """JSON-LD Recipe dict -> dict(title, servings, notes, lines). lines are merged per item and
-    carry item_id/conf/note from catalog.match(name). is_pantry(name) lines (water) are skipped."""
+    """JSON-LD Recipe dict -> dict(title, servings, servings_max, notes, lines, reviews). lines are
+    merged per item and carry item_id/conf/note from catalog.match(name), plus origin ('steps': the
+    amount was read from the cooking steps, 'one': 'Stück X' without a number = 1 Stück).
+    reviews are amountless lines that need a human (never written). is_pantry(name) lines (water)
+    are skipped."""
     notes = []
-    servings, snotes, servings_source = servings_for(rec)
-    notes += snotes
-    items = []
-    for raw in rec.get("recipeIngredient") or []:
-        line = parse_ingredient(raw)
+    sinfo = servings_info(rec)
+    servings, servings_source = sinfo["servings"], sinfo["source"]
+    notes += sinfo["notes"]
+    steps = instruction_steps(rec)
+    parsed_lines = [(raw, parse_ingredient(raw)) for raw in rec.get("recipeIngredient") or []]
+    numbered_families = {step_amounts.ingredient_key(l.name)[1] for _r, l in parsed_lines if not l.to_taste}
+    numbered_families.discard(None)
+    items, reviews = [], []
+    for raw, line in parsed_lines:
         if not line.name or (is_pantry and is_pantry(line.name)):
             continue
-        iid, conf, note = catalog.match(line.name)
+        origin, why = None, None
+        if line.to_taste and not _NACH_GESCHMACK.search(raw or ""):
+            line, origin, why = _resolve_amountless(raw, line, steps, numbered_families)
+        iid, conf, note = catalog.match(line.name if line else parse_ingredient(raw).name)
+        if line is None or (why and why.startswith(("REVIEW", "no row"))):
+            reviews.append({"raw": raw, "name": (line or parse_ingredient(raw)).name, "item_id": iid,
+                            "conf": conf, "reason": why})
+            continue
+        if why:
+            note = (note + "; " if note else "") + why
         items.append({"raw": raw, "name": line.name, "quantity": line.quantity, "unit": line.unit,
-                      "to_taste": line.to_taste, "item_id": iid, "conf": conf, "note": note})
+                      "to_taste": line.to_taste, "item_id": iid, "conf": conf, "note": note, "origin": origin})
     lines, mnotes = merge_lines(items)
     notes += mnotes
-    return {"title": cut_title(rec.get("name")), "servings": servings, "servings_source": servings_source,
-            "notes": notes, "lines": lines}
+    return {"title": cut_title(rec.get("name")), "servings": servings, "servings_max": sinfo["servings_max"],
+            "servings_source": servings_source, "notes": notes, "lines": lines, "reviews": reviews}
 
 
 def find_recipe(o):

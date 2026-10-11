@@ -14,6 +14,19 @@ Status: `in progress` · `next` · `later` · `idea`
   2 / 3 / 4 people, several mentions summed); `Stück X` without a number = 1 Stück (e.g. pita,
   pomegranate); `nach Geschmack X` = to taste; only salt, pepper, oil and vinegar become to taste
   when no amount exists anywhere; everything else goes to review. Then one guarded apply.
+  Implemented in the PR "step amounts + servings ranges" (not applied). Decisions taken with it:
+  `nach Geschmack X` stays to taste even when a step names an amount (~1,600 lines, mostly
+  `1 Prise Salz`); `Stück Zucker` / butter / honey / flour / stock without an amount goes to review
+  instead of "1 Stück"; a step wording that differs from the line (`Essig` for `Weißweinessig`,
+  `Senf` for `mittelscharfer Senf`) goes to review. The apply (snapshot, migration 0006, one
+  transaction, counts checked) is a separate step after Nate has read the new review TSV.
+- **Importer: write `servings_max` for new recipes** — `next`. `extract.py` / `load_recipes.py`
+  still draft `recipe_servings` only (a range recipe gets its lower bound and a REVIEW flag); the
+  draft SQL format that `load_recipes.py` parses needs the extra column. From the range PR.
+- **API: expose `servingsMax`** — `later`. `Recipe`, `RecipeDetailDto` and `RecipeSummaryDto`
+  carry `servings` only. Scaling already uses `recipe_servings` (the lower bound), so nothing
+  breaks; the extra field is for display and for the household's later choice of how to read a
+  range (lower / upper).
 - **Servings ranges** — `in progress`. Keep "3 – 4 Personen" as a range: `servings` = 3 (lower
   bound, default) + new nullable `servings_max` = 4. Normal recipes stay 2 (all scraped recipes
   are 2-person); explicit "für 4 Personen" / "Bundle 4P" = 4. Recipe 28614 ("OTP 4P … 2

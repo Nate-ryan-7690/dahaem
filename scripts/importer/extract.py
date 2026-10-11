@@ -198,6 +198,11 @@ def process(hash_id, pdf_path, cat, rename, delay):
         matched.append((ln["name"], ln["unit"], ln["quantity"], ln["to_taste"], ln["item_id"], ln["conf"], ln["note"]))
         if ln["conf"] not in CONFIDENT:
             reviews.append((ln["name"], ln["item_id"], ln["conf"], ln["note"]))
+    for rv in parsed.get("reviews", []):         # amountless lines with no safe amount: not in the draft
+        reviews.append((rv["name"], rv["item_id"], rv["conf"], rv["reason"]))
+    if parsed.get("servings_max"):
+        flags.append(f"REVIEW: servings range {servings} - {parsed['servings_max']}: the draft stores {servings}, "
+                     f"recipe_servings_max is not written by the importer yet (docs/BACKLOG.md)")
     if not matched:
         flags.append("no ingredients parsed")
 
