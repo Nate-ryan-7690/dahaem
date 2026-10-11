@@ -9,7 +9,7 @@ Status: `in progress` · `next` · `later` · `idea`
 ## Recipes
 
 - **Step amounts: show in the recipe view (PHP, Nate)** — `next`. Display `scaledInstruction`
-  instead of `instruction` (contract in the PR below, "Amounts in cooking steps").
+  instead of `instruction` (contract in #70).
 - **Step amounts: plural units** — `idea`. Units are kept as written, so "1 Prise" scales to
   "2 Prise", "1 Zehe" to "2 Zehe". Plural forms need a small word list; deferred to keep units
   unchanged as decided.
@@ -134,7 +134,7 @@ Status: `in progress` · `next` · `later` · `idea`
   43 steps amount already taken, 45 unsure wording / several candidates) and 60 servings titles
   (59 "… oder …" ready meals + 28614), all still at servings 2. Still open: importer writes no
   `servings_max`, per-household reading of ranges, Brühe family rule (above).
-- #PR_NUMBER Amounts in cooking steps: `GET /api/recipes/{id}` instructions gain `scaledInstruction` for
+- #70 Amounts in cooking steps: `GET /api/recipes/{id}` instructions gain `scaledInstruction` for
   `people` / `basis` (`StepAmounts`). A 2-serving recipe uses HelloFresh's own bracket values for
   2 / 3 / 4 people (single-value bracket = 4 people), other counts and other recipes scale the
   2-person value; plain number + measuring unit amounts scale, °C / times / Stufe / cm / %, Watt
