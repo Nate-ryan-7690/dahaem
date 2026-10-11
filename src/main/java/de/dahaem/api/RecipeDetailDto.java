@@ -3,6 +3,7 @@ package de.dahaem.api;
 import de.dahaem.mealplanner.Recipe;
 import de.dahaem.mealplanner.RecipeIngredient;
 import de.dahaem.mealplanner.RecipeInstruction;
+import de.dahaem.mealplanner.StepAmounts;
 import de.dahaem.shared.Portions;
 
 import java.math.BigDecimal;
@@ -14,7 +15,8 @@ import java.util.List;
  * lower bound), null when the recipe is not a range. {@code people} is the head count asked for with
  * {@code ?people=N} (null when not asked); each ingredient's {@code scaledQuantity} is its
  * {@code quantity} scaled to that count, from {@code servings} by default or from {@code servingsMax}
- * when {@code basis} is {@code "max"}. {@code basis} is the one actually used: {@code "max"} only when
+ * when {@code basis} is {@code "max"}, and each instruction's {@code scaledInstruction} is its step text
+ * with the amounts for that count. {@code basis} is the one actually used: {@code "max"} only when
  * it was asked for and the recipe is a range. {@code scalable} is false when that servings count is
  * not positive, in which case nothing is scaled.
  */
@@ -56,10 +58,19 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
         }
     }
 
-    public record Instruction(int stepNumber, String instruction, String notes, String source) {
+    /**
+     * {@code instruction} is the step as stored (HelloFresh's {@code 1 EL [1,5 EL | 2 EL] Butter*});
+     * {@code scaledInstruction} is the same step with its amounts for {@code people} (see
+     * {@link StepAmounts}) — without {@code people} it is the stored text with each bracket resolved to
+     * its 2-person value. Text that can't be read safely is left exactly as written.
+     */
+    public record Instruction(int stepNumber, String instruction, String scaledInstruction, String notes,
+                              String source) {
 
-        static Instruction from(RecipeInstruction instruction) {
-            return new Instruction(instruction.getStepNumber(), instruction.getInstruction(),
+        static Instruction from(RecipeInstruction instruction, Recipe recipe, Integer people, boolean useMax) {
+            String scaled = StepAmounts.render(instruction.getInstruction(), recipe.getServings(),
+                    recipe.getServingsMax(), people, useMax);
+            return new Instruction(instruction.getStepNumber(), instruction.getInstruction(), scaled,
                     instruction.getNotes(), instruction.getSource());
         }
     }
@@ -79,6 +90,8 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
         return new RecipeDetailDto(recipe.getId(), recipe.getName(), recipe.getServings(), servingsMax, basis, people,
                 Portions.isScalable(scaleFrom), recipe.getPrepTime(), recipe.getCookTime(), nutrition,
                 ingredients.stream().map(ingredient -> Ingredient.from(ingredient, people, scaleFrom)).toList(),
-                instructions.stream().map(Instruction::from).toList());
+                instructions.stream()
+                        .map(instruction -> Instruction.from(instruction, recipe, people, useMax))
+                        .toList());
     }
 }
