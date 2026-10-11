@@ -30,6 +30,12 @@ Status: `in progress` · `next` · `later` · `idea`
   step text for the chosen number of people (2 → first, 3 → second, 4 → third; other counts
   scale from the 2-person value). Only number + measuring unit is scaled, never °C, minutes,
   cm or step counts. Amounts for things not in the ingredient list (water) stay and scale.
+- **"Brühe" family rule for the repair tool** — `next`. A step's generic `Brühe` / `Gemüsebrühe`
+  should count for a line `Stück Gemüsebrühe` (or Geflügel-, Rinderbrühe) when the recipe has
+  exactly ONE stock item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf`
+  (`MERGE_FAMILIES` in `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to
+  review for this ("100 ml Brühe zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the
+  recipe it stays a review. Source: Nate, step 3 of the recipe repair.
 - **Remaining wrong rows after the repair** — `next`. ~301 ½-bug rows held because of uncertain
   item matches (mostly "Limette, gewachst", "Zitrone"): need overrides. 12 rows in ambiguous
   recipes. Unitless lines read as Stück ("75 Weizenmehl", "25 Sojasoße", "25
