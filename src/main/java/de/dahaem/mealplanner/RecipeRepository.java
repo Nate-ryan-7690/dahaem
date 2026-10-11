@@ -31,7 +31,7 @@ public class RecipeRepository {
 
     // Finds all recipes and sorts them by name
     public List<Recipe> findAll(){
-        String sql = "SELECT recipe_id, recipe_name, recipe_servings, recipe_cook_time" +
+        String sql = "SELECT recipe_id, recipe_name, recipe_servings, recipe_servings_max, recipe_cook_time" +
                 ", recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat" +
                 ", recipe_fibre, recipe_sugar " +
                 "FROM recipe ORDER BY recipe_name";
@@ -97,7 +97,7 @@ public class RecipeRepository {
 
     // Searches recipes by id
     public Optional<Recipe> findById(int id){
-        String sql = "SELECT recipe_id, recipe_name, recipe_servings, recipe_cook_time" +
+        String sql = "SELECT recipe_id, recipe_name, recipe_servings, recipe_servings_max, recipe_cook_time" +
                 ", recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat" +
                 ", recipe_fibre, recipe_sugar " +
                 "FROM recipe WHERE recipe_id = ?";
@@ -124,6 +124,7 @@ public class RecipeRepository {
         rs.getInt("recipe_id"),
         rs.getString("recipe_name"),
         rs.getInt("recipe_servings"),
+        getNullableInt(rs, "recipe_servings_max"),
         rs.getInt("recipe_cook_time"),
         rs.getInt("recipe_prep_time"),
         getNullableInt(rs,"recipe_calories"),

@@ -99,6 +99,24 @@ class RecipeReadTest {
     }
 
     @Test
+    void servingsMaxIsNullForANormalRecipeAndTheUpperBoundForARange() throws SQLException {
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time) VALUES (1, 'Bolognese', 2, 30, 10)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_servings_max, recipe_cook_time, recipe_prep_time) VALUES (2, 'Familien-Lasagne', 3, 4, 60, 20)");
+
+        Recipe normal = repository.findById(1).orElseThrow();
+        assertEquals(2, normal.getServings());
+        assertNull(normal.getServingsMax(), "a recipe that is not a range has no servings_max");
+
+        Recipe range = repository.findById(2).orElseThrow();
+        assertEquals(3, range.getServings(), "servings is the lower bound of the range");
+        assertEquals(4, range.getServingsMax());
+
+        List<Recipe> all = service.allRecipes();
+        assertNull(all.get(0).getServingsMax());
+        assertEquals(4, all.get(1).getServingsMax());
+    }
+
+    @Test
     void findByIdReturnsEmptyForAnUnknownId() {
         assertTrue(repository.findById(999).isEmpty());
     }

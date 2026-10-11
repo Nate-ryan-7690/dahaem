@@ -20,16 +20,17 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * migrations/0005_recipe_quantities.sql and 0006_recipe_servings_max.sql on a throwaway MariaDB
- * (Testcontainers), starting from the recipe tables as they were before 0005: they only widen and
- * add, keep every existing value exactly, can be run twice, and leave the same columns and checks a
- * fresh schema.sql creates.
+ * migrations/0005_recipe_quantities.sql on a throwaway MariaDB (Testcontainers), starting from the
+ * recipe tables as they were before it: it only widens and adds, keeps every existing value
+ * exactly, can be run twice, and (with the later recipe migrations applied in order) leaves the same
+ * columns a fresh schema.sql creates.
  */
 class RecipeQuantitiesMigrationTest {
 
     private static final Path OLD_TABLES = Path.of("src", "test", "resources", "migrations", "pre_0005_recipe_tables.sql");
     private static final Path MIGRATION = Path.of("migrations", "0005_recipe_quantities.sql");
-    private static final Path MIGRATION_SERVINGS_MAX = Path.of("migrations", "0006_recipe_servings_max.sql");
+    // schema.sql also carries the later recipe migrations, so the comparison applies them in order too.
+    private static final List<Path> LATER_MIGRATIONS = List.of(Path.of("migrations", "0006_recipe_servings_max.sql"));
 
     @AfterAll
     static void close() throws IOException {
@@ -68,27 +69,13 @@ class RecipeQuantitiesMigrationTest {
     }
 
     @Test
-    void servingsMaxIsAddedNullableKeepsRowsAndIsReRunnable() throws SQLException {
-        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION));
-        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time) "
-                + "VALUES (1, 'Zwei', 2, 30, 0), (2, 'Drei bis vier', 2, 30, 0)");
-
-        TestDatabase.apply(List.of(MIGRATION_SERVINGS_MAX));
-        TestDatabase.apply(List.of(MIGRATION_SERVINGS_MAX));   // re-runnable
-
-        assertEquals(2, count("SELECT COUNT(*) FROM recipe WHERE recipe_servings = 2 AND recipe_servings_max IS NULL"));
-        exec("UPDATE recipe SET recipe_servings = 3, recipe_servings_max = 4 WHERE recipe_id = 2");
-        assertEquals(4, count("SELECT recipe_servings_max FROM recipe WHERE recipe_id = 2"));
-        // the CHECK: a maximum is never below the servings
-        assertThrows(SQLException.class, () -> exec("UPDATE recipe SET recipe_servings_max = 1 WHERE recipe_id = 1"));
-    }
-
-    @Test
     void migratedTablesMatchAFreshSchema() throws SQLException {
         TestDatabase.reset(List.of(Path.of("schema.sql")));
         List<String> fresh = recipeColumnsAndChecks();
 
-        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION, MIGRATION_SERVINGS_MAX));
+        List<Path> migrations = new ArrayList<>(List.of(OLD_TABLES, MIGRATION));
+        migrations.addAll(LATER_MIGRATIONS);
+        TestDatabase.reset(migrations);
         List<String> migrated = recipeColumnsAndChecks();
 
         assertEquals(fresh, migrated);

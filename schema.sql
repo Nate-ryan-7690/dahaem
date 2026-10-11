@@ -1,5 +1,5 @@
 -- DAHÄM database schema (MariaDB). Generated from the live DB.
--- 24 tables. Regenerate with: mariadb data/kitchen_organizer.db .schema
+-- 25 tables. Regenerate with: mariadb data/kitchen_organizer.db .schema
 
 CREATE TABLE brand ( brand_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
@@ -31,7 +31,7 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_servings INTEGER NOT NULL,
 
-	recipe_servings_max INTEGER,
+	recipe_servings_max INT NULL,
 
 	recipe_cook_time INTEGER NOT NULL,
 
@@ -51,8 +51,8 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_source_url TEXT,
 
-	CONSTRAINT recipe_servings_max_not_below_servings
-		CHECK (recipe_servings_max IS NULL OR recipe_servings_max >= recipe_servings));
+	CONSTRAINT recipe_servings_max_above_servings
+		CHECK (recipe_servings_max IS NULL OR recipe_servings_max > recipe_servings));
 
 CREATE TABLE store ( store_id INTEGER PRIMARY KEY AUTO_INCREMENT, 
 
@@ -280,6 +280,22 @@ CREATE TABLE store_offer (
     UNIQUE (store_offer_store_id, store_offer_external_id, store_offer_valid_from, store_offer_region),
 	FOREIGN KEY(store_offer_store_id) REFERENCES store(store_id),
 	FOREIGN KEY(store_offer_product_id) REFERENCES store_product(store_product_id));
+
+-- One row per price change of an existing offer seen on a re-pull (migrations/0007). A new offer has
+-- none: its store_offer row is the first observation. old/new = stored value before / pulled value.
+CREATE TABLE store_offer_price_change (
+    store_offer_price_change_id               INTEGER PRIMARY KEY AUTO_INCREMENT,
+    store_offer_price_change_offer_id         INTEGER NOT NULL,
+    store_offer_price_change_old_sale_price   DECIMAL(10,2) NOT NULL,
+    store_offer_price_change_new_sale_price   DECIMAL(10,2) NOT NULL,
+    store_offer_price_change_old_normal_price DECIMAL(10,2),
+    store_offer_price_change_new_normal_price DECIMAL(10,2),
+    store_offer_price_change_old_deal_price   DECIMAL(10,2),
+    store_offer_price_change_new_deal_price   DECIMAL(10,2),
+    store_offer_price_change_observed_on      DATE NOT NULL,      -- pulled_on of the pull that saw the new price
+    store_offer_price_change_created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX store_offer_price_change_offer_observed (store_offer_price_change_offer_id, store_offer_price_change_observed_on),
+	FOREIGN KEY(store_offer_price_change_offer_id) REFERENCES store_offer(store_offer_id));
 
 CREATE TABLE store_price_history (
     store_price_history_id            INTEGER PRIMARY KEY AUTO_INCREMENT,

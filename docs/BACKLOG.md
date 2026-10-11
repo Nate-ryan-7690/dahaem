@@ -30,7 +30,12 @@ Status: `in progress` · `next` · `later` · `idea`
 - **Servings ranges** — `in progress`. Keep "3 – 4 Personen" as a range: `servings` = 3 (lower
   bound, default) + new nullable `servings_max` = 4. Normal recipes stay 2 (all scraped recipes
   are 2-person); explicit "für 4 Personen" / "Bundle 4P" = 4. Recipe 28614 ("OTP 4P … 2
-  Portionen") needs a manual decision.
+  Portionen") needs a manual decision. The column exists: `recipe.recipe_servings_max` (nullable,
+  CHECK > `recipe_servings`) in `schema.sql` and `migrations/0006_recipe_servings_max.sql` (not yet
+  applied on llmbox), exposed as `servingsMax` in the recipe API, with `?basis=max` on
+  `GET /api/recipes/{id}` to scale from the upper bound. Still to do: the importer
+  (`scripts/importer/`) has to fill it; the shopping list still scales from `servings` (the lower
+  bound) only; the per-household choice of how to read ranges (lower bound vs. max) is not built.
 - **Amounts in cooking steps** — `next`. The API reads the bracket notation and returns the
   step text for the chosen number of people (2 → first, 3 → second, 4 → third; other counts
   scale from the 2-person value). Only number + measuring unit is scaled, never °C, minutes,
@@ -72,9 +77,6 @@ Status: `in progress` · `next` · `later` · `idea`
   duplicates (KING'S CROWN / KING’S CROWN, LANBECK / LANDBECK, …).
 - **Aggregator per-offer end dates** — `idea`. The page header gives the week (Mon–Sun); exact
   "bis …" dates are only on each offer's own page. Fetch only offers not seen before.
-- **Offer price-change history** — `later`. A re-pull in the same week overwrites the price,
-  so a mid-week price change is lost. Record changes (like `store_price_history` for ALDI)
-  for trend analysis.
 - **Seed sync** — `later`. 9 live inventory items are missing from `seed/inventory_catalog.sql`
   (ids 129, 1034, 1179, 1216, 1218, 1431, 1432, 1433, 1505); export them into the seed.
 - **Old SQLite tools** — `later`. `scripts/importer/add_ingredients.py` and `dedup_catalog.py`
@@ -133,3 +135,5 @@ Status: `in progress` · `next` · `later` · `idea`
   repair tool with name matching — migration 0005 applied live 2026-10-10; 48 recipes repaired.
 - #64 Penny receipt parser: discount-excluded items, deposit variants, footer, payment data
   never stored — 22 / 22 real receipts balance.
+- #66 Offer price-change history: `store_offer_price_change` (migration 0007), written by
+  `saveOffers` in the same transaction when a re-pulled offer's price changes — not yet applied live.

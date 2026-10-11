@@ -46,6 +46,15 @@ class PortionsTest {
     }
 
     @Test
+    void rangeScalesFromLowerBoundUnlessMaxIsAsked() {
+        assertEquals(3, Portions.scalingServings(3, 4, false));
+        assertEquals(4, Portions.scalingServings(3, 4, true));
+        assertEquals(2, Portions.scalingServings(2, null, true), "basis max is ignored when not a range");
+        assertEquals(d("0.67"), Portions.scaleRounded(d("1"), 2, Portions.scalingServings(3, 4, false)));
+        assertEquals(d("0.50"), Portions.scaleRounded(d("1"), 2, Portions.scalingServings(3, 4, true)));
+    }
+
+    @Test
     void peopleBelowOneIsRejected() {
         assertFalse(Portions.isValidPeople(0));
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,

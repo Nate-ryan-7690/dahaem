@@ -36,17 +36,24 @@ public class RecipeController {
     /**
      * The recipe with its ingredients and instructions. An optional {@code ?people=N} adds each
      * ingredient's quantity scaled by {@code people / servings} as {@code scaledQuantity}; the stored
-     * {@code quantity}, the instructions and the nutrition are never changed.
+     * {@code quantity}, the instructions and the nutrition are never changed. An optional
+     * {@code ?basis=max} scales a "3 – 4 Personen" range recipe from its upper bound
+     * ({@code people / servingsMax}) instead; it is ignored for a recipe that is not a range, and
+     * {@code ?basis=servings} is the default.
      */
     @GetMapping("/{id}")
     public RecipeDetailDto byId(@PathVariable("id") int id,
-                                @RequestParam(name = "people", required = false) Integer people) {
+                                @RequestParam(name = "people", required = false) Integer people,
+                                @RequestParam(name = "basis", required = false) String basis) {
         if (people != null && !Portions.isValidPeople(people)) {
             throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
         }
+        if (basis != null && !basis.equals(RecipeDetailDto.BASIS_SERVINGS) && !basis.equals(RecipeDetailDto.BASIS_MAX)) {
+            throw new BadRequestException(Portions.INVALID_BASIS_MESSAGE);
+        }
         Recipe recipe = requireRecipe(id);
         return RecipeDetailDto.from(recipe, recipeService.findAllIngredients(id), recipeService.findAllInstructions(id),
-                people);
+                people, RecipeDetailDto.BASIS_MAX.equals(basis));
     }
 
     @GetMapping("/{id}/tags")

@@ -10,13 +10,22 @@ import java.util.List;
 
 /**
  * One recipe with its nutrition, ingredients and ordered instructions, as returned by /api/recipes/{id}.
- * {@code people} is the head count asked for with {@code ?people=N} (null when not asked); each
- * ingredient's {@code scaledQuantity} is its {@code quantity} scaled to that count. {@code scalable}
- * is false when the recipe has no positive servings, in which case nothing is scaled.
+ * {@code servingsMax} is the upper bound of a "3 – 4 Personen" range ({@code servings} is then the
+ * lower bound), null when the recipe is not a range. {@code people} is the head count asked for with
+ * {@code ?people=N} (null when not asked); each ingredient's {@code scaledQuantity} is its
+ * {@code quantity} scaled to that count, from {@code servings} by default or from {@code servingsMax}
+ * when {@code basis} is {@code "max"}. {@code basis} is the one actually used: {@code "max"} only when
+ * it was asked for and the recipe is a range. {@code scalable} is false when that servings count is
+ * not positive, in which case nothing is scaled.
  */
-public record RecipeDetailDto(int id, String name, int servings, Integer people, boolean scalable, int prepTime,
-                              int cookTime, Nutrition nutrition, List<Ingredient> ingredients,
-                              List<Instruction> instructions) {
+public record RecipeDetailDto(int id, String name, int servings, Integer servingsMax, String basis, Integer people,
+                              boolean scalable, int prepTime, int cookTime, Nutrition nutrition,
+                              List<Ingredient> ingredients, List<Instruction> instructions) {
+
+    /** {@code basis} value: scaled from {@code servings} (the default, a range's lower bound). */
+    public static final String BASIS_SERVINGS = "servings";
+    /** {@code basis} value: scaled from {@code servingsMax} (a range's upper bound). */
+    public static final String BASIS_MAX = "max";
 
     /** Nutrition values as stored (per serving, from the HelloFresh import); any of them may be null when unknown. */
     public record Nutrition(Integer calories, Integer protein, Integer carbs, Integer fat, Integer fiber,
@@ -24,7 +33,7 @@ public record RecipeDetailDto(int id, String name, int servings, Integer people,
     }
 
     /**
-     * {@code quantity} is the stored amount for the recipe's {@code servings}, as a decimal (0.5 Stück);
+     * {@code quantity} is the stored amount for the recipe as written, as a decimal (0.5 Stück);
      * {@code scaledQuantity} is that amount for {@code people}, rounded to 2 decimals (equal to
      * {@code quantity} when unscaled). A "to taste" ingredient ({@code toTaste} true, e.g. salt) has
      * no amount: {@code quantity} and {@code scaledQuantity} are both null and {@code unit} is empty.
@@ -55,15 +64,21 @@ public record RecipeDetailDto(int id, String name, int servings, Integer people,
         }
     }
 
-    /** The recipe with ingredient quantities scaled to {@code people} (null for unscaled); people must be at least 1. */
+    /**
+     * The recipe with ingredient quantities scaled to {@code people} (null for unscaled); people must be
+     * at least 1. With {@code useMax} a range recipe scales from {@code servingsMax} instead of
+     * {@code servings}; a recipe that is not a range ignores it.
+     */
     static RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients,
-                                List<RecipeInstruction> instructions, Integer people) {
+                                List<RecipeInstruction> instructions, Integer people, boolean useMax) {
         Nutrition nutrition = new Nutrition(recipe.getCalories(), recipe.getProtein(), recipe.getCarbs(),
                 recipe.getFat(), recipe.getFiber(), recipe.getSugar());
-        int servings = recipe.getServings();
-        return new RecipeDetailDto(recipe.getId(), recipe.getName(), servings, people, Portions.isScalable(servings),
-                recipe.getPrepTime(), recipe.getCookTime(), nutrition,
-                ingredients.stream().map(ingredient -> Ingredient.from(ingredient, people, servings)).toList(),
+        Integer servingsMax = recipe.getServingsMax();
+        int scaleFrom = Portions.scalingServings(recipe.getServings(), servingsMax, useMax);
+        String basis = useMax && servingsMax != null ? BASIS_MAX : BASIS_SERVINGS;
+        return new RecipeDetailDto(recipe.getId(), recipe.getName(), recipe.getServings(), servingsMax, basis, people,
+                Portions.isScalable(scaleFrom), recipe.getPrepTime(), recipe.getCookTime(), nutrition,
+                ingredients.stream().map(ingredient -> Ingredient.from(ingredient, people, scaleFrom)).toList(),
                 instructions.stream().map(Instruction::from).toList());
     }
 }
