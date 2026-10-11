@@ -137,6 +137,8 @@ Status: `in progress` · `next` · `later` · `idea`
 - #70 Amounts in cooking steps: `GET /api/recipes/{id}` instructions gain `scaledInstruction` for
   `people` / `basis` (`StepAmounts`). A 2-serving recipe uses HelloFresh's own bracket values for
   2 / 3 / 4 people (single-value bracket = 4 people), other counts and other recipes scale the
-  2-person value; plain number + measuring unit amounts scale, °C / times / Stufe / cm / %, Watt
-  and plain counts never; word and time brackets are picked, not scaled; unreadable brackets and a
-  missing `]` stay as written. Tests on made-up steps only.
+  2-person value; plain number + measuring unit amounts scale, °C / times / Stufe / cm / %, Watt,
+  plain counts and pack sizes (`1 Dose (400 g)`, `2 x 100 g`) never; word brackets and brackets of
+  times, temperatures and settings (unit before or after the bracket, or `Stufe` before the number:
+  `10 [12] Min.`, `200 [220] °C`, `Stufe 2 [3]`) are picked per size, never scaled; unreadable
+  brackets and a missing `]` stay as written. Tests on made-up steps only.

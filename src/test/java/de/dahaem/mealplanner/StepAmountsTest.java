@@ -194,6 +194,99 @@ class StepAmountsTest {
         assertEquals("Gare es 12 Min.", two("Gare es 10 Min. [12 Min.]", 4));
     }
 
+    // --- times, temperatures and settings: picked per size, never scaled -------------------------
+
+    /** Checks people null / 1 / 2 / 3 / 4 / 6 on a 2-serving recipe. */
+    private static void assertAllSizes(String step, String none, String p1, String p2, String p3, String p4,
+                                       String p6) {
+        assertEquals(none, two(step, null), "no people");
+        assertSizes(step, p1, p2, p3, p4, p6);
+    }
+
+    @Test
+    void timeUnitAfterASingleValueBracket() {
+        assertAllSizes("Backe 10 [12] Min. im Ofen.",
+                "Backe 10 Min. im Ofen.",
+                "Backe 10 Min. im Ofen.",
+                "Backe 10 Min. im Ofen.",
+                "Backe 10 Min. im Ofen.",   // no 3-person value, and times are not scaled
+                "Backe 12 Min. im Ofen.",
+                "Backe 10 Min. im Ofen.");
+    }
+
+    @Test
+    void timeUnitAfterATwoValueBracket() {
+        assertAllSizes("Backe 10 [12 | 14] Minuten im Ofen.",
+                "Backe 10 Minuten im Ofen.",
+                "Backe 10 Minuten im Ofen.",
+                "Backe 10 Minuten im Ofen.",
+                "Backe 12 Minuten im Ofen.",
+                "Backe 14 Minuten im Ofen.",
+                "Backe 10 Minuten im Ofen.");
+    }
+
+    @Test
+    void stufeBeforeASingleValueBracket() {
+        assertAllSizes("Rühre auf Stufe 2 [3] um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 3 um.",
+                "Rühre auf Stufe 2 um.");
+    }
+
+    @Test
+    void stufeBeforeATwoValueBracket() {
+        assertAllSizes("Rühre auf Stufe 2 [3 | 4] um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 2 um.",
+                "Rühre auf Stufe 3 um.",
+                "Rühre auf Stufe 4 um.",
+                "Rühre auf Stufe 2 um.");
+    }
+
+    @Test
+    void temperatureAfterTheBracket() {
+        assertAllSizes("Backe alles bei 200 [220] °C.",
+                "Backe alles bei 200 °C.",
+                "Backe alles bei 200 °C.",
+                "Backe alles bei 200 °C.",
+                "Backe alles bei 200 °C.",
+                "Backe alles bei 220 °C.",
+                "Backe alles bei 200 °C.");
+    }
+
+    @Test
+    void nonAmountBracketsInARangeRecipeKeepThe2PersonValue() {
+        assertEquals("Backe 10 Min.", StepAmounts.render("Backe 10 [12] Min.", 3, 4, 6, false));
+        assertEquals("Rühre auf Stufe 2 um.", StepAmounts.render("Rühre auf Stufe 2 [3] um.", 3, 4, 6, true));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 3, 4, 6})
+    void settingWithAnAmountInsideIsUnreadable(int people) {
+        String step = "Rühre auf Stufe 2 [3 EL] um.";
+        assertEquals(step, two(step, people));
+    }
+
+    // --- pack sizes in parentheses ------------------------------------------------------------------
+
+    @Test
+    void packSizeInParenthesesIsNeverScaled() {
+        String feta = "Zerbrösele 1 Packung Feta (200 g) über den Salat.";
+        assertAllSizes(feta, feta, feta, feta, feta, feta, feta);
+        String tomatoes = "Gib 1 Dose (400 g) Tomaten in den Topf.";
+        assertAllSizes(tomatoes, tomatoes, tomatoes, tomatoes, tomatoes, tomatoes, tomatoes);
+    }
+
+    @Test
+    void amountsBesideAPackSizeStillScale() {
+        assertEquals("Gib 1 Dose (400 g) Tomaten und 200 ml Wasser* dazu.",
+                two("Gib 1 Dose (400 g) Tomaten und 100 ml Wasser* dazu.", 4));
+    }
+
     // --- left unchanged --------------------------------------------------------------------------
 
     @ParameterizedTest

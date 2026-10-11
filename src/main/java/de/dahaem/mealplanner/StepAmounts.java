@@ -26,8 +26,10 @@ import java.util.regex.Pattern;
  *   <li>Amounts without a bracket are scaled only when they are a number plus a measuring unit
  *       (g, kg, ml, l, EL, TL, Prise, Msp.); °C, times, Stufe, lengths, Watt, % and plain counts
  *       ("2 Pfannen") are never touched.</li>
- *   <li>Brackets of words ({@code Hälfte [drei Viertel | gesamte]}) or times ({@code [19 Min. | 20 Min.]})
- *       pick HelloFresh's variant for 2 / 3 / 4 people and keep the 2-person text otherwise.</li>
+ *   <li>Brackets of words ({@code Hälfte [drei Viertel | gesamte]}) or of times, temperatures and settings
+ *       ({@code 18 Min. [19 Min. | 20 Min.]}, {@code 10 [12] Min.}, {@code 200 [220] °C}, {@code Stufe 2 [3]})
+ *       pick HelloFresh's variant for 2 / 3 / 4 people and keep the 2-person text otherwise; never scaled.</li>
+ *   <li>A pack size in parentheses after a word ({@code 1 Dose (400 g) Tomaten}) is never scaled.</li>
  *   <li>Anything that can't be read safely (free text in brackets, broken numbers, a missing
  *       {@code ]}) stays exactly as written.</li>
  * </ul>
@@ -75,10 +77,16 @@ public final class StepAmounts {
             NUM_START + "(" + NUM + ")(?:(" + RANGE_SEP + "|\\s+bis\\s+)(" + NUM + "))?( ?)"
                     + "(g|kg|ml|l|EL|TL|Prisen|Prise|Msp\\.|Msp)(?![\\p{L}\\d-])");
 
+    private static final Pattern BRACKET = Pattern.compile("\\[([^\\[\\]]*)]");
+
     private static final Pattern DIGIT = Pattern.compile("\\d");
     private static final Pattern CLAUSE_END = Pattern.compile("[.,;:!?]\\s");
 
-    private static final Pattern FOLLOWING_UNIT = Pattern.compile("^\\s*(\\p{L}+\\.?)(?![\\p{L}\\d-])");
+    private static final Pattern FOLLOWING_UNIT = Pattern.compile("^\\s*(°C|%|\\p{L}+\\.?)(?![\\p{L}\\d-])");
+
+    // A pack size in parentheses right after a word: "1 Packung Feta (200 g)", "1 Dose (400 g)".
+    private static final Pattern PACK_SIZE_BEFORE = Pattern.compile("\\p{L}\\*?\\s*\\(\\s*$");
+    private static final Set<String> PACK_SIZE_UNITS = Set.of("g", "kg", "ml", "l");
 
     private static final Pattern MULTIPLIER_BEFORE = Pattern.compile("\\d\\s*[x×]\\s*$");
 
@@ -119,7 +127,7 @@ public final class StepAmounts {
 
         StringBuilder out = new StringBuilder();
         int copiedUpTo = 0;
-        Matcher bracket = Pattern.compile("\\[([^\\[\\]]*)]").matcher(step);
+        Matcher bracket = BRACKET.matcher(step);
         while (bracket.find()) {
             String before = step.substring(copiedUpTo, bracket.start());
             Replacement replacement = resolveBracket(before, bracket.group(1), step.substring(bracket.end()), ctx);
@@ -213,6 +221,12 @@ public final class StepAmounts {
                                                     String followingUnit, Context ctx) {
         String outerText = before.substring(outer.start()).stripTrailing();
         String outerUnit = outer.group(3);
+        // A time, temperature or setting is picked per size but never scaled. The unit can stand before the
+        // bracket ("10 Min. [12 Min.]"), after it ("10 [12] Min.", "200 [220] °C"), or a setting word before
+        // the number ("Stufe 2 [3]").
+        Matcher wordBefore = TRAILING_WORD.matcher(before.substring(0, outer.start()));
+        boolean nonAmount = isNonAmount(outerUnit) || isNonAmount(followingUnit)
+                || (wordBefore.find() && isNonAmount(wordBefore.group(1)));
         Amount outerAmount = amount(outer.group(1), outer.group(2), outerUnit);
         if (outerAmount == null) {
             return null;
@@ -228,8 +242,9 @@ public final class StepAmounts {
             } else if (outerUnit == null) {
                 return null;   // "15 [30 g] g" — can't tell which unit wins
             }
-            if (isNonAmount(parsed.unit()) != isNonAmount(outerUnit)) {
-                return null;   // "10 Min. [2 EL]" mixes kinds
+            if (isNonAmount(parsed.unit()) != isNonAmount(outerUnit)
+                    || (parsed.unit() != null && isNonAmount(parsed.unit()) != nonAmount)) {
+                return null;   // "10 Min. [2 EL]", "Stufe 2 [3 EL]" mix kinds
             }
             sizes.add(parsed);
         }
@@ -238,16 +253,23 @@ public final class StepAmounts {
         if (chosen != null) {
             return new Replacement(from, format(chosen, followingUnit));
         }
-        if (isNonAmount(outerUnit) || !ctx.scales()) {
+        if (nonAmount || !ctx.scales()) {
             return new Replacement(from, outerText);   // times etc. keep the 2-person value
         }
         return new Replacement(from, format(scale(outerAmount, ctx), followingUnit));
     }
 
-    /** The measuring unit right after a bracket ("15 [30] g Butter" → g), only to format the number; else null. */
+    /**
+     * The unit right after a bracket: a measuring unit ("15 [30] g Butter" → g, only to format the number) or a
+     * non-amount unit ("10 [12] Min." → Min., never scaled); else null.
+     */
     private static String followingUnit(String after) {
         Matcher m = FOLLOWING_UNIT.matcher(after);
-        return m.find() && MEASURING_UNITS.contains(m.group(1).toLowerCase(Locale.ROOT)) ? m.group(1) : null;
+        if (!m.find()) {
+            return null;
+        }
+        String unit = m.group(1);
+        return MEASURING_UNITS.contains(unit.toLowerCase(Locale.ROOT)) || isNonAmount(unit) ? unit : null;
     }
 
     /** HelloFresh's own value for the requested size, or null (2 people, missing size, other counts, untrusted). */
@@ -385,8 +407,12 @@ public final class StepAmounts {
         StringBuilder out = new StringBuilder();
         int copied = 0;
         while (m.find()) {
-            if (MULTIPLIER_BEFORE.matcher(text.substring(0, m.start())).find()) {
+            String preceding = text.substring(0, m.start());
+            if (MULTIPLIER_BEFORE.matcher(preceding).find()) {
                 continue;   // "2 x 100 g" is a pack size, not an amount
+            }
+            if (PACK_SIZE_UNITS.contains(m.group(5)) && PACK_SIZE_BEFORE.matcher(preceding).find()) {
+                continue;   // "1 Dose (400 g)" is a pack size, not an amount
             }
             BigDecimal low = parseNumber(m.group(1));
             BigDecimal high = m.group(3) == null ? null : parseNumber(m.group(3));
