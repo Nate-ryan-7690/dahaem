@@ -120,6 +120,26 @@ class RepairSqlTest {
         assertRow(1, 40, "1.500", "Stück", false);     // the rest still applies
     }
 
+    @Test
+    void servingsStatementsOfTheToolSatisfyTheMaxCheck() throws Exception {
+        // the forms repair_quantities.py writes: single N, range N + max, max alone; all guarded on the old values
+        exec("UPDATE recipe SET recipe_servings = 1 WHERE recipe_id = 1 AND recipe_servings = 2");
+        exec("UPDATE recipe SET recipe_servings = 3, recipe_servings_max = 4 WHERE recipe_id = 2 "
+                + "AND recipe_servings = 2 AND recipe_servings_max IS NULL");
+        exec("UPDATE recipe SET recipe_servings_max = 4 WHERE recipe_id = 3 AND recipe_servings = 2 "
+                + "AND recipe_servings_max IS NULL");
+        assertEquals(1, count("SELECT recipe_servings FROM recipe WHERE recipe_id = 1"));
+        assertEquals(3, count("SELECT recipe_servings FROM recipe WHERE recipe_id = 2"));
+        assertEquals(4, count("SELECT recipe_servings_max FROM recipe WHERE recipe_id = 2"));
+        assertEquals(4, count("SELECT recipe_servings_max FROM recipe WHERE recipe_id = 3"));
+        // the guard makes a second run a no-op, and the CHECK refuses a maximum that is not above servings
+        exec("UPDATE recipe SET recipe_servings = 3, recipe_servings_max = 4 WHERE recipe_id = 2 "
+                + "AND recipe_servings = 2 AND recipe_servings_max IS NULL");
+        assertEquals(3, count("SELECT recipe_servings FROM recipe WHERE recipe_id = 2"));
+        org.junit.jupiter.api.Assertions.assertThrows(SQLException.class,
+                () -> exec("UPDATE recipe SET recipe_servings_max = 2 WHERE recipe_id = 4 AND recipe_servings = 2"));
+    }
+
     // ---------- helpers ----------
 
     /** Runs every statement of the file inside one transaction, as the README tells Nate to; returns rows changed. */

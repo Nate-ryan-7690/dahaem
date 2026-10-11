@@ -1,5 +1,5 @@
 -- Recipe quantity repair, selector 'suspect', generated TEST by scripts/importer/repair_quantities.py
--- Needs migrations/0005_recipe_quantities.sql. Review the .tsv next to this file first.
+-- Needs migrations/0005_recipe_quantities.sql and 0006_recipe_servings_max.sql. Review the .tsv next to this file first.
 -- Every statement is guarded on the current value, so a row that changed since the run is left alone
 -- and the file can be applied twice. There is no BEGIN/COMMIT on purpose: run it inside ONE transaction
 -- after a snapshot (scripts/importer/README.md), e.g.
@@ -10,10 +10,10 @@
 -- selector: suspect    recipes selected: 6    URLs loaded: 8
 -- recipes: matched 3 | ambiguous 1 | unmatched 2 (of which 2 incomplete, re-run to retry)
 -- pages: fetched 0 | from cache 7 | 404 1 | fetch errors 0 | robots.txt-disallowed 0 | not cached (offline) 1
--- rows updated: 7 = ½-bug fixed 3 | rounding fixed 2 | unit changed 1 | now to-taste 1 | other 0
--- lines inserted: 3 = EL/TL 2 | to-taste 1 | other 0
--- servings changed: 1 | servings kept, recipeYield missing 1    source URLs set: 3
--- held for review (TSV only): other changes 1 | uncertain item match 2 | unexplained unit change 1 | unmatched ingredient 0
+-- rows updated: 7 = ½-bug fixed 3 | rounding fixed 2 | unit changed 1 | now to-taste 1 | from the steps 0 | other 0
+-- lines inserted: 3 = EL/TL 2 | to-taste 1 | from the steps 0 | 1 Stück 0 | other 0
+-- servings changed: 1 (ranges with a maximum: 0) | servings held for review 1    source URLs set: 3
+-- held for review (TSV only): other changes 1 | uncertain item match 2 | unexplained unit change 1 | unmatched ingredient 0 | amountless line without a safe amount 0
 -- rows unchanged: 3    stored rows not on the page (left as is): 1
 
 -- recipe 1 'Zitronen-Hähnchen' <- https://www.hellofresh.de/recipes/zitronen-hahnchen-5f1a2b3c4d5e6f7a8b9c0d1e

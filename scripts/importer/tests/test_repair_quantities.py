@@ -91,11 +91,11 @@ class RepairToolTest(unittest.TestCase):
             "selector: suspect    recipes selected: 6    URLs loaded: 8",
             "recipes: matched 3 | ambiguous 1 | unmatched 2 (of which 2 incomplete, re-run to retry)",
             "pages: fetched 0 | from cache 7 | 404 1 | fetch errors 0 | robots.txt-disallowed 0 | not cached (offline) 1",
-            "rows updated: 7 = ½-bug fixed 3 | rounding fixed 2 | unit changed 1 | now to-taste 1 | other 0",
-            "lines inserted: 3 = EL/TL 2 | to-taste 1 | other 0",
-            "servings changed: 1 | servings kept, recipeYield missing 1    source URLs set: 3",
+            "rows updated: 7 = ½-bug fixed 3 | rounding fixed 2 | unit changed 1 | now to-taste 1 | from the steps 0 | other 0",
+            "lines inserted: 3 = EL/TL 2 | to-taste 1 | from the steps 0 | 1 Stück 0 | other 0",
+            "servings changed: 1 (ranges with a maximum: 0) | servings held for review 1    source URLs set: 3",
             "held for review (TSV only): other changes 1 | uncertain item match 2 | unexplained unit change 1"
-            " | unmatched ingredient 0",
+            " | unmatched ingredient 0 | amountless line without a safe amount 0",
         ]:
             self.assertIn(expected, out)
         self.assertIn("nothing was applied to the database", out)
@@ -387,6 +387,89 @@ class MatchingTest(unittest.TestCase):
         self.assertIn(title_key("Zitronen-Hähnchen mit Reis"), by_name)
         self.assertEqual(1, statuses["404"])
         self.assertEqual(1, statuses["uncached"])
+
+
+class StepRulesRunTest(NameMatchingRunTest):
+    """End to end: amountless lines (amount from the steps, 1 Stück, to taste, review) and servings ranges."""
+
+    def page(self, name, lines, steps=(), recipe_yield=2):
+        rec = {"@type": "Recipe", "name": name, "recipeYield": recipe_yield, "totalTime": "PT20M",
+               "recipeIngredient": lines}
+        rec["recipeInstructions"] = [{"@type": "HowToStep", "text": f"<p>{s}</p>"} for s in steps]
+        return rec
+
+    def run_all(self, recipes, ingredients, pages, servings=None):
+        state = {"recipes": [{"id": i, "name": n, "servings": (servings or {}).get(i, 2), "source_url": None}
+                             for i, n in recipes],
+                 "ingredients": [{"recipe_id": r, "item_id": i, "unit": u, "quantity": q, "to_taste": False}
+                                 for r, i, u, q in ingredients],
+                 "items": self.items}
+        state_path = os.path.join(self.tmp, "state.json")
+        urls_path = os.path.join(self.tmp, "urls.txt")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        fetcher = Fetcher(self.cache, offline=True)
+        with open(urls_path, "w", encoding="utf-8") as f:
+            for n, (slug, rec) in enumerate(pages.items()):
+                url = f"https://www.hellofresh.de/recipes/{slug}-{n:024x}"
+                f.write(url + "\n")
+                fetcher._store(fetcher._path(url), url, "ok", rec)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+            repair_quantities.main(["--state", state_path, "--urls", urls_path, "--cache", self.cache,
+                                    "--out", self.out, "--offline", "--stamp", "T", "--select", "all"])
+        with open(os.path.join(self.out, "repair_all_T.tsv"), encoding="utf-8") as f:
+            header, *rows = [l.rstrip("\n").split("\t") for l in f]
+        with open(os.path.join(self.out, "repair_all_T.sql"), encoding="utf-8") as f:
+            sql = f.read()
+        return stdout.getvalue(), [dict(zip(header, r)) for r in rows], sql
+
+    def test_amountless_lines_follow_the_rules(self):
+        out, rows, sql = self.run_all(
+            [(1, "Pfannengericht"), (2, "Salat")],
+            [(1, 1070, "Stück", 1), (1, 1148, "Stück", 1), (2, 565, "Stück", 1)],      # old importer: "1 Stück" each
+            {"pfannengericht": self.page("Pfannengericht", ["Stück Honig", "Stück Salz", " Zucker", "nach Geschmack Pfeffer",
+                                                            "Stück Petersilie"],
+                                         ["1 EL Honig und 1 EL Honig verrühren.", "Mit Salz abschmecken."]),
+             "salat": self.page("Salat", ["Stück Pita-Brote"], ["Pita füllen."])})
+        # steps: Honig 2 EL replaces the old "1 Stück" (class from-steps); Salz 1 Stück -> to taste
+        self.assertIn("recipe_ingredient_quantity_needed = 2, recipe_ingredient_unit = 'EL'", sql)
+        self.assertIn("-- from-steps: Stück Honig", sql)
+        self.assertIn("recipe_ingredient_to_taste = 1", sql)
+        # Pfeffer (nach Geschmack) and Zucker (uncountable staple, no amount) are new to-taste rows
+        self.assertIn("-- insert-to-taste: nach Geschmack Pfeffer", sql)
+        self.assertIn("-- insert-to-taste:  Zucker", sql)
+        # Petersilie: not countable, no amount anywhere: review, no SQL
+        review = [r for r in rows if r["action"] == "review-amount"]
+        self.assertEqual(["Stück Petersilie"], [r["page_line"].strip() for r in review])
+        # "Stück Pita-Brote" = 1 Stück: the stored row already says so, nothing to do
+        self.assertFalse([l for l in sql.splitlines() if "item_id = 565" in l])
+        self.assertIn("from the steps 1", out)
+
+    def test_range_title_sets_servings_and_maximum_once(self):
+        out, rows, sql = self.run_all(
+            [(1, "Crumble für 3 – 4 Personen | 40 Minuten"), (2, "Meat Bundle 4P")], [],
+            {"crumble": self.page("Crumble für 3 – 4 Personen | 40 Minuten", ["1 Stück Zitrone"]),
+             "bundle": self.page("Meat Bundle 4P", ["1 Stück Zitrone"])})
+        self.assertIn("UPDATE recipe SET recipe_servings = 3, recipe_servings_max = 4 WHERE recipe_id = 1 "
+                      "AND recipe_servings = 2 AND recipe_servings_max IS NULL;", sql)
+        self.assertIn("UPDATE recipe SET recipe_servings = 4 WHERE recipe_id = 2 AND recipe_servings = 2;", sql)
+        self.assertIn("servings changed: 2 (ranges with a maximum: 1)", out)
+
+    def test_contradicting_title_is_held_for_review(self):
+        out, rows, sql = self.run_all(
+            [(1, "OTP 4P Birnen Parfait 2 Portionen | zubereiten")], [],
+            {"otp": self.page("OTP 4P Birnen Parfait 2 Portionen | zubereiten", ["1 Stück Zitrone"])})
+        self.assertNotIn("recipe_servings", "".join(l for l in sql.splitlines() if l.startswith("UPDATE")))
+        self.assertEqual(["review-servings"], [r["action"] for r in rows if r["action"].startswith("review-serv")])
+
+    def test_a_stored_range_is_not_written_twice(self):
+        state_recipes = [(1, "Crumble für 3 – 4 Personen | 40 Minuten")]
+        out, rows, sql = self.run_all(state_recipes, [],
+                                      {"crumble": self.page(state_recipes[0][1], ["1 Stück Zitrone"])}, servings={1: 3})
+        # servings already 3, but the maximum is still missing: only the maximum is set
+        self.assertIn("UPDATE recipe SET recipe_servings_max = 4 WHERE recipe_id = 1 AND recipe_servings = 3 "
+                      "AND recipe_servings_max IS NULL;", sql)
 
 
 if __name__ == "__main__":

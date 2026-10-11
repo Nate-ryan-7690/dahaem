@@ -11,7 +11,12 @@ What it fixes (see migrations/0005_recipe_quantities.sql, which must be applied 
   * rounding: every amount was rounded half-up and forced to >= 1 ("1½" -> 2, "¼ TL" -> 1)
   * units: "Esslöffel"/"Teelöffel" lines were dropped; "Prisen" etc. stored as Stück
   * "nach Geschmack"/amountless lines: dropped or stored as 1 Stück -> to-taste rows
-  * "Bundle 4P" recipes: amounts for 4 people stored with servings 2 -> servings 4
+  * servings from the title ("4P", "für 6 Personen", "1 Pers.", "4 Portionen"; a range "3 – 4 Personen"
+    keeps servings 3 and recipe_servings_max 4); contradictions are only reported
+  * lines without a number: the amount from the cooking steps (scripts/importer/step_amounts.py),
+    "nach Geschmack X" / salt / pepper / oil / vinegar without an amount -> to taste,
+    "Stück X" without an amount -> 1 Stück, anything unsure -> review-amount (see README.md)
+  (migrations/0006_recipe_servings_max.sql must be applied first)
 and records each matched page in recipe.recipe_source_url.
 
 Steps:
@@ -39,7 +44,7 @@ Only listed in the TSV, never in the SQL:
     review-uncertain-match. An earlier wrong match must not be "corrected" on a guess;
   * a unit change the old parser cannot explain (the stored row is not exactly what the old
     parser made of this page line): review-unit;
-  * servings from a page without a readable recipeYield (and no bundle-for-4 title): the 2 would
+  * servings from a page without a readable recipeYield (and no head count in the title): the 2 would
     be a guess, so the stored value is kept: review-servings;
   * changes that are not one of the known bugs, and new lines that are neither spoons nor
     to-taste (review-held), unless --include-other is given.
@@ -79,6 +84,7 @@ HASH_RE = re.compile(r"-?([0-9a-f]{24})/?$")
 # change classes (TSV "class" column and summary)
 FRACTION, ROUNDING, UNIT, TO_TASTE, OTHER = "half-bug", "rounding", "unit", "to-taste", "other"
 INS_SPOON, INS_TO_TASTE, INS_OTHER = "insert-spoon", "insert-to-taste", "insert-other"
+FROM_STEPS, INS_STEPS, INS_ONE = "from-steps", "insert-steps", "insert-one-piece"
 
 
 # ---------- database state ----------
@@ -107,11 +113,14 @@ class State:
         with con.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
                         "AND ((TABLE_NAME = 'recipe_ingredient' AND COLUMN_NAME = 'recipe_ingredient_to_taste') "
-                        "OR (TABLE_NAME = 'recipe' AND COLUMN_NAME = 'recipe_source_url'))")
-            if cur.fetchone()[0] != 2:
-                raise SystemExit("apply migrations/0005_recipe_quantities.sql first (snapshot before it)")
-            cur.execute("SELECT recipe_id, recipe_name, recipe_servings, recipe_source_url FROM recipe")
-            recipes = {i: {"id": i, "name": n, "servings": s, "source_url": u} for i, n, s, u in cur.fetchall()}
+                        "OR (TABLE_NAME = 'recipe' AND COLUMN_NAME IN ('recipe_source_url', 'recipe_servings_max')))")
+            if cur.fetchone()[0] != 3:
+                raise SystemExit("apply migrations/0005_recipe_quantities.sql and 0006_recipe_servings_max.sql "
+                                 "first (snapshot before each)")
+            cur.execute("SELECT recipe_id, recipe_name, recipe_servings, recipe_servings_max, recipe_source_url "
+                        "FROM recipe")
+            recipes = {i: {"id": i, "name": n, "servings": s, "servings_max": sm, "source_url": u}
+                       for i, n, s, sm, u in cur.fetchall()}
             cur.execute("SELECT recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, "
                         "recipe_ingredient_quantity_needed, recipe_ingredient_to_taste FROM recipe_ingredient")
             rows = {}
@@ -355,25 +364,47 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
     for note in parsed["notes"]:
         plan.tsv_row(recipe, url, "note", note=note)
 
-    if parsed["servings_source"] == recipe_parse.DEFAULT:
-        # no readable recipeYield and no bundle title: 2 would only be a guess, never written
+    if parsed["servings_source"] in (recipe_parse.DEFAULT, recipe_parse.REVIEW):
+        # no readable recipeYield and no title rule (2 would only be a guess), or a self-contradicting
+        # title: never written, a human decides
         plan.counts["servings_held"] += 1
         plan.tsv_row(recipe, url, "review-servings", "servings",
-                     note=f"recipeYield missing, stored {recipe['servings']} kept; " + "; ".join(parsed["notes"]))
-    elif parsed["servings"] != recipe["servings"]:
-        plan.sql.append(f"UPDATE recipe SET recipe_servings = {parsed['servings']} "
-                        f"WHERE recipe_id = {rid} AND recipe_servings = {recipe['servings']};")
-        plan.counts["servings"] += 1
-        plan.tsv_row(recipe, url, "update-servings", "servings",
-                     note=f"{recipe['servings']} -> {parsed['servings']} (from {parsed['servings_source']}); "
+                     note=(f"recipeYield missing, stored {recipe['servings']} kept; " if parsed["servings_source"]
+                           == recipe_parse.DEFAULT else f"stored {recipe['servings']} kept; ")
                      + "; ".join(parsed["notes"]))
+    else:
+        want, want_max = parsed["servings"], parsed.get("servings_max")
+        have, have_max = recipe["servings"], recipe.get("servings_max")
+        sets, guards = [], [f"recipe_id = {rid}", f"recipe_servings = {have}"]
+        if want != have:
+            sets.append(f"recipe_servings = {want}")
+        if want_max is not None and want_max != have_max:
+            sets.append(f"recipe_servings_max = {want_max}")
+            guards.append("recipe_servings_max IS NULL" if have_max is None
+                          else f"recipe_servings_max = {have_max}")
+        if sets:
+            plan.sql.append(f"UPDATE recipe SET {', '.join(sets)} WHERE {' AND '.join(guards)};")
+            plan.counts["servings"] += 1
+            if want_max is not None:
+                plan.counts["servings_range"] += 1
+            plan.tsv_row(recipe, url, "update-servings", "servings",
+                         note=f"{have} -> {want}" + (f" (max {want_max})" if want_max is not None else "")
+                         + f" (from {parsed['servings_source']}); " + "; ".join(parsed["notes"]))
 
     if not recipe.get("source_url"):
         plan.sql.append(f"UPDATE recipe SET recipe_source_url = {sql_str(url)} "
                         f"WHERE recipe_id = {rid} AND recipe_source_url IS NULL;")
         plan.counts["source_url"] += 1
 
-    seen = set()
+    review_seen = set()
+    for rev in parsed.get("reviews", []):
+        plan.counts["held_amount"] += 1
+        iid = rev["item_id"]
+        review_seen.add(iid)
+        plan.tsv_row(recipe, url, "review-amount", "", iid if iid is not None else "", None, None, rev["raw"],
+                     rev["conf"], rev["reason"], state.item_names.get(iid, ""))
+
+    seen = set(review_seen)           # an amountless line held for review leaves its stored row alone
     for line in parsed["lines"]:
         iid = line["item_id"]
         name = state.item_names.get(iid, "")
@@ -397,6 +428,9 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
                 plan.counts["unchanged"] += 1
                 continue
             cls = classify(old, new)
+            if line.get("origin") in ("steps", "one") and cls in (OTHER, UNIT) and (
+                    old["to_taste"] or recipe_parse.old_parse(line["raw"]) == (old["quantity"], old["unit"])):
+                cls = FROM_STEPS    # the stored row is what the old parser made of this amountless line
             if line["conf"] not in CONFIDENT:
                 # an uncertain item match is no ground for "correcting" a stored row: it may be
                 # an earlier wrong match ("g Bratapfelgewürz" -> Apfel), whatever the class
@@ -430,7 +464,8 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
             plan.tsv_row(recipe, url, "update", cls, iid, old, new, line["raw"], line["conf"], line["note"], name)
             continue
         # a line the stored recipe does not have
-        cls = INS_TO_TASTE if new["to_taste"] else INS_SPOON if new["unit"] in SPOONS else INS_OTHER
+        cls = (INS_TO_TASTE if new["to_taste"] else INS_STEPS if line.get("origin") == "steps"
+               else INS_ONE if line.get("origin") == "one" else INS_SPOON if new["unit"] in SPOONS else INS_OTHER)
         if line["conf"] not in CONFIDENT:
             plan.counts["held_unconfident"] += 1
             plan.tsv_row(recipe, url, "review-uncertain-match", cls, iid, None, new, line["raw"], line["conf"],
@@ -517,7 +552,7 @@ def run(state, urls, selector, fetcher, catalog, include_other=False, limit=0, l
 
 def summary(plan, fetcher, selector, n_urls):
     c, f = plan.counts, fetcher.stats
-    ins = c[INS_SPOON] + c[INS_TO_TASTE] + c[INS_OTHER]
+    ins = c[INS_SPOON] + c[INS_TO_TASTE] + c[INS_STEPS] + c[INS_ONE] + c[INS_OTHER]
     upd = sum(v for k, v in c.items() if k.startswith("update:"))
     return "\n".join([
         f"selector: {selector}    recipes selected: {c['selected']}    URLs loaded: {n_urls}",
@@ -527,13 +562,15 @@ def summary(plan, fetcher, selector, n_urls):
         f" | robots.txt-disallowed {f['robots']} | not cached (offline) {f['uncached']}",
         f"rows updated: {upd} = ½-bug fixed {c['update:' + FRACTION]} | rounding fixed {c['update:' + ROUNDING]}"
         f" | unit changed {c['update:' + UNIT]} | now to-taste {c['update:' + TO_TASTE]}"
-        f" | other {c['update:' + OTHER]}",
-        f"lines inserted: {ins} = EL/TL {c[INS_SPOON]} | to-taste {c[INS_TO_TASTE]} | other {c[INS_OTHER]}",
-        f"servings changed: {c['servings']} | servings kept, recipeYield missing {c['servings_held']}"
+        f" | from the steps {c['update:' + FROM_STEPS]} | other {c['update:' + OTHER]}",
+        f"lines inserted: {ins} = EL/TL {c[INS_SPOON]} | to-taste {c[INS_TO_TASTE]} | from the steps "
+        f"{c[INS_STEPS]} | 1 Stück {c[INS_ONE]} | other {c[INS_OTHER]}",
+        f"servings changed: {c['servings']} (ranges with a maximum: {c['servings_range']}) | servings held for "
+        f"review {c['servings_held']}"
         f"    source URLs set: {c['source_url']}",
         f"held for review (TSV only): other changes {c['held_other']} | uncertain item match "
         f"{c['held_unconfident']} | unexplained unit change {c['held_unit']} | unmatched ingredient "
-        f"{c['unmatched_line']}",
+        f"{c['unmatched_line']} | amountless line without a safe amount {c['held_amount']}",
         f"rows unchanged: {c['unchanged']}    stored rows not on the page (left as is): {c['db_only']}",
     ])
 
@@ -548,7 +585,7 @@ def write_outputs(plan, out_dir, selector, stamp, summary_text):
     base = os.path.join(out_dir, f"repair_{selector}_{stamp}")
     header = [
         f"-- Recipe quantity repair, selector '{selector}', generated {stamp} by scripts/importer/repair_quantities.py",
-        "-- Needs migrations/0005_recipe_quantities.sql. Review the .tsv next to this file first.",
+        "-- Needs migrations/0005_recipe_quantities.sql and 0006_recipe_servings_max.sql. Review the .tsv next to this file first.",
         "-- Every statement is guarded on the current value, so a row that changed since the run is left alone",
         "-- and the file can be applied twice. There is no BEGIN/COMMIT on purpose: run it inside ONE transaction",
         "-- after a snapshot (scripts/importer/README.md), e.g.",
