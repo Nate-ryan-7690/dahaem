@@ -378,7 +378,7 @@ def _resolve_amountless(raw, line, fam, steps, merge_ok):
         return line, None, f"REVIEW: step amounts in units that cannot be added: {notes[0]}"
     if fam in step_amounts.TO_TASTE_FAMILIES:
         return line, None, None
-    if re.match(r"\s*Stück\s", raw or "", re.I) and step_amounts.COUNTABLE.search(line.name):
+    if re.match(r"\s*Stück\s", raw or "", re.I) and step_amounts.is_countable(line.name):
         return Line(raw, Decimal(1), DEFAULT_UNIT, line.name, False), "one", None
     return line, None, "REVIEW: no amount in the ingredient list or the steps"
 

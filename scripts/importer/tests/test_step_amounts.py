@@ -195,6 +195,20 @@ class AmountlessLineRulesTest(unittest.TestCase):
                          {l["name"]: l["quantity"] for l in p["lines"] if l["unit"] == "Stück"})
         self.assertEqual([], p["reviews"])
 
+    def test_countable_garlic_and_paprika_are_the_fresh_forms_only(self):
+        for name in ("Knoblauch", "Knoblauchzehe", "Knoblauchzehen", "Knoblauchknolle", "rote Paprika", "Paprika", "gelbe Paprika"):
+            with self.subTest(name=name):
+                self.assertTrue(step_amounts.is_countable(name), name)
+        for name in ("Knoblauchpulver", "Knoblauchöl", "Knoblauchgranulat", "Paprika edelsüß", "Paprika rosenscharf",
+                     "Paprika, geräuchert", "Paprika scharf", "Paprikapulver", "Paprika Pulver"):
+            with self.subTest(name=name):
+                self.assertFalse(step_amounts.is_countable(name), name)
+
+    def test_garlic_product_and_spice_paprika_without_an_amount_go_to_review(self):
+        p = self.parse(["Stück Knoblauchpulver", "Stück Paprika edelsüß", "Stück Knoblauchzehe"], ["Alles verrühren."])
+        self.assertEqual({45: (Decimal(1), "Stück", False, "one")}, lines_of(p))
+        self.assertEqual({"Knoblauchpulver", "Paprika edelsüß"}, {r["name"] for r in p["reviews"]})
+
     def test_anything_else_without_an_amount_goes_to_review(self):
         p = self.parse(["Stück Petersilie", "g Rinderhackfleischzubereitung", " Basmatireis", "Stück Weißwein"],
                        ["Alles verrühren."])

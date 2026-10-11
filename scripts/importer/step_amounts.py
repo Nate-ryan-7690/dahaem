@@ -60,9 +60,20 @@ MERGE_FAMILIES = {"öl", "essig", "senf"}
 # no amount anywhere: these become "to taste" (rules of 2026-10-11)
 TO_TASTE_FAMILIES = {"salz", "pfeffer", "öl", "essig", "zucker", "butter", "brühe", "honig", "mehl", "senf", "milch"}
 # "Stück X" without an amount anywhere is 1 Stück only for countable things; anything else is reviewed
-COUNTABLE = re.compile(r"\b(?:ei(?:er)?|eigelb|eiweiß|frühlingszwiebeln?|zwiebeln?|zitronen?|limetten?|knoblauch\w*|"
+COUNTABLE = re.compile(r"\b(?:ei(?:er)?|eigelb|eiweiß|frühlingszwiebeln?|zwiebeln?|zitronen?|limetten?|knoblauch(?:zehen?|knollen?)?|"
                        r"granatäpfel|granatapfel|schmand|chilischoten?|beete|pita\S*|fladenbrot|karotten?|gurken?|"
                        r"orangen?|kumquats?|paprikas?|tomaten?|burgerbrötchen|brötchen)\b", re.I)
+# "Paprika" is the vegetable unless the line names the spice
+_PAPRIKA_SPICE = re.compile(r"edelsüß|rosenscharf|geräuchert|scharf|süß|pulver|gemahlen|flocken|gewürz", re.I)
+
+
+def is_countable(name):
+    """Does "Stück <name>" without an amount mean 1 Stück? Fresh garlic and the vegetable paprika, not their products."""
+    if _PAPRIKA_SPICE.search(name or "") and re.search(r"paprika", name, re.I):
+        return False
+    return bool(COUNTABLE.search(name or ""))
+
+
 _FILLER = {"der", "die", "das", "dem", "den", "des", "etwas", "restliche", "restlichen", "restlicher",
            "restliches", "gesamten", "gesamte", "ein", "eine", "einen", "einem", "kleine", "kleinen",
            "großen", "große", "frisch", "frischen", "heiße", "heißen", "heißem", "heißes", "heißer",
