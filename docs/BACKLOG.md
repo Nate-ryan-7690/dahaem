@@ -8,28 +8,24 @@ Status: `in progress` · `next` · `later` · `idea`
 
 ## Recipes
 
-- **Recipe quantity repair (apply)** — `in progress`. Overnight run matched 10,868 / 11,070
-  recipes. The tool (PR #67) now follows Nate's rules of 2026-10-11 for lines without a number, in
-  order: `nach Geschmack X` = to taste (even if a step names an amount); else the amount from the
-  cooking steps (2-person value outside `[… | …]`, mentions summed; `Öl` / `Olivenöl`, a generic
-  `Essig` / `Senf` count when the recipe has exactly one such item; `Zitronensaft` ≠ Zitrone;
-  1 EL = 3 TL, stored in EL; spoons with g / ml → review); else salt, pepper, oil, vinegar and the
-  staples sugar, butter, stock, honey, flour, mustard, milk = to taste, countable `Stück X` = 1
-  Stück, anything else → review (TSV only). Servings come from the title (see below). Apply order,
-  after Nate's go: regenerate → review → snapshot → migrations 0006 + 0007 → restart the API →
-  one guarded transaction, COMMIT only if the counts match.
-- **Servings from titles** — `in progress`. Schema + API are done (#68: `recipe_servings_max`,
-  `servingsMax`, `?basis=max`; migration 0006 not yet applied on llmbox). The repair tool (#67)
-  fills them from the title: single N next to Personen / Person / Pers. / Portion(en) or 4P → N;
-  range N – M → N + max M; contradictions (28614 "OTP 4P … 2 Portionen", and ~59 ready meals
-  such as "1 Portion für 2 Prs. oder 2 Portionen für 1 Prs.") → review; no head count → 2.
-  Still to do: the importer (`extract.py` / `load_recipes.py`) drafts `recipe_servings` only and
-  flags a range; the shopping list scales from `servings` (lower bound) only; the per-household
-  choice of how to read ranges is not built.
 - **Amounts in cooking steps** — `next`. The API reads the bracket notation and returns the
   step text for the chosen number of people (2 → first, 3 → second, 4 → third; other counts
   scale from the 2-person value). Only number + measuring unit is scaled, never °C, minutes,
   cm or step counts. Amounts for things not in the ingredient list (water) stay and scale.
+- **Servings ranges: importer, shopping list, household choice** — `next`. (1) `extract.py` /
+  `load_recipes.py` draft `recipe_servings` only (a range recipe gets its lower bound and a REVIEW
+  flag); the draft SQL that `load_recipes.py` parses needs `recipe_servings_max`. (2) The shopping
+  list scales from `servings` (the lower bound) only; `?basis=max` exists on `GET /api/recipes/{id}`
+  only. (3) The per-household choice of how to read a range (lower / upper) is not built.
+- **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
+  2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
+  and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
+- **"Brühe" family rule for the repair tool** — `next`. A step's generic `Brühe` / `Gemüsebrühe`
+  should count for a line `Stück Gemüsebrühe` (or Geflügel-, Rinderbrühe) when the recipe has
+  exactly ONE stock item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf`
+  (`MERGE_FAMILIES` in `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to
+  review for this ("100 ml Brühe zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the
+  recipe it stays a review. Source: Nate, step 3 of the recipe repair.
 - **Remaining wrong rows after the repair** — `next`. ~301 ½-bug rows held because of uncertain
   item matches (mostly "Limette, gewachst", "Zitrone"): need overrides. 12 rows in ambiguous
   recipes. Unitless lines read as Stück ("75 Weizenmehl", "25 Sojasoße", "25
@@ -126,4 +122,14 @@ Status: `in progress` · `next` · `later` · `idea`
 - #64 Penny receipt parser: discount-excluded items, deposit variants, footer, payment data
   never stored — 22 / 22 real receipts balance.
 - #66 Offer price-change history: `store_offer_price_change` (migration 0007), written by
-  `saveOffers` in the same transaction when a re-pulled offer's price changes — not yet applied live.
+  `saveOffers` in the same transaction when a re-pulled offer's price changes — migration applied live 2026-10-11; the first live
+  `refresh weekly` after it re-priced 0 of 3,636 offers, so no row has been written yet.
+- #67 / #68 Recipe repair applied live 2026-10-11 (snapshot `dahaem-20261011-113126.sql`, migrations
+  0006 + 0007, one transaction, final state compared row by row before COMMIT): step amounts
+  for amountless lines, `nach Geschmack` / staples = to taste, countable `Stück X` = 1 Stück,
+  servings from titles + `recipe_servings_max`. `recipe_ingredient` 104,673 → 140,464, to-taste
+  113 → 21,165, source URLs 48 → 10,868, servings_max on 77 recipes. Left for review in the TSV:
+  415 amountless lines (126 covered by a numbered line, 122 mixed units, 79 no amount anywhere,
+  43 steps amount already taken, 45 unsure wording / several candidates) and 60 servings titles
+  (59 "… oder …" ready meals + 28614), all still at servings 2. Still open: importer writes no
+  `servings_max`, per-household reading of ranges, Brühe family rule (above).
