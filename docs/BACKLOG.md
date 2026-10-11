@@ -117,5 +117,5 @@ Status: `in progress` · `next` · `later` · `idea`
   repair tool with name matching — migration 0005 applied live 2026-10-10; 48 recipes repaired.
 - #64 Penny receipt parser: discount-excluded items, deposit variants, footer, payment data
   never stored — 22 / 22 real receipts balance.
-- #PRNUM Offer price-change history: `store_offer_price_change` (migration 0007), written by
+- #66 Offer price-change history: `store_offer_price_change` (migration 0007), written by
   `saveOffers` in the same transaction when a re-pulled offer's price changes — not yet applied live.
