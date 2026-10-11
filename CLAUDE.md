@@ -48,6 +48,11 @@ Only after the maintainer approves a change to live data/schema:
   `DAHAEM_DB_USER`, `DAHAEM_DB_PASSWORD`, internal API token) — never hardcoded, never
   committed. Do not commit `.env`, credentials, or snapshots.
 
+## Deferred work
+- Everything decided but not done yet lives in `docs/BACKLOG.md`. Read it before starting a task;
+  when you defer something (out of scope, needs Nate's decision, follow-up), add it there in your
+  PR with the reason. Nate sets the priority.
+
 ## Codebase conventions
 - Package-by-feature under `de.dahaem`. Strict layers: **model** (plain data) / **repository**
   (ALL SQL, every statement parameterized — never string-concatenate values) / **service**
