@@ -15,12 +15,16 @@ final class ReceiptText {
 
     // Payment / technical footer data we must not retain. Dropped before any handler sees a line.
     private static final Pattern SENSITIVE_WORDS = Pattern.compile(
-            "(?i)\\b(karten-?nr|kartennummer|kartenfolge|terminal-?(id|nr)|ta-?nr|trace-?nr|beleg-?nr|vu-?nr"
-                    + "|transaktions-?(nr|nummer)|tse|signatur\\w*|seriennummer|iban|emv|arqc)\\b");
+            "(?i)\\b(karten-?nr|kartennummer|kartenfolge|terminal-?(id|nr)|ta-?nr|trace-?nr|vu-?nr|pos-?info|as-?zeit"
+                    + "|transaktions-?(nr|nummer)|tse|signatur\\w*|serienn+ummer|iban|emv|arqc)\\b");
     private static final Pattern SENSITIVE_CODES = Pattern.compile("\\b(PAN|AID|TVR|TSI)\\b");
     private static final Pattern MASKED_CARD = Pattern.compile("[*#Xx•]{4,}\\s?\\d{2,4}");
     private static final Pattern LONG_DIGITS = Pattern.compile("(?:\\d[ -]?){13,19}");
     private static final Pattern LONG_TOKEN = Pattern.compile("\\S{40,}");
+    // Wrapped signature/certificate text: one base64-looking token on its own line (the tail of a
+    // wrapped signature can be short, so length alone isn't enough).
+    private static final Pattern BASE64_LINE = Pattern.compile("^[A-Za-z0-9+/]{8,}={0,2}$");
+    private static final Pattern BASE64_HINT = Pattern.compile("[+/=]|(?=.*\\d)(?=.*[a-z])(?=.*[A-Z])");
     private static final Pattern SEPARATOR = Pattern.compile("^[-=_*.~\\s]{3,}$");
 
     private static final Pattern TAX_ROW = Pattern.compile(
@@ -50,7 +54,11 @@ final class ReceiptText {
     static boolean isSensitive(String s) {
         return SENSITIVE_WORDS.matcher(s).find() || SENSITIVE_CODES.matcher(s).find()
                 || MASKED_CARD.matcher(s).find() || LONG_DIGITS.matcher(s).find()
-                || LONG_TOKEN.matcher(s).find();
+                || LONG_TOKEN.matcher(s).find() || isBase64Line(s);
+    }
+
+    private static boolean isBase64Line(String s) {
+        return BASE64_LINE.matcher(s).matches() && BASE64_HINT.matcher(s).find();
     }
 
     /** "1.234,56" / "-2,20" / "0,865" to BigDecimal (German decimal comma). */

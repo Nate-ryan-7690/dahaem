@@ -25,6 +25,9 @@ final class ReceiptBuilder {
     LocalDateTime purchasedAt;
     BigDecimal total;
     BigDecimal savings;
+    BigDecimal appSavings;
+    BigDecimal otherSavings;
+    String receiptNumber;
     int loyaltyPoints;
     boolean sawLoyaltyPoints;
 
@@ -38,8 +41,12 @@ final class ReceiptBuilder {
     }
 
     void addItem(String name, BigDecimal lineTotal, String taxSymbol) {
+        addItem(name, lineTotal, taxSymbol, false);
+    }
+
+    void addItem(String name, BigDecimal lineTotal, String taxSymbol, boolean discountExcluded) {
         lines.add(new ReceiptLine(name.strip(), BigDecimal.ONE, "Stk", lineTotal, lineTotal, taxSymbol,
-                null, null, null, null));
+                null, null, null, null, discountExcluded));
         adjacent = true;
     }
 
@@ -78,6 +85,21 @@ final class ReceiptBuilder {
         adjustments.add(new ReceiptAdjustment(type, description, amount, lineIndex));
     }
 
+    /**
+     * Applies an "n Stk x p" sub-line to the last adjustment (a multi-unit Pfand or Leergut line):
+     * the count goes into the description and, for Pfand, {@code p} becomes the per-unit deposit
+     * of the product it is attached to. The amount stays as printed.
+     */
+    void annotateLastAdjustment(int count, BigDecimal unitAmount, String countText) {
+        int i = adjustments.size() - 1;
+        ReceiptAdjustment a = adjustments.get(i);
+        adjustments.set(i, new ReceiptAdjustment(a.type(), a.description() + " (" + countText + ")",
+                a.amount(), a.lineIndex()));
+        if (a.type() == AdjustmentType.PFAND_DEPOSIT && a.lineIndex() != null && count > 0) {
+            lines.set(a.lineIndex(), lines.get(a.lineIndex()).withDeposit(unitAmount));
+        }
+    }
+
     void addTax(TaxBreakdownEntry entry) {
         taxes.add(entry);
     }
@@ -103,6 +125,7 @@ final class ReceiptBuilder {
             resolved.add(l.withTaxRate(rates.get(l.taxSymbol())));
         }
         return new ParsedReceipt(brand, address, storeId, purchasedAt, "EUR", resolved, adjustments,
-                total, taxes, savings, sawLoyaltyPoints ? loyaltyPoints : null, unparsed);
+                total, taxes, savings, sawLoyaltyPoints ? loyaltyPoints : null, unparsed, receiptNumber,
+                appSavings, otherSavings);
     }
 }

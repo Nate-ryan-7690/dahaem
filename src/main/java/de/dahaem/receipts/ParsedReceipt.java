@@ -14,7 +14,8 @@ public record ParsedReceipt(String storeBrand, String storeAddress, String store
                             List<ReceiptLine> lines, List<ReceiptAdjustment> adjustments,
                             BigDecimal total, List<TaxBreakdownEntry> taxBreakdown,
                             BigDecimal totalSavings, Integer loyaltyPointsEarned,
-                            List<String> unparsedLines) {
+                            List<String> unparsedLines, String receiptNumber,
+                            BigDecimal appSavings, BigDecimal otherSavings) {
 
     public ParsedReceipt {
         lines = List.copyOf(lines);
