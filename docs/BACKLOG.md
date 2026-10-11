@@ -59,9 +59,6 @@ Status: `in progress` · `next` · `later` · `idea`
   duplicates (KING'S CROWN / KING’S CROWN, LANBECK / LANDBECK, …).
 - **Aggregator per-offer end dates** — `idea`. The page header gives the week (Mon–Sun); exact
   "bis …" dates are only on each offer's own page. Fetch only offers not seen before.
-- **Offer price-change history** — `later`. A re-pull in the same week overwrites the price,
-  so a mid-week price change is lost. Record changes (like `store_price_history` for ALDI)
-  for trend analysis.
 - **Seed sync** — `later`. 9 live inventory items are missing from `seed/inventory_catalog.sql`
   (ids 129, 1034, 1179, 1216, 1218, 1431, 1432, 1433, 1505); export them into the seed.
 - **Old SQLite tools** — `later`. `scripts/importer/add_ingredients.py` and `dedup_catalog.py`
@@ -120,3 +117,5 @@ Status: `in progress` · `next` · `later` · `idea`
   repair tool with name matching — migration 0005 applied live 2026-10-10; 48 recipes repaired.
 - #64 Penny receipt parser: discount-excluded items, deposit variants, footer, payment data
   never stored — 22 / 22 real receipts balance.
+- #66 Offer price-change history: `store_offer_price_change` (migration 0007), written by
+  `saveOffers` in the same transaction when a re-pulled offer's price changes — not yet applied live.
