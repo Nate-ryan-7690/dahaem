@@ -24,6 +24,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -193,6 +194,85 @@ class ApiSmokeTest {
                     .andExpect(jsonPath("$.scalable").value(false))
                     .andExpect(jsonPath("$.ingredients[0].quantity").value(300.0))
                     .andExpect(jsonPath("$.ingredients[0].scaledQuantity").value(300.0));
+        } finally {
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
+    void normalRecipeHasNoServingsMaxAndIgnoresBasisMax() throws Exception {
+        // Seeded with recipe_servings = 2 and no range: 400 g beef (270), 1 Stück onion (40).
+        int recipeId = recipeId("Klassische Rinder-Bolognese");
+
+        mvc.perform(get("/api/recipes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].servingsMax", contains(nullValue())));
+
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.servings").value(2))
+                .andExpect(jsonPath("$.servingsMax").value(nullValue()))
+                .andExpect(jsonPath("$.basis").value("servings"))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(800.0)));
+
+        // basis=max on a recipe that is not a range is ignored: same factor 4/2, basis stays "servings"
+        mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4").param("basis", "max"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.servingsMax").value(nullValue()))
+                .andExpect(jsonPath("$.basis").value("servings"))
+                .andExpect(jsonPath("$.scalable").value(true))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(800.0)))
+                .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(2.0)));
+    }
+
+    @Test
+    void rangeRecipeScalesFromLowerBoundByDefaultAndFromMaxWithBasisMax() throws Exception {
+        int recipeId = insertRecipe("Spanne-Testrezept", 3, 4);   // "3 – 4 Personen"
+        try {
+            insertIngredient(recipeId, 270, "g", "300");
+            insertIngredient(recipeId, 40, "Stück", "1");
+
+            mvc.perform(get("/api/recipes"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].servings", contains(3)))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].servingsMax", contains(4)));
+
+            // default: people / servings = 2/3
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "2"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.servings").value(3))
+                    .andExpect(jsonPath("$.servingsMax").value(4))
+                    .andExpect(jsonPath("$.basis").value("servings"))
+                    .andExpect(jsonPath("$.people").value(2))
+                    .andExpect(jsonPath("$.scalable").value(true))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(300.0)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(200.0)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(0.67)));
+
+            // basis=servings is the same as leaving it out
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "2").param("basis", "servings"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.basis").value("servings"))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(200.0)));
+
+            // basis=max: people / servingsMax = 2/4; the stored quantity is unchanged
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "2").param("basis", "max"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.servings").value(3))
+                    .andExpect(jsonPath("$.servingsMax").value(4))
+                    .andExpect(jsonPath("$.basis").value("max"))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].quantity", contains(300.0)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].scaledQuantity", contains(150.0)))
+                    .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(0.5)));
+
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("basis", "min"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.status").value(400));
+
+            // the shopping list keeps scaling from servings (the lower bound): 300 g * 2/3
+            mvc.perform(get("/api/shopping-list").param("recipeIds", String.valueOf(recipeId)).param("people", "2"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.items[?(@.inventoryItemId == 270)].totalQuantity", contains(200.0)));
         } finally {
             deleteTestRecipe(recipeId);
         }
@@ -547,11 +627,17 @@ class ApiSmokeTest {
     }
 
     private static int insertRecipe(String name, int servings) throws SQLException {
+        return insertRecipe(name, servings, null);
+    }
+
+    private static int insertRecipe(String name, int servings, Integer servingsMax) throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement("INSERT INTO recipe (recipe_name, recipe_servings, "
-                     + "recipe_cook_time, recipe_prep_time) VALUES (?, ?, 10, 0)", Statement.RETURN_GENERATED_KEYS)) {
+                     + "recipe_servings_max, recipe_cook_time, recipe_prep_time) VALUES (?, ?, ?, 10, 0)",
+                     Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, name);
             ps.setInt(2, servings);
+            ps.setObject(3, servingsMax, Types.INTEGER);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();

@@ -57,6 +57,16 @@ Read by `RecipeRepository`.
 watch the spelling) / `recipe_sugar` (nutrition is per serving), and nullable
 `recipe_source_url` (the recipe page it was imported from, so refreshes match 1:1).
 
+Servings ranges: `recipe_servings` is the number of people the stored ingredient amounts are
+for, and the default for scaling. A recipe written for a range ("3 – 4 Personen") stores the
+lower bound there (3) and the upper bound in nullable `recipe_servings_max` (4); "2 – 4" is 2 + 4.
+`recipe_servings_max` is NULL for every recipe that is not a range — the normal (2-person) recipes
+and explicit sizes like "für 4 Personen" (`recipe_servings` = 4). A CHECK
+(`recipe_servings_max_above_servings`) keeps it NULL or strictly greater than `recipe_servings`.
+Added by `migrations/0006_recipe_servings_max.sql`; the importer fills it (see `docs/BACKLOG.md`,
+"Servings ranges"). The API scales from `recipe_servings` unless `?basis=max` is asked for; the
+shopping list always scales from `recipe_servings`.
+
 `recipe_ingredient`: `recipe_ingredient_item_id` (FK -> `inventory_item`),
 `recipe_ingredient_recipe_id` (FK -> `recipe`), `recipe_ingredient_unit`,
 `recipe_ingredient_quantity_needed` (`DECIMAL(10,3)`, nullable: the exact amount for

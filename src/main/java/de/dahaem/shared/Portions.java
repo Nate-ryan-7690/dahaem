@@ -7,7 +7,8 @@ import java.math.RoundingMode;
  * The single definition of portion scaling: a recipe written for {@code servings} people is
  * scaled to {@code people} by the factor {@code people / servings}. Used by the recipe detail
  * endpoint; the shopping list applies the same rule inside its aggregation SQL
- * (ShoppingListRepository.aggregateIngredients), with the same guards — people must be at
+ * (ShoppingListRepository.aggregateIngredients), always from {@code servings} (a range's lower
+ * bound, see {@link #scalingServings}), with the same guards — people must be at
  * least 1, and a recipe whose servings is not positive is not scaled. "To taste" ingredients have
  * no quantity and are never scaled (nor put on a shopping list).
  */
@@ -22,6 +23,18 @@ public final class Portions {
     /** Whether {@code people} is a usable head count (at least 1). */
     public static boolean isValidPeople(int people) {
         return people >= 1;
+    }
+
+    /** Message for a {@code basis} value other than {@code servings} or {@code max}. */
+    public static final String INVALID_BASIS_MESSAGE = "'basis' must be 'servings' or 'max'";
+
+    /**
+     * The servings count to scale a recipe from. A "3 – 4 Personen" recipe stores servings = 3 (the
+     * lower bound, the default) and servingsMax = 4; with {@code useMax} it scales from 4 instead.
+     * {@code useMax} is ignored when the recipe is not a range ({@code servingsMax} null).
+     */
+    public static int scalingServings(int servings, Integer servingsMax, boolean useMax) {
+        return useMax && servingsMax != null ? servingsMax : servings;
     }
 
     /** Whether a recipe with this many servings can be scaled at all (servings must be positive). */

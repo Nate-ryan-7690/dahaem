@@ -10,6 +10,7 @@ public class Recipe {
     private final int id;
     private final String name;
     private final int servings;
+    private final Integer servingsMax;
     private final int cookTime;
     private final int prepTime;
     private final Integer calories;
@@ -19,11 +20,12 @@ public class Recipe {
     private final Integer fiber;
     private final Integer sugar;
 
-    public Recipe(int id, String name, int servings, int cookTime, int prepTime, Integer calories,
-                  Integer protein, Integer carbs, Integer fat, Integer fiber, Integer sugar) {
+    public Recipe(int id, String name, int servings, Integer servingsMax, int cookTime, int prepTime,
+                  Integer calories, Integer protein, Integer carbs, Integer fat, Integer fiber, Integer sugar) {
         this.id = id;
         this.name = name;
         this.servings = servings;
+        this.servingsMax = servingsMax;
         this.cookTime = cookTime;
         this.prepTime = prepTime;
         this.calories = calories;
@@ -39,6 +41,9 @@ public class Recipe {
     public String getName(){ return name;}
 
     public int getServings(){ return servings;}
+
+    // Upper bound of a "3 – 4 Personen" range (servings is the lower bound); null when not a range.
+    public Integer getServingsMax(){ return servingsMax;}
 
     public int getCookTime(){ return cookTime;}
 
@@ -62,6 +67,7 @@ public class Recipe {
                 "id=" + id +
                 ", name='" + name + '\'' +
                 ", servings=" + servings +
+                ", servingsMax=" + servingsMax +
                 ", cookTime=" + cookTime +
                 ", prepTime=" + prepTime +
                 ", calories=" + calories +
