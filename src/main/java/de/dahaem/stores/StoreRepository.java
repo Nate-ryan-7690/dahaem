@@ -685,7 +685,26 @@ public class StoreRepository {
      * was pulled before, e.g. first from next week's preview, then from the live page.
      * Links each offer to its store_product when the chain's range is known.
      */
+    /**
+     * Upserts the offers in one transaction. When an offer that is already stored comes back with a
+     * different sale, normal or deal price, the old and new prices go into store_offer_price_change
+     * first (same transaction), so a mid-week price change is not lost. A new offer gets no change row.
+     */
     public int saveOffers(int storeId, List<StoreOffer> offers, LocalDate pulledOn, String source) {
+        // Compared as DECIMAL(10,2), the way the values are stored; <=> treats NULL = NULL as unchanged.
+        String changeSql = "INSERT INTO store_offer_price_change (store_offer_price_change_offer_id, "
+                + "store_offer_price_change_old_sale_price, store_offer_price_change_new_sale_price, "
+                + "store_offer_price_change_old_normal_price, store_offer_price_change_new_normal_price, "
+                + "store_offer_price_change_old_deal_price, store_offer_price_change_new_deal_price, "
+                + "store_offer_price_change_observed_on) "
+                + "SELECT o.store_offer_id, o.store_offer_sale_price, n.sale, o.store_offer_normal_price, n.normal, "
+                + "       o.store_offer_deal_price, n.deal, ? "
+                + "FROM store_offer o CROSS JOIN (SELECT CAST(? AS DECIMAL(10,2)) AS sale, "
+                + "       CAST(? AS DECIMAL(10,2)) AS normal, CAST(? AS DECIMAL(10,2)) AS deal) n "
+                + "WHERE o.store_offer_store_id = ? AND o.store_offer_external_id = ? "
+                + "  AND o.store_offer_valid_from = ? AND o.store_offer_region = ? "
+                + "  AND NOT (o.store_offer_sale_price <=> n.sale AND o.store_offer_normal_price <=> n.normal "
+                + "           AND o.store_offer_deal_price <=> n.deal)";
         String sql = "INSERT INTO store_offer (store_offer_store_id, store_offer_product_id, store_offer_external_id, "
                 + "store_offer_brand, store_offer_name, store_offer_sales_unit, store_offer_sale_price, "
                 + "store_offer_deal_quantity, store_offer_deal_price, store_offer_normal_price, store_offer_base_price, "
@@ -712,8 +731,22 @@ public class StoreRepository {
                 + "store_offer_source = VALUES(store_offer_source)";
         try (Connection con = Database.getConnection()) {
             con.setAutoCommit(false);
-            try (PreparedStatement ps = con.prepareStatement(sql)) {
+            try (PreparedStatement change = con.prepareStatement(changeSql);
+                 PreparedStatement ps = con.prepareStatement(sql)) {
                 for (StoreOffer o : offers) {
+                    String region = o.region() == null ? "" : o.region();
+                    // Row by row, change check before upsert: the same offer twice in one pull still
+                    // compares against the price the previous statement just stored.
+                    change.setObject(1, pulledOn);
+                    change.setDouble(2, o.salePrice());
+                    change.setObject(3, o.normalPrice());
+                    change.setObject(4, o.dealPrice());
+                    change.setInt(5, storeId);
+                    change.setString(6, o.externalId());
+                    change.setObject(7, o.validFrom());
+                    change.setString(8, region);
+                    change.executeUpdate();
+
                     ps.setInt(1, storeId);
                     ps.setInt(2, storeId);
                     ps.setString(3, o.externalId());
@@ -730,14 +763,13 @@ public class StoreRepository {
                     ps.setObject(14, o.deposit());
                     ps.setString(15, o.promoText());
                     ps.setString(16, o.category());
-                    ps.setString(17, o.region() == null ? "" : o.region());
+                    ps.setString(17, region);
                     ps.setObject(18, o.validFrom());
                     ps.setObject(19, o.validUntil());
                     ps.setObject(20, pulledOn);
                     ps.setString(21, source);
-                    ps.addBatch();
+                    ps.executeUpdate();
                 }
-                ps.executeBatch();
                 con.commit();
             } catch (SQLException e) {
                 con.rollback();

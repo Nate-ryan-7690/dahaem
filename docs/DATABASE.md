@@ -132,6 +132,32 @@ All created with `CREATE TABLE IF NOT EXISTS` by `ensureSchema()`.
   price, normal/base price, deposit, promo text, category, region, validity
   window, pulled-on date, and `store_offer_source` (`STORE` / `AGGREGATOR` /
   `RECEIPT`, in trust order receipt > direct store > aggregator).
+- **`store_offer_price_change`** (migration `0007`) — one row per price change
+  of an offer that is already stored. See below.
+
+## Offer price-change history (`store_offer_price_change`)
+
+`store_offer` is upserted on its key, so a re-pull in the same week overwrites
+the prices. The refresh runs daily, so `StoreRepository.saveOffers` keeps the
+trend: when a re-pulled offer's sale, normal or deal price differs from the
+stored row, it first inserts one `store_offer_price_change` row (old and new of
+all three prices, `observed_on` = that pull's `pulled_on`, `created_at`), then
+updates the offer as before — both in the same transaction, so a failed save
+leaves neither. Prices are compared as `DECIMAL(10,2)`, NULL = NULL counts as
+unchanged. No row when nothing changed, and none for a new offer: the
+`store_offer` row itself is the first observation. The full price history of
+one offer is its first pulled prices (the oldest change's `old_*` values, or
+the row itself when there are no changes) followed by each change in order:
+
+```sql
+SELECT c.store_offer_price_change_observed_on AS observed_on,
+       c.store_offer_price_change_old_sale_price AS old_sale, c.store_offer_price_change_new_sale_price AS new_sale,
+       c.store_offer_price_change_old_normal_price AS old_normal, c.store_offer_price_change_new_normal_price AS new_normal,
+       c.store_offer_price_change_old_deal_price AS old_deal, c.store_offer_price_change_new_deal_price AS new_deal
+FROM store_offer_price_change c
+WHERE c.store_offer_price_change_offer_id = ?
+ORDER BY c.store_offer_price_change_observed_on, c.store_offer_price_change_id;
+```
 
 See `StoreRepository.java`'s `SCHEMA` array for the exact DDL (types,
 constraints, foreign keys) — it's the closest thing to a source of truth this
