@@ -12,6 +12,14 @@ Status: `in progress` · `next` · `later` · `idea`
   step text for the chosen number of people (2 → first, 3 → second, 4 → third; other counts
   scale from the 2-person value). Only number + measuring unit is scaled, never °C, minutes,
   cm or step counts. Amounts for things not in the ingredient list (water) stay and scale.
+- **Servings ranges: importer, shopping list, household choice** — `next`. (1) `extract.py` /
+  `load_recipes.py` draft `recipe_servings` only (a range recipe gets its lower bound and a REVIEW
+  flag); the draft SQL that `load_recipes.py` parses needs `recipe_servings_max`. (2) The shopping
+  list scales from `servings` (the lower bound) only; `?basis=max` exists on `GET /api/recipes/{id}`
+  only. (3) The per-household choice of how to read a range (lower / upper) is not built.
+- **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
+  2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
+  and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
 - **"Brühe" family rule for the repair tool** — `next`. A step's generic `Brühe` / `Gemüsebrühe`
   should count for a line `Stück Gemüsebrühe` (or Geflügel-, Rinderbrühe) when the recipe has
   exactly ONE stock item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf`
