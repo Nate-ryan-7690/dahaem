@@ -22,12 +22,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * migrations/0005_recipe_quantities.sql on a throwaway MariaDB (Testcontainers), starting from the
  * recipe tables as they were before it: it only widens and adds, keeps every existing value
- * exactly, can be run twice, and leaves the same columns a fresh schema.sql creates.
+ * exactly, can be run twice, and (with the later recipe migrations applied in order) leaves the same
+ * columns a fresh schema.sql creates.
  */
 class RecipeQuantitiesMigrationTest {
 
     private static final Path OLD_TABLES = Path.of("src", "test", "resources", "migrations", "pre_0005_recipe_tables.sql");
     private static final Path MIGRATION = Path.of("migrations", "0005_recipe_quantities.sql");
+    // schema.sql also carries the later recipe migrations, so the comparison applies them in order too.
+    private static final List<Path> LATER_MIGRATIONS = List.of(Path.of("migrations", "0006_recipe_servings_max.sql"));
 
     @AfterAll
     static void close() throws IOException {
@@ -70,7 +73,9 @@ class RecipeQuantitiesMigrationTest {
         TestDatabase.reset(List.of(Path.of("schema.sql")));
         List<String> fresh = recipeColumnsAndChecks();
 
-        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION));
+        List<Path> migrations = new ArrayList<>(List.of(OLD_TABLES, MIGRATION));
+        migrations.addAll(LATER_MIGRATIONS);
+        TestDatabase.reset(migrations);
         List<String> migrated = recipeColumnsAndChecks();
 
         assertEquals(fresh, migrated);

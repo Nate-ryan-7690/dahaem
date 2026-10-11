@@ -17,7 +17,12 @@ Status: `in progress` · `next` · `later` · `idea`
 - **Servings ranges** — `in progress`. Keep "3 – 4 Personen" as a range: `servings` = 3 (lower
   bound, default) + new nullable `servings_max` = 4. Normal recipes stay 2 (all scraped recipes
   are 2-person); explicit "für 4 Personen" / "Bundle 4P" = 4. Recipe 28614 ("OTP 4P … 2
-  Portionen") needs a manual decision.
+  Portionen") needs a manual decision. The column exists: `recipe.recipe_servings_max` (nullable,
+  CHECK > `recipe_servings`) in `schema.sql` and `migrations/0006_recipe_servings_max.sql` (not yet
+  applied on llmbox), exposed as `servingsMax` in the recipe API, with `?basis=max` on
+  `GET /api/recipes/{id}` to scale from the upper bound. Still to do: the importer
+  (`scripts/importer/`) has to fill it; the shopping list still scales from `servings` (the lower
+  bound) only; the per-household choice of how to read ranges (lower bound vs. max) is not built.
 - **Amounts in cooking steps** — `next`. The API reads the bracket notation and returns the
   step text for the chosen number of people (2 → first, 3 → second, 4 → third; other counts
   scale from the 2-person value). Only number + measuring unit is scaled, never °C, minutes,
