@@ -249,4 +249,88 @@ class PennyReceiptFormatTest {
                 """);
         assertEquals(List.of("Beleg-Nr.                             4711"), kept);
     }
+
+    // ---- credit-card payment block, newer footer wording -------------------------------------
+
+    @Test
+    void visaReceiptBalancesAndLeavesNothingUnparsed() {
+        ParsedReceipt r = penny(fixture("penny_made_up_visa.txt"));
+        assertEquals(List.of(), r.unparsedLines());
+        assertEquals(4, r.lines().size());
+        assertNum("37.96", r.total());
+        assertTrue(r.balances());
+        assertEquals(LocalDateTime.of(2026, 10, 4, 9, 15), r.purchasedAt());
+        assertEquals("0815", r.receiptNumber());
+        assertEquals(2, r.taxBreakdown().size());
+    }
+
+    @Test
+    void visaPaymentBlockLeavesNoBankOrCardDataInTheResult() {
+        ParsedReceipt r = penny(fixture("penny_made_up_visa.txt"));
+        String all = r.toString() + "\n" + String.join("\n", r.unparsedLines());
+        for (String secret : List.of("VISA", "MUSTERBANK", "BEISPIELORT", "Bezahlung", "APPROVED", "Proc-Code",
+                "13 579 24", "Capt", "9753", "4321", "0002", "71727374", "246810", "05 123 07", "AS-Zeit",
+                "Pos-Info", "Terminal", "Trace", "Contactless", "37,96", "MADEUP01SERIAL", "MEUCIQ",
+                "XyZaBcDeFgHiJkLmNoPq")) {
+            assertFalse(all.contains(secret), "result leaked " + secret + ":\n" + all);
+        }
+    }
+
+    @Test
+    void anyLineInsideThePaymentBlockIsSkippedNeverUnparsed() {
+        ParsedReceipt r = penny("""
+                     BROT                            1,89 B
+                     SUMME                    EUR     1,89
+                     Geg. Mastercard          EUR     1,89
+                     Bezahlung
+                     MASTERCARD IRGENDEINE BANK
+                     Some Unknown Payment Line 42
+                                 Betrag EUR
+                                                      1,89
+                     Steuer %        Netto    Steuer   Brutto
+                     B=  7,0%         1,77      0,12     1,89
+                     Gesamtbetrag     1,77      0,12     1,89
+                     Unbekannter Text
+                """);
+        assertEquals(List.of("Unbekannter Text"), r.unparsedLines()); // outside the block: still reported
+        assertEquals(1, r.taxBreakdown().size());
+        assertTrue(r.balances());
+        assertFalse(r.toString().contains("BANK"));
+    }
+
+    @Test
+    void appSavingsOnTwoLinesAndOnOneLine() {
+        assertNum("1.00", penny(fixture("penny_made_up_visa.txt")).appSavings());
+        ParsedReceipt oneLine = penny("SUMME  EUR  1,89\nMit der PENNY App 0,20 EUR gespart");
+        assertNum("0.20", oneLine.appSavings());
+        assertTrue(oneLine.unparsedLines().isEmpty(), oneLine.unparsedLines().toString());
+    }
+
+    @Test
+    void newerFooterWordingIsRecognised() {
+        ParsedReceipt r = penny(fixture("penny_made_up_visa.txt"));
+        assertEquals(20, r.loyaltyPointsEarned());
+        assertNum("22.00", r.otherSavings());
+        assertNum("23.00", r.totalSavings());
+    }
+
+    @Test
+    void benefitsSumWithoutSonstigeVorteileLineIsOtherSavings() {
+        ParsedReceipt r = penny("""
+                     DUSCHTUCH BLAU                  24,99 A *
+                     Treueartikel                   -22,00
+                     SUMME                    EUR     2,99
+                     Deine zusätzlichen Vorteile heute:
+                     Summe                           22,00
+                """);
+        assertNum("22.00", r.otherSavings());
+        assertTrue(r.unparsedLines().isEmpty(), r.unparsedLines().toString());
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void strayBase64LineOnItsOwnIsDropped() {
+        assertEquals(List.of(), ReceiptText.lines("XyZaBcDeFgHiJkLmNoPq\nAbCdEfGhIjKlMnOp\nQUJDREVGR0g=\n"));
+        assertEquals(List.of("Contactless", "KINDERPONCHO"), ReceiptText.lines("Contactless\nKINDERPONCHO"));
+    }
 }

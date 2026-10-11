@@ -35,9 +35,15 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
     private static final Pattern LEERGUT_RETURN = Pattern.compile("^(\\d+)\\s*Stk\\s*x\\s*(\\d+,\\d{2})\\s+(" + MONEY + ")\\s+[A-Z](\\s*\\*)?$");
     private static final Pattern TREUEARTIKEL = Pattern.compile("^(Treueartikel)\\s+(" + MONEY + ")(\\s+[A-Z])?(\\s*\\*)?$");
     private static final Pattern TREUEPUNKTE = Pattern.compile("(?i)^Treuepunkte.*(diesen Einkauf|erhalten|gesammelt)\\D*(\\d+)\\s*$");
-    private static final Pattern SIE_ERHALTEN = Pattern.compile("(?i)^Sie erhalten\\s+(\\d+)\\s+Treuepunkt");
+    private static final Pattern SIE_ERHALTEN = Pattern.compile("(?i)^(?:Sie erhalten|Du erh(?:ä|ae)ls?t)\\s+(\\d+)\\s+Treuepunkt");
     private static final Pattern APP_SAVINGS = Pattern.compile("(?i)^Mit der PENNY[- ]App\\b.*?(\\d+,\\d{2})\\s*EUR\\b.*gespart");
+    /** Two-line form: "Mit der PENNY App" then "1,00 EUR gespart". */
+    private static final Pattern APP_SAVINGS_HEAD = Pattern.compile("(?i)^Mit der PENNY[- ]App:?$");
+    private static final Pattern APP_SAVINGS_TAIL = Pattern.compile("(?i)^(\\d+,\\d{2})\\s*EUR\\s+gespart\\W*$");
     private static final Pattern OTHER_SAVINGS = Pattern.compile("(?i)^Sonstige Vorteile\\D*?(\\d+,\\d{2})");
+    /** "Deine zusätzlichen Vorteile heute:" block, closed by "Summe x,xx" (the block's sum). */
+    private static final Pattern BENEFITS_HEAD = Pattern.compile("(?i)^Deine zus(?:ä|ae)tzlichen Vorteile\\b.*");
+    private static final Pattern BENEFITS_SUM = Pattern.compile("^Summe\\s+(\\d+,\\d{2})$");
     private static final Pattern RECEIPT_NUMBER = Pattern.compile("(?i)^Beleg-?Nr\\.?:?\\s*(\\d+)$");
     private static final Pattern TOTAL = Pattern.compile("^SUMME\\s+EUR\\s+(" + MONEY + ")$");
     private static final Pattern DATE = Pattern.compile("(\\d{2})\\.(\\d{2})\\.(\\d{4})\\s+(\\d{1,2}):(\\d{2})");
@@ -58,11 +64,30 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
             + "|Geg\\.\\s.*|R(?:ü|ue)ckgeld\\b.*"
             + "|\\*\\s*\\*\\s*(?:Kunden|H(?:ä|ae)ndler)beleg\\s*\\*\\s*\\*"
             + "|Datum\\b.*|Uhrzeit\\b.*"
-            + "|Trace-?Nr.*|Terminal-?ID.*|Pos-?Info.*|AS-?Zeit.*|(?-i:Nr\\.)(?:\\s.*)?"
-            + "|Kartenzahlung\\b.*|Contactless|girocard\\b.*|Betrag\\s+EUR\\b.*|Zahlung erfolgt.*"
+            + "|Trace-?Nr.*|Terminal-?ID.*|Pos-?Info.*|AS-?Zeit.*|AS-?Proc-?Code.*|Capt\\.?-?Ref.*|(?-i:Nr\\.)(?:\\s.*)?"
+            + "|Kartenzahlung\\b.*|Bezahlung|Contactless|girocard\\b.*|Betrag\\s+EUR\\b.*|Zahlung erfolgt.*"
+            + "|APPROVED|GENEHMIGT"
             + "|Gesamtbetrag\\b.*"
             + "|Serienn+ummer\\b.*"
-            + "|Wir danken\\b.*|Erstmal zu Penny.*|\\[?www\\.penny\\.de.*"
+            + ")$");
+
+    /** Closing texts below the tax table. */
+    private static final Pattern CLOSING = Pattern.compile("(?i)^(?:"
+            + "Wir danken\\b.*|Danke f(?:ü|ue)r (?:deinen|Ihren) Einkauf.*"
+            + "|Erstmal (?:zu|in die) Penny.*|Noch mehr sparen:?"
+            + "|Keine Rabatte auf die mit \\*.*|gekennzeichnete Produkte\\.?"
+            + "|-?\\s*auch im Internet unter.*|.*\\bwww\\.penny\\.de\\b.*"
+            + ")$");
+
+    /**
+     * First line of the payment block (amount given, card slip). Everything from here up to the
+     * tax table or the first known footer line is payment data and is skipped whatever it says --
+     * girocard, VISA, Mastercard, bank names, approval codes, a lone amount line -- so none of it
+     * can reach {@code unparsedLines}.
+     */
+    private static final Pattern PAYMENT_START = Pattern.compile("(?i)^(?:"
+            + "Geg\\.\\s.*|\\*\\s*\\*\\s*(?:Kunden|H(?:ä|ae)ndler)beleg\\s*\\*\\s*\\*"
+            + "|Kartenzahlung\\b.*|Bezahlung|Betrag\\s+EUR\\b.*"
             + ")$");
 
     /** What the last booked line was, so an "n Stk x p" sub-line lands on the right thing. */
@@ -92,8 +117,44 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
         Last last = Last.OTHER;
         String[] date = null;
         String[] time = null;
+        boolean inPayment = false;
+        boolean appSavingsPending = false;
+        boolean sawBenefitsSum = false;
         for (String line : lines) {
             Matcher m;
+            if (inPayment || PAYMENT_START.matcher(line).matches()) {
+                if (!inPayment) {
+                    b.detach();
+                    if (leergutPending) {
+                        b.unparsed("LEERG. (no return line followed)");
+                        leergutPending = false;
+                    }
+                    inPayment = true;
+                    last = Last.OTHER;
+                    continue;
+                }
+                if (ReceiptText.isTaxHeader(line) || ReceiptText.taxRow(line) != null || isFooter(line)) {
+                    inPayment = false; // end of the payment block; parse this line normally
+                } else {
+                    if ((m = RECEIPT_NUMBER.matcher(line)).matches()) {
+                        b.receiptNumber = m.group(1);
+                    } else if ((m = DATE.matcher(line)).find()) {
+                        b.purchasedAt = ReceiptText.dateTime(m.group(1), m.group(2), m.group(3), m.group(4), m.group(5));
+                    } else if ((m = DATE_ONLY.matcher(line)).matches()) {
+                        date = new String[] {m.group(1), m.group(2), m.group(3)};
+                    } else if ((m = TIME_ONLY.matcher(line)).matches()) {
+                        time = new String[] {m.group(1), m.group(2)};
+                    }
+                    continue; // payment data: never kept
+                }
+            }
+            if (appSavingsPending) {
+                appSavingsPending = false;
+                if ((m = APP_SAVINGS_TAIL.matcher(line)).matches()) {
+                    b.appSavings = ReceiptText.money(m.group(1));
+                    continue;
+                }
+            }
             Last now = Last.OTHER;
             if ((m = APP_RABATT.matcher(line)).matches()) {
                 b.adjust(AdjustmentType.APP_RABATT, m.group(1), ReceiptText.money(m.group(2)));
@@ -142,8 +203,17 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
                     b.addLoyaltyPoints(Integer.parseInt(m.group(1)));
                 } else if ((m = APP_SAVINGS.matcher(line)).find()) {
                     b.appSavings = ReceiptText.money(m.group(1));
+                } else if (APP_SAVINGS_HEAD.matcher(line).matches()) {
+                    appSavingsPending = true;
                 } else if ((m = OTHER_SAVINGS.matcher(line)).find()) {
-                    b.otherSavings = ReceiptText.money(m.group(1));
+                    if (!sawBenefitsSum) {
+                        b.otherSavings = ReceiptText.money(m.group(1));
+                    }
+                } else if (BENEFITS_HEAD.matcher(line).matches()) {
+                    // heading of the "Sonstige Vorteile ... Summe" block
+                } else if (b.total != null && (m = BENEFITS_SUM.matcher(line)).matches()) {
+                    b.otherSavings = ReceiptText.money(m.group(1)); // the block's own sum wins
+                    sawBenefitsSum = true;
                 } else if ((m = RECEIPT_NUMBER.matcher(line)).matches()) {
                     b.receiptNumber = m.group(1);
                 } else if ((m = MARKT.matcher(line)).find()) {
@@ -160,7 +230,7 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
                     date = new String[] {m.group(1), m.group(2), m.group(3)};
                 } else if ((m = TIME_ONLY.matcher(line)).matches()) {
                     time = new String[] {m.group(1), m.group(2)};
-                } else if (SKIP.matcher(line).matches()) {
+                } else if (SKIP.matcher(line).matches() || CLOSING.matcher(line).matches()) {
                     // known header/footer/payment line without data we keep
                 } else if ((m = ITEM.matcher(line)).matches()) {
                     b.addItem(m.group(1), ReceiptText.money(m.group(2)), m.group(3), m.group(4) != null);
@@ -185,6 +255,14 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
             b.savings = nz(b.appSavings).add(nz(b.otherSavings));
         }
         return b.build();
+    }
+
+    /** A known line below the payment block; ends it. */
+    private static boolean isFooter(String line) {
+        return TREUEPUNKTE.matcher(line).matches() || SIE_ERHALTEN.matcher(line).find()
+                || APP_SAVINGS.matcher(line).find() || APP_SAVINGS_HEAD.matcher(line).matches()
+                || OTHER_SAVINGS.matcher(line).find() || BENEFITS_HEAD.matcher(line).matches()
+                || CLOSING.matcher(line).matches();
     }
 
     private static BigDecimal nz(BigDecimal v) {

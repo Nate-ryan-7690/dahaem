@@ -15,7 +15,7 @@ final class ReceiptText {
 
     // Payment / technical footer data we must not retain. Dropped before any handler sees a line.
     private static final Pattern SENSITIVE_WORDS = Pattern.compile(
-            "(?i)\\b(karten-?nr|kartennummer|kartenfolge|terminal-?(id|nr)|ta-?nr|trace-?nr|vu-?nr|pos-?info|as-?zeit"
+            "(?i)\\b(karten-?nr|kartennummer|kartenfolge|terminal-?(id|nr)|ta-?nr|trace-?nr|vu-?nr|pos-?info|as-?zeit|as-?proc-?code|capt\\.?-?ref"
                     + "|transaktions-?(nr|nummer)|tse|signatur\\w*|serienn+ummer|iban|emv|arqc)\\b");
     private static final Pattern SENSITIVE_CODES = Pattern.compile("\\b(PAN|AID|TVR|TSI)\\b");
     private static final Pattern MASKED_CARD = Pattern.compile("[*#Xx•]{4,}\\s?\\d{2,4}");
@@ -58,7 +58,12 @@ final class ReceiptText {
     }
 
     private static boolean isBase64Line(String s) {
-        return BASE64_LINE.matcher(s).matches() && BASE64_HINT.matcher(s).find();
+        if (!BASE64_LINE.matcher(s).matches()) {
+            return false;
+        }
+        // 20+ characters of base64 alphabet without a space is no word a receipt prints
+        return s.length() >= 20 || BASE64_HINT.matcher(s).find()
+                || (s.length() >= 16 && !s.equals(s.toUpperCase()) && !s.equals(s.toLowerCase()));
     }
 
     /** "1.234,56" / "-2,20" / "0,865" to BigDecimal (German decimal comma). */

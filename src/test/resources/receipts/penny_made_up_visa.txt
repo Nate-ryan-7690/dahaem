@@ -1,0 +1,59 @@
+           *** P E N N Y - M A R K T GmbH ***
+                     Musterweg 12
+                  12345 Beispielstadt
+                UID Nr.: DE000000000
+                                                EUR
+     DUSCHTUCH BLAU                       24,99 A *
+     Treueartikel                        -22,00
+     KAFFEE                                5,99 B
+     App-Preis-Rabatt                     -1,00 B
+     KINDERPONCHO                         29,99 A *
+     MINERALWASSER                         0,49 A
+     PFAND 0,25 EURO                       0,25 A *
+     LEERGUT EINWEG                       -0,75 A *
+                   3 Stk x 0,25
+     --------------------------------------------
+     SUMME                    EUR         37,96
+     ============================================
+     Geg. Kreditkarte         EUR         37,96
+
+                   * * Kundenbeleg * *
+     Datum:                          04.10.2026
+     Uhrzeit:                      09:15:30 Uhr
+     Beleg-Nr.                             0815
+     Trace-Nr.                           246810
+                        Bezahlung
+                 VISA MUSTERBANK BEISPIELORT
+                         Contactless
+     Nr.                  ############4321 0002
+     Terminal-ID                       71727374
+     Pos-Info                         05 123 07
+     AS-Zeit 04.10.                   09:15 Uhr
+     AS-Proc-Code = 13 579 24
+     Capt.-Ref.= 9753
+                        APPROVED
+                 Betrag EUR
+                                      37,96
+                     Zahlung erfolgt
+
+     Steuer %        Netto    Steuer   Brutto
+     A= 19,0%        27,71      5,26    32,97
+     B=  7,0%         4,66      0,33     4,99
+     Gesamtbetrag    32,37      5,59    37,96
+
+     TSE-Signatur:
+     MEUCIQDmadeUpMadeUpMadeUpMadeUpMadeUpMadeUp4567
+     Seriennnummer Kasse: MADEUP01SERIAL
+           Mit der PENNY App
+           1,00 EUR gespart
+     Deine zusätzlichen Vorteile heute:
+     Sonstige Vorteile                   22,00
+     Summe                               22,00
+           Du erhälst 20 Treuepunkt(e)
+           Danke für deinen Einkauf
+     Noch mehr sparen:
+     Erstmal in die Penny App
+     Keine Rabatte auf die mit *
+     gekennzeichnete Produkte
+     - auch im Internet unter www.penny.de
+     XyZaBcDeFgHiJkLmNoPq
