@@ -1,0 +1,60 @@
+           *** P E N N Y - M A R K T GmbH ***
+                     Musterweg 12
+                  12345 Beispielstadt
+                UID Nr.: DE000000000
+                                                EUR
+     MILCH                                 1,19 B
+     App-Preis-Rabatt                     -0,20 B
+     DUSCHTUCH BLAU                       24,99 A *
+     Treueartikel                        -22,00
+     KINDERPONCHO                         29,99 A *
+     BUCH FREUNDE GEF                      2,99 B *
+     MINERALWASSER                         0,98 A
+                   2 Stk x 0,49
+     PFAND 0,25 EURO                       0,50 A *
+                   2 Stk x 0,25
+     SAFTSCHORLE                           1,29 A
+     PFAND 0,32 EUR                        0,32 A *
+     BIER                                  0,89 A
+     PFAND 0,48 EUR                        0,48 A *
+     LEERGUT EINWEG                       -0,75 A *
+                   3 Stk x 0,25
+     LEERGUT EINWEG                       -3,25 A *
+     LEERG. EW E. ST                      -0,50 B *
+                   2 Stk x 0,25
+     --------------------------------------------
+     SUMME                    EUR         36,92
+     ============================================
+     Geg. EC-Cash             EUR         36,92
+
+                   * * Kundenbeleg * *
+     Datum:                          03.10.2026
+     Uhrzeit:                      17:42:05 Uhr
+     Beleg-Nr.                             4711
+     Trace-Nr.                           090807
+                      Kartenzahlung
+                       Contactless
+                        girocard
+     Nr.                  ############5678 0001
+     Terminal-ID                       61626364
+     Pos-Info                         07 315 19
+     AS-Zeit 03.10.                   17:42 Uhr
+                 Betrag EUR           36,92
+                     Zahlung erfolgt
+
+     Steuer %        Netto    Steuer   Brutto
+     A= 19,0%        28,10      5,34    33,44
+     B=  7,0%         3,25      0,23     3,48
+     Gesamtbetrag    31,35      5,57    36,92
+
+     TSE-Signatur:
+     MEUCIQDmadeUpMadeUpMadeUpMadeUpMadeUpMadeUp0123
+     AbCd1234XyZ=
+     TSE-Signaturzaehler:                    42
+     Seriennnummer Kasse: MADEUP00SERIAL
+           Mit der PENNY App 0,20 EUR gespart
+              Sonstige Vorteile 22,00
+           Sie erhalten 3 Treuepunkt(e)
+           Wir danken für Ihren Einkauf
+                  Erstmal zu Penny.
+                    www.penny.de

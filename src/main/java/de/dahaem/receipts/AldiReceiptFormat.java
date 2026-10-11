@@ -22,6 +22,8 @@ final class AldiReceiptFormat implements ReceiptStoreFormat {
     private static final Pattern TOTAL = Pattern.compile("^ZU ZAHLEN\\s+(" + MONEY + ")\\s*€$");
     private static final Pattern SAVINGS = Pattern.compile("^Gesamtersparnis:?\\s*(" + MONEY + ")\\s*€$");
     private static final Pattern DATE = Pattern.compile("Datum\\s+(\\d{2})\\.(\\d{2})\\.(\\d{2,4})\\s+(\\d{1,2}):(\\d{2})");
+    // Payment-block receipt number: not kept for ALDI (and not a commercial line).
+    private static final Pattern BELEG_NR = Pattern.compile("(?i)^Beleg-?Nr\\b");
     private static final Pattern POSTAL = Pattern.compile("\\d{5}\\s+\\p{L}");
 
     @Override
@@ -67,7 +69,7 @@ final class AldiReceiptFormat implements ReceiptStoreFormat {
                 b.purchasedAt = ReceiptText.dateTime(m.group(1), m.group(2), m.group(3), m.group(4), m.group(5));
             } else if (ReceiptText.taxRow(line) != null) {
                 b.addTax(ReceiptText.taxRow(line));
-            } else if (ReceiptText.isTaxHeader(line)) {
+            } else if (ReceiptText.isTaxHeader(line) || BELEG_NR.matcher(line).find()) {
                 continue;
             } else if ((m = ITEM.matcher(line)).matches()) {
                 b.addItem(m.group(1), ReceiptText.money(m.group(2)), m.group(3));
