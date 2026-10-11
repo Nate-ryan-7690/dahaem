@@ -58,25 +58,31 @@ ingredient the recipe needs without an amount (`migrations/0005_recipe_quantitie
   but say `recipeYield: 2`. Any other disagreement between title and yield is reported, not
   applied. Without a readable `recipeYield` (and no bundle title) a new import gets the default
   2; the repair tool never writes that default over a stored value.
-  - **Ranges** are kept as ranges: `für 3 – 4 Personen` gives servings 3 (the lower bound, which
-    scaling uses by default) and `recipe_servings_max` 4 (`migrations/0006_recipe_servings_max.sql`);
-    `2 – 4 Personen` gives 2 and 4. Only a range written with `Personen` counts.
-  - A 4-person title that also says another number of `Portionen` ("OTP 4P … 2 Portionen")
-    contradicts itself: `review-servings`, nothing written.
-  - Titles that only say `N Portionen` (ready-made products), or `für 6 Personen`, are reported
-    and stay 2.
+  - The **title** decides when it names people (all scraped recipes say `recipeYield: 2`). Only a
+    number next to `Personen`, `Person`, `Pers.`, `Portionen` or `Portion`, or `4P` / `Bundle 4P` /
+    `OTP 4P`, counts; a bare number pair elsewhere in a title never does.
+    - one number N: servings N (`4 Portionen` 4, `für 6 Personen` 6, `1 Pers.` 1; 2 = unchanged);
+    - a range `N – M` / `N-M` next to Personen or Portionen: servings N (the lower bound, used for
+      scaling by default) and `recipe_servings_max` M (migration 0006, CHECK max > servings);
+    - two different numbers, or a number outside the range (`OTP 4P … 2 Portionen`,
+      `1 Portion für 2 Prs. oder 2 Portionen für 1 Prs.`): `review-servings`, nothing written;
+    - no head count in the title: 2.
 - **Lines without a number** (Nate, 2026-10-11), in this order:
   1. `nach Geschmack X` is to taste, whatever X is (also when a step names an amount);
   2. otherwise the amount comes from the **cooking steps**: the amount outside the bracket is the
-     2-person value, several mentions of the same ingredient are added up. Only a mention
-     worded like the line counts (`(Oliven-)Öl` = `Öl` = `Olivenöl`); a different wording
-     (`Essig` for `Weißweinessig`, `Senf` for `mittelscharfer Senf`, `Zitronensaft` for
-     `Zitrone`) or mentions in different units (1 EL + 1 TL) go to review, never guessed;
-  3. no amount anywhere: salt, pepper, oil and vinegar are to taste; `Stück X` is 1 Stück
-     (pita, pomegranate), except for uncountable things (sugar, butter, honey, flour, milk,
-     stock …), which go to review; everything else goes to review (`review-amount`);
-  4. a line whose kind of ingredient already has a numbered line in the recipe (`1 Esslöffel
-     Olivenöl` next to `Stück Öl`) gets no row of its own.
+     2-person value, several mentions of the same ingredient are added up. A mention counts when it
+     is worded like the line (`(Oliven-)Öl` = `Öl` = `Olivenöl`). For oil, vinegar and mustard a
+     generic mention (`Essig`, `Senf`, `Öl`) also counts when the recipe has exactly ONE item of that
+     kind (the only vinegar); with several it goes to review. `Zitronensaft` is not `Zitrone` and
+     `Limettenspalten` are not `Limette`: review. A line whose ingredient already has a numbered line
+     in the recipe gets no row of its own;
+  3. EL and TL of the same ingredient are converted exactly (1 EL = 3 TL) and stored in EL with
+     3 decimals; spoons together with g, ml or Prise go to review;
+  4. no amount anywhere: salt, pepper, oil, vinegar and the uncountable staples sugar, butter,
+     stock / fond, honey, flour, mustard and milk are to taste; `Stück X` of a countable thing (egg,
+     lemon, lime, garlic clove, pomegranate, pita, Schmand, spring onion, onion, carrot, cucumber,
+     orange, pepper, tomato, chilli, beetroot, bread rolls) is 1 Stück; anything else is
+     `review-amount` and never in the SQL.
 - **Two lines on the same catalog item** (the primary key is item + recipe):
   - same unit: the quantities are summed;
   - a line with an amount beats a to-taste line;
@@ -173,7 +179,7 @@ docker run --rm --network php-sandbox_default --user 1000:1000 --env-file <env f
 | now to-taste | 1 Stück Salz -> to taste |
 | inserted EL/TL lines | lines the old parser dropped |
 | inserted to-taste lines | lines the old parser dropped |
-| servings | 2 -> 4 (explicit 4-person title), 2 -> 3 + maximum 4 (range) |
+| servings | from the title: 2 -> N, or 2 -> N + maximum M for a range |
 | from-steps / inserted-from-steps lines | amountless line, amount read from the cooking steps |
 | inserted 1 Stück lines | `Stück X` without an amount anywhere |
 | `recipe_source_url` | set where empty |
@@ -193,7 +199,7 @@ These are listed in the TSV but **not** written to the SQL:
 | `review-uncertain-match` | any change (update or insert) where the item match is only `like`/`multi`, e.g. "1 Packung Bratapfelgewürz" fuzzily matched to Apfel. The TSV shows old and new values, the page line and the match |
 | `review-unit` | the unit differs and the old parser would have stored something else for this line (e.g. stored 1 Stück, but the old parser would have made "1 TL Honig" into 1 TL) |
 | `review-servings` | the page has no readable `recipeYield` and no title rule, or the title contradicts itself (4P + "2 Portionen"); the stored servings are kept |
-| `review-amount` | an amountless line with no safe amount: steps worded differently or in different units, uncountable `Stück X`, no amount anywhere, or covered by a numbered line |
+| `review-amount` | an amountless line with no safe amount: steps worded differently or in units that cannot be added, several candidates for a generic mention, an uncountable-or-unknown `Stück X`, no amount anywhere, or covered by a numbered line |
 | `review-held` | the page now simply says something else (250 g -> 300 g), or a new line that is neither a spoon nor to-taste. `--include-other` writes these |
 | `review-unmatched` | the page line matches no catalog item |
 | `db-only` | a stored row that is not on the page; left as is |

@@ -8,12 +8,13 @@ the bracket holds 3 | 4 people. The app scales from the 2-person value, so only 
 the bracket is read (a bracket-only "[y]" has no 2-person value and is ignored). Several mentions
 of the same ingredient in one recipe are added up.
 
-Pure functions, no network, no database. Matching is by the ingredient's German wording, in two
-levels, so a human can be asked about the unsure ones:
+Pure functions, no network, no database. Matching is by the ingredient's German wording, in two levels:
   exact   the step names the ingredient as the line does ("Butter" / "Butter"; "(Oliven-)Öl" matches
           both "Öl" and "Olivenöl", which HelloFresh uses for the same bottle);
-  family  same kind of ingredient, different wording ("Essig" for a line "Weißweinessig", "Senf" for
-          "mittelscharfer Senf", "Zitronensaft" for "Zitrone"): never used without a human.
+  family  same kind of ingredient, different wording ("Essig" for a line "Weißweinessig", "Zitronensaft"
+          for "Zitrone"). For oil, vinegar and mustard (MERGE_FAMILIES) a family mention belongs to the
+          line when the recipe has exactly ONE item of that family; otherwise, and for every other
+          family, it is never used without a human.
 """
 import re
 from decimal import Decimal
@@ -50,14 +51,18 @@ FAMILIES = [  # (family, test on one lower-case word)
     ("zitrone", lambda w: w.startswith("zitron")),
     ("limette", lambda w: w.startswith("limett")),
     ("sahne", lambda w: w.endswith("sahne")),
-    ("brühe", lambda w: "brühe" in w or "bouillon" in w),
+    ("brühe", lambda w: "brühe" in w or "bouillon" in w or w.startswith("fond") or w.endswith("fond")),
     ("wasser", lambda w: w == "wasser"),
 ]
-# no step amount found: these become "to taste" (rule of 2026-10-11), everything else is reviewed
-TO_TASTE_FAMILIES = {"salz", "pfeffer", "öl", "essig"}
-# "1 Stück" makes no sense for these: "Stück Zucker" without an amount goes to review
-UNCOUNTABLE_FAMILIES = {"butter", "zucker", "honig", "mehl", "milch", "senf", "brühe", "schmand",
-                        "sahne", "wasser", "buttermilch"}
+# Oil, vinegar and mustard are one ingredient for the recipe's steps when the recipe has only one item
+# of that kind: a step's generic "Essig" belongs to the recipe's only vinegar.
+MERGE_FAMILIES = {"öl", "essig", "senf"}
+# no amount anywhere: these become "to taste" (rules of 2026-10-11)
+TO_TASTE_FAMILIES = {"salz", "pfeffer", "öl", "essig", "zucker", "butter", "brühe", "honig", "mehl", "senf", "milch"}
+# "Stück X" without an amount anywhere is 1 Stück only for countable things; anything else is reviewed
+COUNTABLE = re.compile(r"\b(?:ei(?:er)?|eigelb|eiweiß|frühlingszwiebeln?|zwiebeln?|zitronen?|limetten?|knoblauch\w*|"
+                       r"granatäpfel|granatapfel|schmand|chilischoten?|beete|pita\S*|fladenbrot|karotten?|gurken?|"
+                       r"orangen?|kumquats?|paprikas?|tomaten?|burgerbrötchen|brötchen)\b", re.I)
 _FILLER = {"der", "die", "das", "dem", "den", "des", "etwas", "restliche", "restlichen", "restlicher",
            "restliches", "gesamten", "gesamte", "ein", "eine", "einen", "einem", "kleine", "kleinen",
            "großen", "große", "frisch", "frischen", "heiße", "heißen", "heißem", "heißes", "heißer",
@@ -65,6 +70,7 @@ _FILLER = {"der", "die", "das", "dem", "den", "des", "etwas", "restliche", "rest
            "kalten", "kaltem", "flüssige", "flüssigen", "geschmolzene", "geschmolzenen", "gehackte",
            "gehackten", "ca", "gestrichenen", "gestrichenem", "gehäuften", "etwa", "weitere",
            "weiteren", "zusätzliche", "zusätzlichen", "gutes", "gute"}
+_GENERIC = (["essig"], ["öl"], ["senf"])        # the bare word: names no particular kind
 _CUT = re.compile(r"\s+(?:und|oder|sowie|mit|in|auf|zu|dazu|dann|dabei|über|für|aus)\s+|\s+(?:und|oder)$")
 
 
@@ -150,6 +156,8 @@ def _match(words, fam, noun):
                 if fam == "öl" and len(phrase) == 1 and len(words) == 1 and \
                         {phrase[0], words[0]} <= {"öl", "olivenöl"}:
                     return "exact"           # "(Oliven-)Öl", "Öl" and "Olivenöl" are one bottle
+                if fam in MERGE_FAMILIES and phrase not in _GENERIC and words not in _GENERIC:
+                    return None              # two specific vinegars / oils / mustards: different ingredients
                 return "family"
         return None
     if not words:
@@ -163,13 +171,8 @@ def _match(words, fam, noun):
     return None
 
 
-def step_amount(name, steps):
-    """What the steps say about ingredient `name` (a line without a number).
-    -> (status, amount, unit, notes)
-       'found'      amount/unit in the steps, several mentions summed
-       'uncertain'  only a same-kind mention with different wording; never used
-       'mixed'      exact mentions in different units (1 EL + 1 TL): never used
-       'none'       nothing"""
+def collect(name, steps):
+    """-> (exact mentions, family-only mentions) of ingredient `name` in the steps."""
     words, fam = ingredient_key(name)
     exact, loose = [], []
     for step in steps:
@@ -179,13 +182,36 @@ def step_amount(name, steps):
                 exact.append(m)
             elif kind == "family":
                 loose.append(m)
-    if exact:
-        units = {m["unit"] or "Stück" for m in exact}
-        if len(units) > 1:
-            return "mixed", None, None, ["; ".join(m["raw"] for m in exact)]
-        total = sum((m["amount"] for m in exact), Decimal(0))
-        note = "from the steps: " + " + ".join(f"{m['amount']} {m['unit'] or 'Stück'}" for m in exact)
-        return "found", _dec(Fraction(total)), units.pop(), [note]
+    return exact, loose
+
+
+def total(found):
+    """Add up mentions of one ingredient -> (status, amount, unit, notes).
+    'found'  one unit, or EL and TL mixed (1 EL = 3 TL, exact, stored in EL with 3 decimals)
+    'mixed'  g / ml / Prise ... together with another unit: never added up"""
+    units = {m["unit"] or "Stück" for m in found}
+    shown = " + ".join(f"{m['amount']} {m['unit'] or 'Stück'}" for m in found)
+    if len(units) == 1:
+        return "found", _dec(Fraction(sum((m["amount"] for m in found), Decimal(0)))), units.pop(), \
+            ["from the steps: " + shown]
+    if units == {"EL", "TL"}:
+        eel = sum((Fraction(m["amount"]) / (3 if m["unit"] == "TL" else 1) for m in found), Fraction(0))
+        return "found", _dec(eel), "EL", ["from the steps: " + shown + " (1 EL = 3 TL)"]
+    return "mixed", None, None, ["; ".join(m["raw"] for m in found)]
+
+
+def step_amount(name, steps, merge_family=False):
+    """What the steps say about ingredient `name` (a line without a number).
+    -> (status, amount, unit, notes)
+       'found'      amount/unit in the steps, several mentions summed (merge_family: a same-kind mention
+                    with other wording counts too, because the caller knows the recipe has only one such item)
+       'uncertain'  only a same-kind mention with different wording; never used
+       'mixed'      mentions in units that cannot be added exactly: never used
+       'none'       nothing"""
+    exact, loose = collect(name, steps)
+    found = exact + loose if merge_family else exact
+    if found:
+        return total(found)
     if loose:
         return "uncertain", None, None, ["; ".join(m["raw"] for m in loose)]
     return "none", None, None, []

@@ -116,13 +116,13 @@ class ServingsTest(unittest.TestCase):
     def test_bundle_for_four_wins_over_recipe_yield(self):
         servings, notes, source = servings_for(fixture("familien_bolognese_bundle.json"))
         self.assertEqual((4, recipe_parse.FROM_BUNDLE_TITLE), (servings, source))
-        self.assertIn("bundle for 4", notes[0])
+        self.assertIn("title says 4", notes[0])
         self.assertEqual(4, servings_for({"name": "Pasta für 4 Personen", "recipeYield": 2})[0])
 
-    def test_other_conflicts_are_reported_not_applied(self):
+    def test_a_title_with_a_head_count_wins_over_recipe_yield(self):
         servings, notes, source = servings_for(fixture("curry_fuer_3.json"))   # title 3, recipeYield "2 Portionen"
-        self.assertEqual((2, recipe_parse.FROM_YIELD), (servings, source))
-        self.assertTrue(notes[0].startswith("CONFLICT"))
+        self.assertEqual((3, recipe_parse.FROM_TITLE), (servings, source))
+        self.assertIn("title says 3", notes[0])
 
     def test_missing_or_unreadable_yield_is_only_a_default(self):
         for rec in [fixture("kuerbissuppe_ohne_yield.json"), {"name": "X", "recipeYield": "viele"},

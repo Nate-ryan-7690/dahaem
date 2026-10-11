@@ -11,12 +11,12 @@ What it fixes (see migrations/0005_recipe_quantities.sql, which must be applied 
   * rounding: every amount was rounded half-up and forced to >= 1 ("1½" -> 2, "¼ TL" -> 1)
   * units: "Esslöffel"/"Teelöffel" lines were dropped; "Prisen" etc. stored as Stück
   * "nach Geschmack"/amountless lines: dropped or stored as 1 Stück -> to-taste rows
-  * "Bundle 4P" recipes: amounts for 4 people stored with servings 2 -> servings 4
+  * servings from the title ("4P", "für 6 Personen", "1 Pers.", "4 Portionen"; a range "3 – 4 Personen"
+    keeps servings 3 and recipe_servings_max 4); contradictions are only reported
   * lines without a number: the amount from the cooking steps (scripts/importer/step_amounts.py),
     "nach Geschmack X" / salt / pepper / oil / vinegar without an amount -> to taste,
     "Stück X" without an amount -> 1 Stück, anything unsure -> review-amount (see README.md)
-  * "3 – 4 Personen" titles: servings 3 (lower bound) + recipe_servings_max 4
-    (migrations/0006_recipe_servings_max.sql must be applied first)
+  (migrations/0006_recipe_servings_max.sql must be applied first)
 and records each matched page in recipe.recipe_source_url.
 
 Steps:
@@ -44,7 +44,7 @@ Only listed in the TSV, never in the SQL:
     review-uncertain-match. An earlier wrong match must not be "corrected" on a guess;
   * a unit change the old parser cannot explain (the stored row is not exactly what the old
     parser made of this page line): review-unit;
-  * servings from a page without a readable recipeYield (and no bundle-for-4 title): the 2 would
+  * servings from a page without a readable recipeYield (and no head count in the title): the 2 would
     be a guess, so the stored value is kept: review-servings;
   * changes that are not one of the known bugs, and new lines that are neither spoons nor
     to-taste (review-held), unless --include-other is given.

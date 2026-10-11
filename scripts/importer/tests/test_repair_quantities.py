@@ -428,19 +428,20 @@ class StepRulesRunTest(NameMatchingRunTest):
         out, rows, sql = self.run_all(
             [(1, "Pfannengericht"), (2, "Salat")],
             [(1, 1070, "Stück", 1), (1, 1148, "Stück", 1), (2, 565, "Stück", 1)],      # old importer: "1 Stück" each
-            {"pfannengericht": self.page("Pfannengericht", ["Stück Honig", "Stück Salz", " Zucker", "nach Geschmack Pfeffer"],
+            {"pfannengericht": self.page("Pfannengericht", ["Stück Honig", "Stück Salz", " Zucker", "nach Geschmack Pfeffer",
+                                                            "Stück Petersilie"],
                                          ["1 EL Honig und 1 EL Honig verrühren.", "Mit Salz abschmecken."]),
              "salat": self.page("Salat", ["Stück Pita-Brote"], ["Pita füllen."])})
         # steps: Honig 2 EL replaces the old "1 Stück" (class from-steps); Salz 1 Stück -> to taste
         self.assertIn("recipe_ingredient_quantity_needed = 2, recipe_ingredient_unit = 'EL'", sql)
         self.assertIn("-- from-steps: Stück Honig", sql)
         self.assertIn("recipe_ingredient_to_taste = 1", sql)
-        # Pfeffer is new and nach Geschmack; Zucker has no amount anywhere: review, no SQL
+        # Pfeffer (nach Geschmack) and Zucker (uncountable staple, no amount) are new to-taste rows
         self.assertIn("-- insert-to-taste: nach Geschmack Pfeffer", sql)
-        self.assertNotIn("Zucker", sql.split("\n-- recipe")[1].split("--")[0] if False else "".join(
-            l for l in sql.splitlines() if l.startswith(("UPDATE", "INSERT"))))
+        self.assertIn("-- insert-to-taste:  Zucker", sql)
+        # Petersilie: not countable, no amount anywhere: review, no SQL
         review = [r for r in rows if r["action"] == "review-amount"]
-        self.assertEqual(["Zucker"], [r["page_line"].strip() for r in review])
+        self.assertEqual(["Stück Petersilie"], [r["page_line"].strip() for r in review])
         # "Stück Pita-Brote" = 1 Stück: the stored row already says so, nothing to do
         self.assertFalse([l for l in sql.splitlines() if "item_id = 565" in l])
         self.assertIn("from the steps 1", out)
