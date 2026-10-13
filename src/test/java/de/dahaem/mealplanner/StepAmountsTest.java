@@ -452,51 +452,141 @@ class StepAmountsTest {
         }
     }
 
-    // --- recipes with servings other than 2 ------------------------------------------------------
+    // --- a bracket always means 2 / 3 / 4 people, whatever the recipe's servings are ---------------
+
+    private static void assertForPeople(String step, int servings, Integer servingsMax, boolean useMax,
+                                        String none, String p1, String p2, String p3, String p4, String p6) {
+        assertEquals(none, StepAmounts.render(step, servings, servingsMax, null, useMax), "no people");
+        assertEquals(p1, StepAmounts.render(step, servings, servingsMax, 1, useMax), "1 person");
+        assertEquals(p2, StepAmounts.render(step, servings, servingsMax, 2, useMax), "2 people");
+        assertEquals(p3, StepAmounts.render(step, servings, servingsMax, 3, useMax), "3 people");
+        assertEquals(p4, StepAmounts.render(step, servings, servingsMax, 4, useMax), "4 people");
+        assertEquals(p6, StepAmounts.render(step, servings, servingsMax, 6, useMax), "6 people");
+    }
 
     @Test
-    void rangeRecipeScalesTheOuterValueFromServingsOrServingsMaxAndIgnoresTheSizeMapping() {
+    void servings4RecipeUsesTheLastBracketValueAsItsOwnAmount() {
+        assertForPeople("Bringe 3 EL [4,5 EL | 6 EL] Butter auf Zimmertemperatur.", 4, null, false,
+                "Bringe 6 EL Butter auf Zimmertemperatur.",
+                "Bringe 1½ EL Butter auf Zimmertemperatur.",
+                "Bringe 3 EL Butter auf Zimmertemperatur.",
+                "Bringe 4½ EL Butter auf Zimmertemperatur.",
+                "Bringe 6 EL Butter auf Zimmertemperatur.",
+                "Bringe 9 EL Butter auf Zimmertemperatur.");
+    }
+
+    @Test
+    void servings4RecipeWithASingleValueBracketTakesItAsThe4PersonValue() {
+        assertForPeople("Gib 1 TL [2 TL] Honig dazu.", 4, null, false,
+                "Gib 2 TL Honig dazu.", "Gib ½ TL Honig dazu.", "Gib 1 TL Honig dazu.",
+                "Gib 1½ TL Honig dazu.", "Gib 2 TL Honig dazu.", "Gib 3 TL Honig dazu.");
+    }
+
+    @Test
+    void rangeRecipeResolvesWithoutPeopleForServingsOrServingsMax() {
+        String step = "Bepinsle mit 1 EL [1,5 EL | 2 EL] Milch.";
+        assertForPeople(step, 3, 4, false,
+                "Bepinsle mit 1½ EL Milch.", "Bepinsle mit ½ EL Milch.", "Bepinsle mit 1 EL Milch.",
+                "Bepinsle mit 1½ EL Milch.", "Bepinsle mit 2 EL Milch.", "Bepinsle mit 3 EL Milch.");
+        assertForPeople(step, 3, 4, true,
+                "Bepinsle mit 2 EL Milch.", "Bepinsle mit ½ EL Milch.", "Bepinsle mit 1 EL Milch.",
+                "Bepinsle mit 1½ EL Milch.", "Bepinsle mit 2 EL Milch.", "Bepinsle mit 3 EL Milch.");
+    }
+
+    @Test
+    void range2To3ResolvesWithoutPeopleForServingsOrServingsMax() {
+        String step = "Rühre 2 EL [3 EL | 4 EL] Sahne unter.";
+        assertForPeople(step, 2, 3, false,
+                "Rühre 2 EL Sahne unter.", "Rühre 1 EL Sahne unter.", "Rühre 2 EL Sahne unter.",
+                "Rühre 3 EL Sahne unter.", "Rühre 4 EL Sahne unter.", "Rühre 6 EL Sahne unter.");
+        assertForPeople(step, 2, 3, true,
+                "Rühre 3 EL Sahne unter.", "Rühre 1 EL Sahne unter.", "Rühre 2 EL Sahne unter.",
+                "Rühre 3 EL Sahne unter.", "Rühre 4 EL Sahne unter.", "Rühre 6 EL Sahne unter.");
+    }
+
+    @Test
+    void oneServingRecipeScalesTheFrontValueFromTwoPeopleWithoutPeople() {
+        assertForPeople("Gib 1 EL [2 EL] Öl* dazu.", 1, null, false,
+                "Gib ½ EL Öl* dazu.", "Gib ½ EL Öl* dazu.", "Gib 1 EL Öl* dazu.",
+                "Gib 1½ EL Öl* dazu.", "Gib 2 EL Öl* dazu.", "Gib 3 EL Öl* dazu.");
+        // basis max on a recipe that is not a range is ignored
+        assertEquals("Gib ½ EL Öl* dazu.", StepAmounts.render("Gib 1 EL [2 EL] Öl* dazu.", 1, null, null, true));
+    }
+
+    @Test
+    void twoServingRecipeIsUnchangedWithoutPeople() {
+        assertEquals("Erhitze 1 EL Butter* in der Pfanne.",
+                StepAmounts.render("Erhitze 1 EL [1,5 EL | 2 EL] Butter* in der Pfanne.", 2, null, null, false));
+        assertEquals("Erhitze 1 EL Butter* in der Pfanne.",
+                StepAmounts.render("Erhitze 1 EL [1,5 EL | 2 EL] Butter* in der Pfanne.", 2, null, 2, false));
+    }
+
+    @Test
+    void plainAmountsStillScaleFromTheRecipesServings() {
+        assertForPeople("Gib 200 g Reis in den Topf.", 4, null, false,
+                "Gib 200 g Reis in den Topf.", "Gib 50 g Reis in den Topf.", "Gib 100 g Reis in den Topf.",
+                "Gib 150 g Reis in den Topf.", "Gib 200 g Reis in den Topf.", "Gib 300 g Reis in den Topf.");
+    }
+
+    @Test
+    void bracketAndPlainAmountsInOneStepOfAServings4Recipe() {
+        assertEquals("Brate 600 g Hackfleisch mit 150 ml Wasser* an.",
+                StepAmounts.render("Brate 300 g [450 g | 600 g] Hackfleisch mit 150 ml Wasser* an.", 4, null, null, false));
+        assertEquals("Brate 450 g Hackfleisch mit 113 ml Wasser* an.",
+                StepAmounts.render("Brate 300 g [450 g | 600 g] Hackfleisch mit 150 ml Wasser* an.", 4, null, 3, false));
+    }
+
+    @Test
+    void servings4RecipePicksWordsAndTimesForItsOwnSize() {
+        assertEquals("Gib die gesamte Soße dazu.",
+                StepAmounts.render("Gib die Hälfte [drei Viertel | gesamte] Soße dazu.", 4, null, null, false));
+        assertEquals("Backe 12 Min.", StepAmounts.render("Backe 10 [12] Min.", 4, null, null, false));
+        assertEquals("Backe 20 Min.", StepAmounts.render("Backe 18 Min. [19 Min. | 20 Min.]", 4, null, null, false));
+        assertEquals("Backe 18 Min.", StepAmounts.render("Backe 18 Min. [19 Min. | 20 Min.]", 4, null, 6, false));
+        assertEquals("Gib die Hälfte Soße dazu.",
+                StepAmounts.render("Gib die Hälfte [drei Viertel | gesamte] Soße dazu.", 4, null, 6, false));
+    }
+
+    @Test
+    void rangeRecipePicksWordsAndTimesForTheServingsOrServingsMaxSize() {
+        String words = "Gib die Hälfte [drei Viertel | gesamte] Soße dazu.";
+        assertEquals("Gib die drei Viertel Soße dazu.", StepAmounts.render(words, 3, 4, null, false));
+        assertEquals("Gib die gesamte Soße dazu.", StepAmounts.render(words, 3, 4, null, true));
+        assertEquals("Backe 18 Min.", StepAmounts.render("Backe 18 Min. [19 Min. | 20 Min.]", 3, 4, 1, true));
+    }
+
+    @Test
+    void mixedBracketAndPlainAmountsOnA3To4RangeScaleFromTheChosenBasis() {
         String step = "Brate 300 g [450 g | 600 g] Hackfleisch mit 150 ml Wasser* an.";
-        // servings 3 – 4, basis default: people / 3
-        assertEquals("Brate 300 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, null, false));
-        assertEquals("Brate 200 g Hackfleisch mit 100 ml Wasser* an.", StepAmounts.render(step, 3, 4, 2, false));
-        assertEquals("Brate 300 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, 3, false));
-        assertEquals("Brate 400 g Hackfleisch mit 200 ml Wasser* an.", StepAmounts.render(step, 3, 4, 4, false));
-        assertEquals("Brate 600 g Hackfleisch mit 300 ml Wasser* an.", StepAmounts.render(step, 3, 4, 6, false));
+        // servings 3 – 4, basis default: plain amounts people / 3
+        assertEquals("Brate 450 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, null, false));
+        assertEquals("Brate 300 g Hackfleisch mit 100 ml Wasser* an.", StepAmounts.render(step, 3, 4, 2, false));
+        assertEquals("Brate 600 g Hackfleisch mit 200 ml Wasser* an.", StepAmounts.render(step, 3, 4, 4, false));
         // basis max: people / 4
-        assertEquals("Brate 300 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, null, true));
-        assertEquals("Brate 150 g Hackfleisch mit 75 ml Wasser* an.", StepAmounts.render(step, 3, 4, 2, true));
-        assertEquals("Brate 225 g Hackfleisch mit 113 ml Wasser* an.", StepAmounts.render(step, 3, 4, 3, true));
-        assertEquals("Brate 300 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, 4, true));
-        assertEquals("Brate 450 g Hackfleisch mit 225 ml Wasser* an.", StepAmounts.render(step, 3, 4, 6, true));
+        assertEquals("Brate 600 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, null, true));
+        assertEquals("Brate 600 g Hackfleisch mit 150 ml Wasser* an.", StepAmounts.render(step, 3, 4, 4, true));
     }
 
     @Test
     void rangeRecipeSpoonsAndCountsUseFractions() {
-        assertEquals("Gib ⅔ EL Öl* dazu.", StepAmounts.render("Gib 1 EL [1,5 EL | 2 EL] Öl* dazu.", 3, 4, 2, false));
-        assertEquals("Forme 2⅔ Frikadellen.", StepAmounts.render("Forme 4 [6 | 8] Frikadellen.", 3, 4, 2, false));
+        assertEquals("Gib ½ EL Öl* dazu.", StepAmounts.render("Gib 1 EL [1,5 EL | 2 EL] Öl* dazu.", 3, 4, 1, false));
+        assertEquals("Forme 2 Frikadellen.", StepAmounts.render("Forme 4 [6 | 8] Frikadellen.", 3, 4, 1, false));
         assertEquals("Gib 3,33 l Brühe dazu.", StepAmounts.render("Gib 5 l Brühe dazu.", 3, 4, 2, false));
     }
 
     @Test
-    void rangeRecipeKeepsThe2PersonWordsAndTimes() {
-        assertEquals("Gib die Hälfte Soße dazu.",
-                StepAmounts.render("Gib die Hälfte [drei Viertel | gesamte] Soße dazu.", 3, 4, 4, false));
-        assertEquals("Backe 18 Min.", StepAmounts.render("Backe 18 Min. [19 Min. | 20 Min.]", 3, 4, 4, true));
+    void eighthsAreShownAsFractionsForSpoonsPinchesAndCounts() {
+        assertEquals("Gib ⅛ TL Salz dazu.", two("Gib ¼ TL Salz dazu.", 1));
+        assertEquals("Gib 1⅛ EL Öl dazu.", two("Gib 2¼ EL Öl dazu.", 1));
+        assertEquals("Gib ⅛ Prise Pfeffer dazu.", two("Gib ¼ Prise Pfeffer dazu.", 1));
     }
 
     @Test
-    void readyMealWithOneServingScalesInsteadOfTrustingTheBracket() {
-        assertEquals("Gib 2 EL Öl* dazu.", StepAmounts.render("Gib 1 EL [2 EL] Öl* dazu.", 1, null, 2, false));
-        assertEquals("Gib 4 EL Öl* dazu.", StepAmounts.render("Gib 1 EL [2 EL] Öl* dazu.", 1, null, 4, false));
-        // basis max on a recipe that is not a range is ignored
-        assertEquals("Gib 4 EL Öl* dazu.", StepAmounts.render("Gib 1 EL [2 EL] Öl* dazu.", 1, null, 4, true));
-    }
-
-    @Test
-    void recipeWithZeroServingsResolvesBracketsButScalesNothing() {
-        assertEquals("Gib 1 EL Öl* und 100 g Mehl dazu.",
+    void recipeWithZeroServingsResolvesBracketsForPeopleButScalesNothingElse() {
+        assertEquals("Gib 2 EL Öl* und 100 g Mehl dazu.",
                 StepAmounts.render("Gib 1 EL [1,5 EL | 2 EL] Öl* und 100 g Mehl dazu.", 0, null, 4, false));
+        assertEquals("Gib 1 EL Öl* und 100 g Mehl dazu.",
+                StepAmounts.render("Gib 1 EL [1,5 EL | 2 EL] Öl* und 100 g Mehl dazu.", 0, null, null, false));
     }
 
     // --- edges ------------------------------------------------------------------------------------

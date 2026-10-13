@@ -324,16 +324,26 @@ class ApiSmokeTest {
                     .andExpect(jsonPath("$.instructions[0].scaledInstruction")
                             .value("Erhitze ½ EL Butter* und gib 125 ml Wasser* dazu."));
 
-            // a "3 – 4 Personen" range scales the outer value from servings, or from servingsMax with basis=max
+            // a "3 – 4 Personen" range: a bracket always means 2 / 3 / 4 people; without people it follows the
+            // recipe's own count (servings 3, or servingsMax 4 with basis=max), like the ingredient list
+            mvc.perform(get("/api/recipes/{id}", rangeId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 450 g Hackfleisch an."));
+            mvc.perform(get("/api/recipes/{id}", rangeId).param("basis", "max"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 600 g Hackfleisch an."));
             mvc.perform(get("/api/recipes/{id}", rangeId).param("people", "2"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 200 g Hackfleisch an."));
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 300 g Hackfleisch an."));
             mvc.perform(get("/api/recipes/{id}", rangeId).param("people", "2").param("basis", "max"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.basis").value("max"))
                     .andExpect(jsonPath("$.instructions[0].instruction")
                             .value("Brate 300 g [450 g | 600 g] Hackfleisch an."))
-                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 150 g Hackfleisch an."));
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 300 g Hackfleisch an."));
+            mvc.perform(get("/api/recipes/{id}", rangeId).param("people", "4"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 600 g Hackfleisch an."));
         } finally {
             deleteTestRecipe(recipeId);
             deleteTestRecipe(rangeId);
