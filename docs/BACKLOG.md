@@ -6,6 +6,10 @@ move it to **Done** with the PR number when it ships. Nate decides priority and 
 
 Status: `in progress` · `next` · `later` · `idea`
 
+The product / UX plan for the PHP frontend is `docs/ux-product-spec.md` (living brief, started
+2026-10-13). Frontend items are coded by hand by Nate; agents build the Java API they need and
+document the contract. Its open decisions are settled with Nate one at a time.
+
 ## Recipes
 
 - **Step amounts: show in the recipe view (PHP, Nate)** — `next`. Display `scaledInstruction`
@@ -103,14 +107,88 @@ Status: `in progress` · `next` · `later` · `idea`
 - **Coffee machine setting** — `idea`. A household owns one capsule / pad system; show only
   offers for that system.
 
+## API work for the frontend (from the UX spec)
+
+Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
+
+- **API audit for the UI** — `next`. Go through every page in the spec (Login, Home, Meal Planner,
+  Recipes, Shopping list, Inventory, Offers) and list each read / write it needs against the existing
+  endpoints; record each missing one here. Known so far: meal plans can only be listed, created and
+  appended to; inventory is read-only; a shopping list can't be saved, ticked off or completed; there
+  are no user / household settings.
+- **Meal plan: any day, any number of meals** — `next`. `meal_plan_recipe` has no date, its key
+  (recipe, plan) blocks the same recipe twice in a week, and `meal_time` is a fixed slot text. Needs
+  an entry id, a date, an order within the day, servings per entry and an optional free label (no
+  breakfast / lunch / dinner slots); endpoints for one week by date, add / edit / remove / move.
+  Migration with a data move for existing plans → snapshot first, guarded.
+- **Recipe search and paging** — `next`. `GET /api/recipes` returns all ~11,000 recipes. Server-side
+  search (name, ingredient), filters on data that actually exists (time, tags, servings), paging, and a
+  small card DTO; the planner's recipe picker uses the same endpoint.
+- **Recipe images** — `next`, needs Nate's decision (spec open decision 5). There is no image column;
+  check what the scraped sources hold, store a URL / file per recipe, a thumbnail size for calendar and
+  cards, a larger one for the detail view; the PHP shows a designed fallback when there is none.
+- **Recipe opportunities with evidence** — `next`. `/api/suggestions/by-savings` and `/by-expiring`
+  exist; extend them so each suggestion says which ingredients are covered by which offer (store,
+  product, price, valid until), which are already in stock and which are still uncovered. Suggestions
+  never change the plan by themselves.
+- **Shopping list lifecycle** — `next`. Save a list (from a meal-plan week), tick items, record the
+  shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn
+  when a chosen offer has expired or a price changed, never substitute silently.
+- **Inventory writes** — `next`. Add, consume, correct and expiry changes with a history, so low /
+  expiring items can lead to "adjust stock", "plan a recipe" or "add to the list".
+- **Auth and session review** — `next`. Check PHP sessions against the Java login / me / CSRF
+  endpoints together: session expiry, logout, errors that reveal nothing internal. Account creation /
+  invitation is open (spec decision 6); no public self-registration until it is decided.
+- **Stores and pinned stores** — `later`. A store list with name and logo for the Home offers deck and
+  "offers of one store"; per-user pinned stores change only the order, never hide stores or offers.
+  Store logos / banners: check the usage rights, fall back to a neutral DAHÄM card.
+- **Personal vs household settings** — `later`, needs Nate's decision (spec decision 7). Greeting,
+  language, theme per user; plan, stock, list and purchases shared per household.
+
+## Platform
+
+- **Support tickets: backend foundation** — `next` per the spec (it says "do now"; Nate sets the
+  order). Tickets, messages (user-visible vs staff notes), access requests, explicit time-limited
+  grants bound to one ticket and household, append-only audit log; default deny. The negative tests in
+  spec §12 (no ticket, no grant, wrong household / ticket, expired, revoked, closed, wrong role) are
+  acceptance criteria. Staff access to household content stays disabled until that gate passes.
+  Large and independent of the UI work. Policy values (scopes, grant duration, retention) still open.
+- **Household isolation** — `later`. Every query and endpoint scoped to the user's household, with
+  tests that one household can never read or change another's data (needed before any hosted use).
+- **Licence** — `later`, Nate's decision. Neither repo has a `LICENSE`; decide before making either
+  repo public or accepting outside contributions.
+- **Monetization** — `idea`, nothing chosen (spec §12). Privacy is a baseline: household data is never
+  sold or used for ads.
+
 ## Frontend and mobile (PHP, Nate)
+
+- **Design system** — `next`. Fresh & Natural direction is decided; compare a sage-led palette (warm
+  off-white, optional olive accent) with an olive-led one on real screens (login, home, week planner),
+  check contrast and colour-blindness, then fix tokens, typography, spacing, components, light / dark.
+- **Login and app shell** — `next`. Login (show / hide password, clear errors, logout, session
+  expiry), shared layout, navigation, design tokens, loading / empty / error states.
+- **Home** — `next`. Meal plan first (compact week, images with fallback), then recipe opportunities
+  with their reasons, store offers deck (pinned stores first; one store at a time on mobile, desktop
+  open), one compact "Household essentials" summary.
+- **Meal Planner page** — `next`. Whole week on desktop, a day view on mobile, any number of meals
+  per day, recipe picker over the calendar, previous / next week. Needs "Meal plan: any day, any number
+  of meals" and "Recipe search and paging".
+- **Recipes page** — `next`. Search, paging, filters, cards, detail with `?people=N`,
+  `scaledQuantity` and `scaledInstruction`; actions "add to plan" and "add to shopping list".
 
 - **Mobile = PHP frontend as a mobile-first PWA** — decided 2026-10-10. Installable on the
   home screen, offline shopping list via a service worker (the old Java static app had this:
   `sw.js`, manifest). No native app for now; the internal-only API stays internal.
 - **`sql/schema_mariadb.sql` in dahaem-frontend** — `next`. Still has the old INTEGER recipe
   quantity; align with migration 0005 (and later `servings_max`).
-- **Recipe view** — `next`. Uses `GET /api/recipes/{id}?people=N` (contract in PR #61 / #62).
+- **Recipe view** — `next`. Uses `GET /api/recipes/{id}?people=N` (contract in PR #61 / #62);
+  part of the Recipes page above.
+- **Shopping list, Inventory, Offers pages** — `later`, after their API items above.
+- **Help & Support pages** — `later`, after the ticket backend.
+- **Culinary inspiration** — `idea`. Discovering dishes from around the world, baking projects,
+  techniques, trustworthy nutrition content, independent of offers; not in the first release (spec §2A).
+- **Household chores** — `idea`, Nate's decision. Recurring upkeep only (bins, litter tray, filters),
+  not a general to-do app.
 
 ## Process
 
