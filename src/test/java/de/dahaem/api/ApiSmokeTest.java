@@ -143,6 +143,8 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 40)].scaledQuantity", contains(2.0)))
                 .andExpect(jsonPath("$.ingredients[?(@.itemId == 270)].unit", contains("g")))
                 .andExpect(jsonPath("$.instructions[0].instruction")
+                        .value("Zwiebel, Knoblauch und Karotte fein würfeln."))
+                .andExpect(jsonPath("$.instructions[0].scaledInstruction")
                         .value("Zwiebel, Knoblauch und Karotte fein würfeln."));
 
         mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "3"))
@@ -275,6 +277,66 @@ class ApiSmokeTest {
                     .andExpect(jsonPath("$.items[?(@.inventoryItemId == 270)].totalQuantity", contains(200.0)));
         } finally {
             deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
+    void instructionsGainAScaledInstructionForPeopleAndBasis() throws Exception {
+        // Made-up steps in HelloFresh's notation: 2-person value [3-person | 4-person].
+        // Every amount keeps its own unit: 1 EL butter and 250 ml water are two separate amounts.
+        String butter = "Erhitze 1 EL [1,5 EL | 2 EL] Butter* und gib 250 ml Wasser* dazu.";
+        String varoma = "Gib 10 g [20 g] Öl* in den Mixtopf [und im Varoma-Behälter].";
+        int recipeId = insertRecipe("Schritt-Mengen-Testrezept", 2);
+        int rangeId = insertRecipe("Schritt-Mengen-Spanne-Testrezept", 3, 4);
+        try {
+            insertInstruction(recipeId, 1, butter);
+            insertInstruction(recipeId, 2, varoma);
+            insertInstruction(rangeId, 1, "Brate 300 g [450 g | 600 g] Hackfleisch an.");
+
+            // without people: the original text, plus the bracket resolved to the 2-person value
+            mvc.perform(get("/api/recipes/{id}", recipeId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].stepNumber").value(1))
+                    .andExpect(jsonPath("$.instructions[0].instruction").value(butter))
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction")
+                            .value("Erhitze 1 EL Butter* und gib 250 ml Wasser* dazu."))
+                    .andExpect(jsonPath("$.instructions[1].scaledInstruction")
+                            .value("Gib 10 g Öl* in den Mixtopf [und im Varoma-Behälter]."));
+
+            // 3 people: HelloFresh's 3-person value; the single-value bracket has none, so 10 g is scaled
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "3"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].instruction").value(butter))
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction")
+                            .value("Erhitze 1½ EL Butter* und gib 375 ml Wasser* dazu."))
+                    .andExpect(jsonPath("$.instructions[1].scaledInstruction")
+                            .value("Gib 15 g Öl* in den Mixtopf [und im Varoma-Behälter]."));
+
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction")
+                            .value("Erhitze 2 EL Butter* und gib 500 ml Wasser* dazu."))
+                    .andExpect(jsonPath("$.instructions[1].scaledInstruction")
+                            .value("Gib 20 g Öl* in den Mixtopf [und im Varoma-Behälter]."));
+
+            mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction")
+                            .value("Erhitze ½ EL Butter* und gib 125 ml Wasser* dazu."));
+
+            // a "3 – 4 Personen" range scales the outer value from servings, or from servingsMax with basis=max
+            mvc.perform(get("/api/recipes/{id}", rangeId).param("people", "2"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 200 g Hackfleisch an."));
+            mvc.perform(get("/api/recipes/{id}", rangeId).param("people", "2").param("basis", "max"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.basis").value("max"))
+                    .andExpect(jsonPath("$.instructions[0].instruction")
+                            .value("Brate 300 g [450 g | 600 g] Hackfleisch an."))
+                    .andExpect(jsonPath("$.instructions[0].scaledInstruction").value("Brate 150 g Hackfleisch an."));
+        } finally {
+            deleteTestRecipe(recipeId);
+            deleteTestRecipe(rangeId);
         }
     }
 
@@ -646,6 +708,18 @@ class ApiSmokeTest {
         }
     }
 
+    private static void insertInstruction(int recipeId, int stepNumber, String text) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("INSERT INTO recipe_instructions (recipe_instructions_recipe_id, "
+                     + "recipe_instructions_step_number, recipe_instructions_instruction, recipe_instructions_source) "
+                     + "VALUES (?, ?, ?, 'Testrezept')")) {
+            ps.setInt(1, recipeId);
+            ps.setInt(2, stepNumber);
+            ps.setString(3, text);
+            ps.executeUpdate();
+        }
+    }
+
     private static void insertIngredient(int recipeId, int itemId, String unit, String quantity) throws SQLException {
         insertIngredient(recipeId, itemId, unit, new BigDecimal(quantity), false);
     }
@@ -685,9 +759,13 @@ class ApiSmokeTest {
         try (Connection con = Database.getConnection();
              PreparedStatement ingredients = con.prepareStatement(
                      "DELETE FROM recipe_ingredient WHERE recipe_ingredient_recipe_id = ?");
+             PreparedStatement instructions = con.prepareStatement(
+                     "DELETE FROM recipe_instructions WHERE recipe_instructions_recipe_id = ?");
              PreparedStatement recipe = con.prepareStatement("DELETE FROM recipe WHERE recipe_id = ?")) {
             ingredients.setInt(1, recipeId);
             ingredients.executeUpdate();
+            instructions.setInt(1, recipeId);
+            instructions.executeUpdate();
             recipe.setInt(1, recipeId);
             recipe.executeUpdate();
         }

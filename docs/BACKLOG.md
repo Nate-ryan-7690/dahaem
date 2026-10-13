@@ -8,10 +8,11 @@ Status: `in progress` · `next` · `later` · `idea`
 
 ## Recipes
 
-- **Amounts in cooking steps** — `next`. The API reads the bracket notation and returns the
-  step text for the chosen number of people (2 → first, 3 → second, 4 → third; other counts
-  scale from the 2-person value). Only number + measuring unit is scaled, never °C, minutes,
-  cm or step counts. Amounts for things not in the ingredient list (water) stay and scale.
+- **Step amounts: show in the recipe view (PHP, Nate)** — `next`. Display `scaledInstruction`
+  instead of `instruction` (contract in #70).
+- **Step amounts: plural units** — `idea`. Units are kept as written, so "1 Prise" scales to
+  "2 Prise", "1 Zehe" to "2 Zehe". Plural forms need a small word list; deferred to keep units
+  unchanged as decided.
 - **Servings ranges: importer, shopping list, household choice** — `next`. (1) `extract.py` /
   `load_recipes.py` draft `recipe_servings` only (a range recipe gets its lower bound and a REVIEW
   flag); the draft SQL that `load_recipes.py` parses needs `recipe_servings_max`. (2) The shopping
@@ -133,3 +134,11 @@ Status: `in progress` · `next` · `later` · `idea`
   43 steps amount already taken, 45 unsure wording / several candidates) and 60 servings titles
   (59 "… oder …" ready meals + 28614), all still at servings 2. Still open: importer writes no
   `servings_max`, per-household reading of ranges, Brühe family rule (above).
+- #70 Amounts in cooking steps: `GET /api/recipes/{id}` instructions gain `scaledInstruction` for
+  `people` / `basis` (`StepAmounts`). A 2-serving recipe uses HelloFresh's own bracket values for
+  2 / 3 / 4 people (single-value bracket = 4 people), other counts and other recipes scale the
+  2-person value; plain number + measuring unit amounts scale, °C / times / Stufe / cm / %, Watt,
+  plain counts and pack sizes (`1 Dose (400 g)`, `2 x 100 g`) never; word brackets and brackets of
+  times, temperatures and settings (unit before or after the bracket, or `Stufe` before the number:
+  `10 [12] Min.`, `200 [220] °C`, `Stufe 2 [3]`) are picked per size, never scaled; unreadable
+  brackets and a missing `]` stay as written. Tests on made-up steps only.
