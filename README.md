@@ -109,11 +109,28 @@ java --enable-native-access=ALL-UNNAMED -cp target/dahaem-1.0-SNAPSHOT.jar de.da
 PENNY receipts (`pdftotext -layout -enc UTF-8` output, one `.txt` per receipt) are imported as purchase
 history with `ReceiptImportRunner` — a dry run by default, `--commit` writes all new receipts in one
 transaction into the receipt tables (migration 0008). It never changes stock or `purchase_history`. Receipt
-texts are personal data: keep them outside the repo.
+texts are personal data: keep them outside the repo. Plain "App-Coupon" and brand coupons ("Ferrero Kinder
+25%") are booked on the product before them; PENNY's group coupons ("App-Coupon 10% Waren") belong to no
+single product and are stored without a line. A discount that would make a line's paid total negative is
+stored without a line too, and the report lists it.
 
 ```bash
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /path/to/receipt-texts            # dry run
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /path/to/receipt-texts --commit
+```
+
+Names left unmatched can be mapped later without importing again: edit `config/receipt_overrides.json`
+(move a key from `review` to `exact`, or add one — keys as the import report prints them), then
+`--rematch` re-runs the matcher on the stored lines. It looks only at lines whose `match_source` is NULL,
+`rule` or `override` — a line set to `manual` by hand is never changed — and updates item, match source
+and brand where the result differs; a key moved to `review` clears its former match. Dry run by default
+(per changed line old → new item, counts); `--commit` writes every change in one transaction. Receipts,
+adjustments, stock and `purchase_history` are never touched; override ids missing from `inventory_item`
+are refused.
+
+```bash
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner --rematch            # dry run
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner --rematch --commit
 ```
 
 ### Recipe tags
@@ -121,7 +138,7 @@ java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /
 Recipe tags come from DAHÄM's own data, in five groups (`tag_category`): **Tier** (Hähnchen, Pute, Rind,
 Schwein, Lamm, Kalb, Wild, Fisch, Meeresfrüchte), **Ernährung** (vegetarisch, vegan), **Zeit** (schnell =
 prep + cook ≤ 30 min), **Nährwerte** (kalorienarm ≤ 600 kcal, proteinreich ≥ 30 g, per serving; thresholds in
-`config/recipe_tags.properties`) and **Küche** (the recipe's cuisine, once `recipe.cuisine` exists). Nothing in
+`config/recipe_tags.properties`) and **Küche** (the recipe's `recipe_cuisine`, migration 0010). Nothing in
 the catalogue records which animal a meat item is, so that is its own table, `inventory_item_animal`
 (migration 0011), filled in two steps with `ItemAnimalRunner` — everything the name does not say is
 marked REVIEW and only stored after a person has looked at it:
@@ -185,8 +202,8 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/inventory` | all items |
 | GET | `/api/inventory/expiring?days=7` | items expiring within N days |
 | GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
-| GET | `/api/recipes` | recipe list; each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range) and `tags` (the tag names, sorted by group then name; `[]` when untagged) |
-| GET | `/api/recipes/{id}[?people=N][&basis=servings\|max]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`. Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown |
+| GET | `/api/recipes` | recipe list; each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range), and the page data `description`, `imageUrl`, `thumbnailUrl` (links: the browser loads the image from its source, nothing is copied), `imageSource` (`hellofresh` \| `own` \| `generated`, so images can be replaced in bulk; null without an image), `cuisine` (one German name), `ratingAvg` (0 – 5, 2 decimals), `ratingCount`, `publishedDate` (`YYYY-MM-DD`) — each null when missing (migration 0010, filled by `scripts/importer/enrich_recipes.py`) Also `tags`: the recipe's tag names, sorted by group then name (`[]` when untagged). |
+| GET | `/api/recipes/{id}[?people=N][&basis=servings\|max]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). |
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` (a hand-added tag is `manual`; adding one the tagger derived makes it `manual`) |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
 | POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |

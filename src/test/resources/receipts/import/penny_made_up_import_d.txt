@@ -1,0 +1,44 @@
+           *** P E N N Y - M A R K T GmbH ***
+                     Musterweg 12
+                  12345 Beispielstadt
+                UID Nr.: DE000000000
+                                                EUR
+     Rosinen Brötchen                      0,49 B
+     Gourmetbrötchen                       0,39 B
+     Mandarin Orangen                      0,99 B
+     RINDERSALAMI                          1,99 B
+     EDELSALAMI                            1,79 B
+     GFL-FLEISCHWURST                      1,49 B
+     Minigurken                            1,29 B
+     SOUR CREAM                            0,99 B
+     BACON                                 1,69 B
+     DEL. BACON                            1,99 B
+     BACON XXL                             3,49 B
+     BACON-STREIFEN                        1,99 B
+     C & W Brötchen                        1,19 B
+     --------------------------------------------
+     SUMME                    EUR         19,77
+     ============================================
+     Geg. EC-Cash             EUR         19,77
+
+                   * * Kundenbeleg * *
+     Datum:                          07.10.2026
+     Uhrzeit:                      08:45:30 Uhr
+     Beleg-Nr.                             0913
+     Trace-Nr.                           030405
+                      Kartenzahlung
+                       Contactless
+                        girocard
+     Nr.                  ############1234 0001
+     Terminal-ID                       11223344
+     Pos-Info                         07 315 19
+     AS-Zeit 07.10.                   08:45 Uhr
+                 Betrag EUR         19,77
+                     Zahlung erfolgt
+
+     Steuer %        Netto    Steuer   Brutto
+     B=  7,0%        18,48      1,29    19,77
+     Gesamtbetrag    18,48      1,29    19,77
+           Sie erhalten 0 Treuepunkt(e)
+           Wir danken für Ihren Einkauf
+                    www.penny.de

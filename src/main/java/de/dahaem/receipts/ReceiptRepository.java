@@ -17,8 +17,8 @@ import java.util.List;
 /**
  * All SQL of the receipt import: purchase_receipt, purchase_receipt_line, purchase_receipt_adjustment
  * (migration 0008) and the store lookup. Every statement is parameterized. {@link #saveReceipts} writes
- * a whole import in ONE transaction: any failure rolls all of it back. Nothing here touches
- * purchase_history or inventory_item.
+ * a whole import in ONE transaction: any failure rolls all of it back; {@link #updateMatches} does the same
+ * for a rematch. Nothing here touches purchase_history or inventory_item.
  */
 public class ReceiptRepository {
 
@@ -75,6 +75,86 @@ public class ReceiptRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Receipt import failed, nothing was written: " + e.getMessage(), e);
+        }
+    }
+
+    /** A stored receipt line as the rematch reads it. */
+    public record StoredLine(int lineId, LocalDateTime purchasedAt, String receiptNumber, int lineNo, String rawName,
+                             String brand, Integer itemId, String matchSource) {
+    }
+
+    /**
+     * The stored lines the rematch may change: match_source NULL, 'rule' or 'override'. A 'manual' line
+     * (set by hand) is never read here, so it can never be changed.
+     */
+    public List<StoredLine> findRematchCandidates() {
+        String sql = "SELECT l.purchase_receipt_line_id, r.purchase_receipt_purchased_at, r.purchase_receipt_receipt_number, "
+                + "l.purchase_receipt_line_line_no, l.purchase_receipt_line_raw_name, l.purchase_receipt_line_brand, "
+                + "l.purchase_receipt_line_inventory_item_id, l.purchase_receipt_line_match_source "
+                + "FROM purchase_receipt_line l JOIN purchase_receipt r ON r.purchase_receipt_id = l.purchase_receipt_line_receipt_id "
+                + "WHERE l.purchase_receipt_line_match_source IS NULL OR l.purchase_receipt_line_match_source IN (?, ?) "
+                + "ORDER BY r.purchase_receipt_purchased_at, l.purchase_receipt_line_line_no";
+        List<StoredLine> out = new ArrayList<>();
+        try (Connection con = Database.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, ReceiptMatcher.RULE);
+            ps.setString(2, ReceiptMatcher.OVERRIDE);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int item = rs.getInt(7);
+                    Integer itemId = rs.wasNull() ? null : item;
+                    out.add(new StoredLine(rs.getInt(1), rs.getTimestamp(2).toLocalDateTime(), rs.getString(3), rs.getInt(4),
+                            rs.getString(5), rs.getString(6), itemId, rs.getString(8)));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the stored receipt lines", e);
+        }
+        return out;
+    }
+
+    /**
+     * Writes the rematch's changes in ONE transaction; any failure rolls all of them back. Only the line's
+     * item, match source and brand change; receipts, adjustments, stock and purchase_history are not touched.
+     */
+    public void updateMatches(List<ReceiptRematchService.Change> changes) {
+        try (Connection con = Database.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                for (ReceiptRematchService.Change c : changes) {
+                    updateMatch(con, c);
+                }
+                con.commit();
+            } catch (SQLException | RuntimeException e) {
+                con.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Rematch failed, nothing was written: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * One line's new match. Guarded on the line not being 'manual' (it may have been set by hand since it
+     * was read): such a line fails the whole rematch instead of being overwritten.
+     */
+    public void updateMatch(Connection con, ReceiptRematchService.Change c) throws SQLException {
+        String sql = "UPDATE purchase_receipt_line SET purchase_receipt_line_inventory_item_id = ?, "
+                + "purchase_receipt_line_match_source = ?, purchase_receipt_line_brand = ? "
+                + "WHERE purchase_receipt_line_id = ? AND (purchase_receipt_line_match_source IS NULL "
+                + "OR purchase_receipt_line_match_source <> ?)";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            if (c.newItemId() == null) {
+                ps.setNull(1, Types.INTEGER);
+            } else {
+                ps.setInt(1, c.newItemId());
+            }
+            ps.setString(2, c.newSource());
+            ps.setString(3, c.newBrand());
+            ps.setInt(4, c.line().lineId());
+            ps.setString(5, ReceiptRematchService.MANUAL);
+            if (ps.executeUpdate() != 1) {
+                throw new SQLException("line " + c.line().lineId() + " is gone or was set to 'manual' meanwhile");
+            }
         }
     }
 

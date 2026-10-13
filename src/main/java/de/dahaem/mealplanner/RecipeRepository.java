@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -33,7 +34,9 @@ public class RecipeRepository {
     public List<Recipe> findAll(){
         String sql = "SELECT recipe_id, recipe_name, recipe_servings, recipe_servings_max, recipe_cook_time" +
                 ", recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat" +
-                ", recipe_fibre, recipe_sugar " +
+                ", recipe_fibre, recipe_sugar" +
+                ", recipe_description, recipe_image_url, recipe_thumbnail_url, recipe_image_source" +
+                ", recipe_cuisine, recipe_rating_avg, recipe_rating_count, recipe_published_date " +
                 "FROM recipe ORDER BY recipe_name";
 
         List<Recipe> recipes = new ArrayList<>();
@@ -99,7 +102,9 @@ public class RecipeRepository {
     public Optional<Recipe> findById(int id){
         String sql = "SELECT recipe_id, recipe_name, recipe_servings, recipe_servings_max, recipe_cook_time" +
                 ", recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat" +
-                ", recipe_fibre, recipe_sugar " +
+                ", recipe_fibre, recipe_sugar" +
+                ", recipe_description, recipe_image_url, recipe_thumbnail_url, recipe_image_source" +
+                ", recipe_cuisine, recipe_rating_avg, recipe_rating_count, recipe_published_date " +
                 "FROM recipe WHERE recipe_id = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
@@ -132,7 +137,15 @@ public class RecipeRepository {
         getNullableInt(rs, "recipe_carbs"),
         getNullableInt(rs, "recipe_fat"),
         getNullableInt(rs, "recipe_fibre"),
-        getNullableInt(rs, "recipe_sugar")
+        getNullableInt(rs, "recipe_sugar"),
+        rs.getString("recipe_description"),
+        rs.getString("recipe_image_url"),
+        rs.getString("recipe_thumbnail_url"),
+        rs.getString("recipe_image_source"),
+        rs.getString("recipe_cuisine"),
+        rs.getBigDecimal("recipe_rating_avg"),
+        getNullableInt(rs, "recipe_rating_count"),
+        rs.getObject("recipe_published_date", LocalDate.class)
         );
     }
     private RecipeIngredient mapRowIngredient(ResultSet rs) throws SQLException {

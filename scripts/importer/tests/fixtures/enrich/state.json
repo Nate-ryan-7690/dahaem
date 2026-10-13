@@ -1,0 +1,11 @@
+{"recipes": [
+  {"id": 1, "source_url": "https://example.test/recipes/full-0001"},
+  {"id": 2, "source_url": "https://example.test/recipes/sparse-0002"},
+  {"id": 3, "source_url": "https://example.test/recipes/unmapped-0003/"},
+  {"id": 4, "source_url": "https://example.test/recipes/own-image-0004",
+   "image_url": "https://own.example.test/photo-4.jpg", "image_source": "own", "description": "Von Hand geschrieben"},
+  {"id": 5, "source_url": "https://example.test/recipes/done-0005",
+   "description": "Schon befüllt.", "cuisine": "Deutsch"},
+  {"id": 6, "source_url": null},
+  {"id": 7, "source_url": "https://example.test/recipes/gone-0008"}
+]}

@@ -51,8 +51,8 @@ document the contract. Its open decisions are settled with Nate one at a time.
   (kalorienarm / proteinreich) and Küche come from `inventory_item_animal`, the ingredients, the
   times and the nutrition, written by `RecipeTagRunner` as `recipe_tag_source = 'derived'`; manual
   tags are never touched. Nate still has to: apply 0011, review the animals (below), confirm the
-  thresholds in `config/recipe_tags.properties`, run the tagger. Küche is a no-op until
-  `recipe.cuisine` (migration 0010) exists; it reads `recipe_cuisine`, else `cuisine`.
+  thresholds in `config/recipe_tags.properties`, run the tagger. Küche reads
+  `recipe.recipe_cuisine` (migration 0010).
 - **Animal review** — `next`, Nate. `ItemAnimalRunner` proposes the animal(s) of the meat / fish
   items by name; what the name does not say (Salami, Fleischwurst, Speck, Kasseler, Lyoner,
   Wiener, Chorizo, Leberwurst, Schinken, Bifi …) is marked REVIEW with a suggestion and is only
@@ -70,12 +70,6 @@ document the contract. Its open decisions are settled with Nate one at a time.
   already withholds both for an ingredient without an item, but today it never sees one. Store
   the unmatched lines (e.g. a nullable item id plus the raw text) or record per recipe that
   lines were dropped.
-- **Allergens** — `idea`. Gluten, milk, egg, nuts, fish, soy … per catalogue item (like
-  `inventory_item_animal`), derived to recipes the same way, shown as warnings. Needs Nate's list
-  of allergens and a rule for "may contain".
-
-## Offers, matching and catalogue
-
 - **"versch. Sorten" / multi-item offers** — `next`. One offer counts for every item it covers,
   but only the variants that exist in the ADVERTISED PACK SIZE (Coca-Cola 1,25 l ≠ cans). Named
   variants ("A / B", "oder", commas) are split directly. Otherwise look up brand + size once,
@@ -115,8 +109,12 @@ document the contract. Its open decisions are settled with Nate one at a time.
   receipt link). Every line is stored, matched or not; coupons are adjustments on the product before
   them. `ReceiptImportRunner` (dry run, `--commit` = one transaction, duplicates by store + date-time +
   receipt number) never calls `PurchaseService` and never changes stock: the household's stock is built
-  from new purchases and check-ins, not reconstructed from old receipts. Next (llmbox, Nate): snapshot →
-  apply 0008 → dry run on the private receipt texts (gitignored, never in the repo) → review → `--commit`.
+  from new purchases and check-ins, not reconstructed from old receipts. First dry run on Nate's 22 receipts
+  (2026-10-13): 22 NEW, all balancing, €1,324.68. Fixed before the real `--commit`: PENNY group coupons
+  ("App-Coupon 10% Waren", one per tax class, printed after an unrelated product or as a block at the end)
+  are stored without a line instead of on the product before them; a discount that would make a paid total
+  negative is stored without a line and reported. New items 1818–1821 (migration 0009) and override
+  changes per Nate's decisions. Next (llmbox, Nate): snapshot → apply 0009 → rebuild → dry run → `--commit`.
   Uses: real regular prices (Penny publishes mostly UVPs), confirmed product → item matches, price
   history and budget.
 - **Receipt review** — `next`. Names left unmatched on purpose for Nate to map (they are in the
@@ -125,11 +123,22 @@ document the contract. Its open decisions are settled with Nate one at a time.
   the salted chips), Kinder Riegel, MOZZARELLA-STICK / LH MOZZ. STICKS; and the analysis's wrong rule
   matches: VIT.Z. RASPBERRY (≠ Himbeere), Krom FB Kirsche (Krombacher Fassbrause ≠ Kirsche), SALATSCHALE
   ORZO (≠ Orzo pasta), FRUCHTZWERGE (≠ Naturjoghurt; `store_overrides.json` maps "fruchtzwerge" to 386,
-  which is why the receipt import does not use the store overrides). Plus whatever the first dry run
-  lists as unmatched. Mapping one = move its key from `review` to `exact` (or set `match_source =
-  'manual'` on stored lines). Two seeded overrides to confirm: BACON / DEL. BACON / BACON XXL → 350
-  ("smoked bacon / geräucherter Speck" — the only bacon item; the catalogue doesn't say sliced), Bagels
-  Mehrkorn → 587 ("bagel vollkorn": Mehrkorn ≠ Vollkorn in wording).
+  which is why the receipt import does not use the store overrides).
+  From Nate's decisions on the first dry run (2026-10-13): **BACON / DEL. BACON / BACON XXL** moved from
+  `exact` (→ 350) to `review` — Nate checks the actual product (sliced / block / bits) before mapping;
+  BACON-STREIFEN → 1536 stays. **C & W Brötchen** — what product is it? ("C & W" looks like a brand.)
+  Still to confirm: Bagels Mehrkorn → 587 ("bagel vollkorn": Mehrkorn ≠ Vollkorn in wording).
+  The ~200 remaining unmatched names of the dry run are mapped AFTER the `--commit`, without re-importing:
+  edit the overrides (move a key from `review` to `exact`, or add one), then `ReceiptImportRunner --rematch`
+  (dry run) and `--rematch --commit`. A line can also be fixed by hand with `match_source = 'manual'`; the
+  rematch never changes those.
+- **Rosinenbrötchen unit** — `later`. "Rosinen Brötchen" now maps to the existing 575 rosinenbrötchen,
+  whose unit is `g` like most rolls; 569 Brötchen and Franzbrötchen were changed to `Stück` in 0004.
+  Rolls are bought per piece; switch 575 (and the other rolls) when Nate confirms. Left out of 0009,
+  which only adds.
+- **Sour Cream vs. Sauerrahm-Dip** — `idea`. 1821 Sour Cream (new, dairy) sits next to 1522 "sauerrahm
+  dip" (snacks / dips & spreads) and 368 saure sahne. If Penny's "SOUR CREAM" is really the dip, map it
+  to 1522 instead (rematch).
 - **Receipts + shopping list** — `idea`. Once the PHP shopping list is in use, match a new receipt's
   lines first against that trip's open list (`shopping_list_item` already has `inventory_item_id`,
   `store_item_id` with brand, `purchase_status`). Confirmed pairs tick the list item off with the real
@@ -174,9 +183,20 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   search (name, ingredient), filters on data that actually exists (time, tags, servings), paging, and a
   small card DTO; the planner's recipe picker uses the same endpoint. Tags are ready to filter on:
   each recipe in the list carries its tag names and `recipe_tag` has an index on the tag id.
-- **Recipe images** — `next`, needs Nate's decision (spec open decision 5). There is no image column;
-  check what the scraped sources hold, store a URL / file per recipe, a thumbnail size for calendar and
-  cards, a larger one for the detail view; the PHP shows a designed fallback when there is none.
+- **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
+  copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
+  HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
+  bulk later (bought licence, own photos or AI-generated). The PHP shows a designed fallback when there is
+  none. Next (llmbox, Nate): snapshot → apply 0010 → rebuild `dahaem-api` → `enrich_recipes.py` → review →
+  apply the SQL in one transaction. Same PR adds description, cuisine (German, `config/cuisine_map.json`),
+  rating and publish date.
+- **1,294 cached recipes never imported** — `later`. The page cache holds 12,162 pages; 10,868 tie to a DB
+  recipe, 1,294 have none (read-only check 2026-10-13). Decide whether to import them (extract + load) or
+  drop them from the cache; `enrich_recipes.py` only counts them.
+- **Allergens** — `idea`. Needs allergen data per item (the pages hold no allergens, diet flags or tags);
+  nothing to show or filter on until the catalogue carries it. Idea: per catalogue item like
+  `inventory_item_animal` (gluten, milk, egg, nuts, fish, soy …), derived to recipes the same way,
+  shown as warnings; needs Nate's allergen list and a rule for "may contain".
 - **Recipe opportunities with evidence** — `next`. `/api/suggestions/by-savings` and `/by-expiring`
   exist; extend them so each suggestion says which ingredients are covered by which offer (store,
   product, price, valid until), which are already in stock and which are still uncovered. Suggestions

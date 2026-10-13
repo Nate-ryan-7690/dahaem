@@ -28,11 +28,18 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
     /**
      * App coupons print like a product with a negative amount: "App-Coupon  -0,50 B",
      * "App-Coupon 10% Waren  -1,20 B", or a brand with a percentage, "Ferrero Kinder 25%  -0,50 B".
-     * They are discounts on the product line before them, never products themselves. A "...Rabatt nn%"
+     * They are discounts, never products themselves. A plain "App-Coupon" and a brand coupon belong to
+     * the product line before them; a group coupon ({@link #GROUP_COUPON}) does not. A "...Rabatt nn%"
      * line stays a generic discount.
      */
     private static final Pattern COUPON = Pattern.compile(
             "^(?!.*[Rr]abatt)(App-?Coupon\\b.*?|.*?\\S\\s+\\d{1,2}\\s?%)\\s+([-−]\\d+,\\d{2})(\\s+[A-Z])?(\\s*\\*)?$");
+    /**
+     * "App-Coupon nn%" followed by a group word or nothing ("App-Coupon 10% Waren", "App-Coupon 5% Chips,"):
+     * a percentage off a whole product group, printed once per tax class after an unrelated product or as
+     * a block after the last product. It belongs to no single line, so it is booked without one.
+     */
+    private static final Pattern GROUP_COUPON = Pattern.compile("(?i)^App-?Coupon\\s+\\d{1,2}\\s?%.*");
     private static final Pattern FRESHNESS = Pattern.compile("(?i)^Frische-?rabatt\\b.*");
     private static final Pattern OTHER_RABATT = Pattern.compile("^(.*[Rr]abatt.*?)\\s+([-−]\\d+,\\d{2})(\\s+[A-Z])?(\\s*\\*)?$");
     private static final Pattern PFAND = Pattern.compile("^(PFAND\\s+\\d+,\\d{2}\\s*EURO?)\\s+(" + MONEY + ")\\s+[A-Z](\\s*\\*)?$");
@@ -168,7 +175,12 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
             if ((m = APP_RABATT.matcher(line)).matches()) {
                 b.adjust(AdjustmentType.APP_RABATT, m.group(1), ReceiptText.money(m.group(2)));
             } else if ((m = COUPON.matcher(line)).matches()) {
-                b.adjust(AdjustmentType.APP_COUPON, m.group(1).strip(), ReceiptText.money(m.group(2)));
+                String what = m.group(1).strip();
+                if (isGroupCoupon(what)) {
+                    b.adjustUnattached(AdjustmentType.APP_COUPON, what, ReceiptText.money(m.group(2)));
+                } else {
+                    b.adjust(AdjustmentType.APP_COUPON, what, ReceiptText.money(m.group(2)));
+                }
             } else if ((m = PFAND.matcher(line)).matches()) {
                 b.adjust(AdjustmentType.PFAND_DEPOSIT, m.group(1), ReceiptText.money(m.group(2)));
                 now = Last.PFAND;
@@ -268,6 +280,11 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
             b.savings = nz(b.appSavings).add(nz(b.otherSavings));
         }
         return b.build();
+    }
+
+    /** True for a group coupon ("App-Coupon 10% Waren"), which is booked without a product line. */
+    static boolean isGroupCoupon(String description) {
+        return description != null && GROUP_COUPON.matcher(description.strip()).matches();
     }
 
     /** A known line below the payment block; ends it. */

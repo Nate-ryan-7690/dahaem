@@ -177,6 +177,7 @@ class RecipeTagServiceTest {
 
     @Test
     void cuisineIsANoOpUntilTheColumnExistsThenBecomesAKuecheTag() {
+        TagFixtures.run("ALTER TABLE recipe DROP COLUMN recipe_cuisine");   // a database before migration 0010
         int recipe = TagFixtures.recipe("Pasta", 40, 40, 700, 20);
         TagFixtures.ingredient(recipe, carrot);
 
@@ -185,7 +186,7 @@ class RecipeTagServiceTest {
         assertTrue(before.toText().contains("cuisine tag: OFF"));
         assertFalse(before.recipesPerTag().containsKey("Italienisch"));
 
-        TestDatabase.apply(List.of(Path.of("src", "test", "resources", "migrations", "add_recipe_cuisine.sql")));
+        TestDatabase.apply(List.of(Path.of("migrations", "0010_recipe_enrichment.sql")));
         TagFixtures.run("UPDATE recipe SET recipe_cuisine = ? WHERE recipe_id = ?", "Italienisch", recipe);
 
         RecipeTagService.Plan after = service.commit(service.plan());

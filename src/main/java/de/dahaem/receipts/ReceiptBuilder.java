@@ -86,6 +86,14 @@ final class ReceiptBuilder {
     }
 
     /**
+     * Records a discount that belongs to no single product line (a PENNY group coupon). It does not
+     * end the current item: a plain coupon printed right after it still belongs to that item.
+     */
+    void adjustUnattached(AdjustmentType type, String description, BigDecimal printedAmount) {
+        adjustments.add(new ReceiptAdjustment(type, description, printedAmount.abs().negate(), null));
+    }
+
+    /**
      * Applies an "n Stk x p" sub-line to the last adjustment (a multi-unit Pfand or Leergut line):
      * the count goes into the description and, for Pfand, {@code p} becomes the per-unit deposit
      * of the product it is attached to. The amount stays as printed.

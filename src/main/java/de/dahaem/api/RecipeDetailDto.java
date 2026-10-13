@@ -8,6 +8,7 @@ import de.dahaem.shared.Portions;
 import de.dahaem.tags.TagRepository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -19,12 +20,17 @@ import java.util.List;
  * when {@code basis} is {@code "max"}, and each instruction's {@code scaledInstruction} is its step text
  * with the amounts for that count. {@code basis} is the one actually used: {@code "max"} only when
  * it was asked for and the recipe is a range. {@code scalable} is false when that servings count is
- * not positive, in which case nothing is scaled. {@code tags} are the recipe's tags, sorted by group then name:
+ * not positive, in which case nothing is scaled. The enrichment fields ({@code description},
+ * {@code imageUrl}, {@code thumbnailUrl}, {@code imageSource}, {@code cuisine}, {@code ratingAvg},
+ * {@code ratingCount}, {@code publishedDate}) are as in {@link RecipeSummaryDto}; null when missing. {@code tags} are the recipe's tags, sorted by group then name:
  * {@code source} is {@code "manual"} (added by a person) or {@code "derived"} (worked out from DAHÄM's data).
  */
 public record RecipeDetailDto(int id, String name, int servings, Integer servingsMax, String basis, Integer people,
                               boolean scalable, int prepTime, int cookTime, Nutrition nutrition,
-                              List<Ingredient> ingredients, List<Instruction> instructions, List<Tag> tags) {
+                              List<Ingredient> ingredients, List<Instruction> instructions,
+                              String description, String imageUrl, String thumbnailUrl, String imageSource,
+                              String cuisine, BigDecimal ratingAvg, Integer ratingCount, LocalDate publishedDate,
+                              List<Tag> tags) {
 
     /** {@code basis} value: scaled from {@code servings} (the default, a range's lower bound). */
     public static final String BASIS_SERVINGS = "servings";
@@ -104,6 +110,8 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
                 instructions.stream()
                         .map(instruction -> Instruction.from(instruction, recipe, people, useMax))
                         .toList(),
+                recipe.getDescription(), recipe.getImageUrl(), recipe.getThumbnailUrl(), recipe.getImageSource(),
+                recipe.getCuisine(), recipe.getRatingAvg(), recipe.getRatingCount(), recipe.getPublishedDate(),
                 tags.stream().map(Tag::from).toList());
     }
 }

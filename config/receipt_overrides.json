@@ -11,9 +11,6 @@
     "hackfleisch gemischt": 271,
     "hackfleisch xxl": 271,
     "rd hack xxl": 270,
-    "bacon": 350,
-    "del bacon": 350,
-    "bacon xxl": 350,
     "bacon streifen": 1536,
     "bagels mehrkorn": 587,
     "lh frischk natur": 381,
@@ -26,7 +23,14 @@
     "w c mayo": 948,
     "heinz ketch": 953,
     "corny muesliriege": 1477,
-    "landliebe konfituere": 1689
+    "landliebe konfituere": 1689,
+    "rosinen broetchen": 575,
+    "gourmetbroetchen": 1818,
+    "mandarin orangen": 892,
+    "rindersalami": 1819,
+    "gfl fleischwurst": 1820,
+    "minigurken": 59,
+    "sour cream": 1821
   },
   "review": [
     "cheddar herzhaft",
@@ -39,6 +43,10 @@
     "vit z raspberry",
     "krom fb kirsche",
     "salatschale orzo",
-    "fruchtzwerge"
+    "fruchtzwerge",
+    "bacon",
+    "del bacon",
+    "bacon xxl",
+    "c w broetchen"
   ]
 }
