@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/recipes")
@@ -30,7 +31,10 @@ public class RecipeController {
 
     @GetMapping
     public List<RecipeSummaryDto> all() {
-        return recipeService.allRecipes().stream().map(RecipeSummaryDto::from).toList();
+        Map<Integer, List<String>> tags = tagService.tagNamesByRecipe();
+        return recipeService.allRecipes().stream()
+                .map(recipe -> RecipeSummaryDto.from(recipe, tags.getOrDefault(recipe.getId(), List.of())))
+                .toList();
     }
 
     /**
@@ -55,7 +59,7 @@ public class RecipeController {
         }
         Recipe recipe = requireRecipe(id);
         return RecipeDetailDto.from(recipe, recipeService.findAllIngredients(id), recipeService.findAllInstructions(id),
-                people, RecipeDetailDto.BASIS_MAX.equals(basis));
+                tagService.recipeTagsForRecipe(id), people, RecipeDetailDto.BASIS_MAX.equals(basis));
     }
 
     @GetMapping("/{id}/tags")

@@ -46,9 +46,30 @@ document the contract. Its open decisions are settled with Nate one at a time.
   PDFs, not in the scraped 2-person data.
 - **Display labels (PHP, Nate)** — `later`. Show "nach Bedarf" for to-taste items (fits salt and
   butter); fractions (0,5 / ½) for Stück, whole numbers for g/ml.
-
-## Offers, matching and catalogue
-
+- **Recipe tags derived from our own data** — `in progress` (this PR; migration 0011). Tier
+  (Hähnchen … Meeresfrüchte), Ernährung (vegetarisch / vegan), Zeit (schnell), Nährwerte
+  (kalorienarm / proteinreich) and Küche come from `inventory_item_animal`, the ingredients, the
+  times and the nutrition, written by `RecipeTagRunner` as `recipe_tag_source = 'derived'`; manual
+  tags are never touched. Nate still has to: apply 0011, review the animals (below), confirm the
+  thresholds in `config/recipe_tags.properties`, run the tagger. Küche reads
+  `recipe.recipe_cuisine` (migration 0010).
+- **Animal review** — `next`, Nate. `ItemAnimalRunner` proposes the animal(s) of the meat / fish
+  items by name; what the name does not say (Salami, Fleischwurst, Speck, Kasseler, Lyoner,
+  Wiener, Chorizo, Leberwurst, Schinken, Bifi …) is marked REVIEW with a suggestion and is only
+  stored after Nate sets the status to REVIEWED. Open decision: Ente, Gans, Kaninchen and Pferd
+  have no value in the Tier list (CHECK in `inventory_item_animal`); they stay REVIEW with no
+  animal until Nate adds values (Geflügel? Kaninchen?) or says to leave them. Items added to the
+  catalogue later show up in the next proposal.
+- **Vegetarian / vegan exclusion list: review** — `next`, Nate. `AnimalProducts` blocks the tags by
+  category, subcategory and name (listed in the PR; `RecipeTagRunner --animal-products` prints it).
+  It errs towards blocking; extend or loosen it there. Things it cannot know: rennet in cheese,
+  gelatine in sweets, bone char in sugar, milk powder in bread or chocolate.
+- **Unmatched recipe ingredients are not stored** — `next`. `recipe_ingredient` cannot hold a line
+  without a catalogue item (the importer drops it and only reports it), so a recipe whose
+  ingredient was dropped looks complete and can get `vegetarisch` / `vegan` wrongly. The tagger
+  already withholds both for an ingredient without an item, but today it never sees one. Store
+  the unmatched lines (e.g. a nullable item id plus the raw text) or record per recipe that
+  lines were dropped.
 - **"versch. Sorten" / multi-item offers** — `next`. One offer counts for every item it covers,
   but only the variants that exist in the ADVERTISED PACK SIZE (Coca-Cola 1,25 l ≠ cans). Named
   variants ("A / B", "oder", commas) are split directly. Otherwise look up brand + size once,
@@ -160,7 +181,8 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   Migration with a data move for existing plans → snapshot first, guarded.
 - **Recipe search and paging** — `next`. `GET /api/recipes` returns all ~11,000 recipes. Server-side
   search (name, ingredient), filters on data that actually exists (time, tags, servings), paging, and a
-  small card DTO; the planner's recipe picker uses the same endpoint.
+  small card DTO; the planner's recipe picker uses the same endpoint. Tags are ready to filter on:
+  each recipe in the list carries its tag names and `recipe_tag` has an index on the tag id.
 - **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
@@ -172,7 +194,9 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   recipe, 1,294 have none (read-only check 2026-10-13). Decide whether to import them (extract + load) or
   drop them from the cache; `enrich_recipes.py` only counts them.
 - **Allergens** — `idea`. Needs allergen data per item (the pages hold no allergens, diet flags or tags);
-  nothing to show or filter on until the catalogue carries it.
+  nothing to show or filter on until the catalogue carries it. Idea: per catalogue item like
+  `inventory_item_animal` (gluten, milk, egg, nuts, fish, soy …), derived to recipes the same way,
+  shown as warnings; needs Nate's allergen list and a rule for "may contain".
 - **Recipe opportunities with evidence** — `next`. `/api/suggestions/by-savings` and `/by-expiring`
   exist; extend them so each suggestion says which ingredients are covered by which offer (store,
   product, price, valid until), which are already in stock and which are still uncovered. Suggestions

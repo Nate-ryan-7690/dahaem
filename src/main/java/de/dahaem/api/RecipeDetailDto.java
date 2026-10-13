@@ -5,6 +5,7 @@ import de.dahaem.mealplanner.RecipeIngredient;
 import de.dahaem.mealplanner.RecipeInstruction;
 import de.dahaem.mealplanner.StepAmounts;
 import de.dahaem.shared.Portions;
+import de.dahaem.tags.TagRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,18 +22,28 @@ import java.util.List;
  * it was asked for and the recipe is a range. {@code scalable} is false when that servings count is
  * not positive, in which case nothing is scaled. The enrichment fields ({@code description},
  * {@code imageUrl}, {@code thumbnailUrl}, {@code imageSource}, {@code cuisine}, {@code ratingAvg},
- * {@code ratingCount}, {@code publishedDate}) are as in {@link RecipeSummaryDto}; null when missing.
+ * {@code ratingCount}, {@code publishedDate}) are as in {@link RecipeSummaryDto}; null when missing. {@code tags} are the recipe's tags, sorted by group then name:
+ * {@code source} is {@code "manual"} (added by a person) or {@code "derived"} (worked out from DAHÄM's data).
  */
 public record RecipeDetailDto(int id, String name, int servings, Integer servingsMax, String basis, Integer people,
                               boolean scalable, int prepTime, int cookTime, Nutrition nutrition,
                               List<Ingredient> ingredients, List<Instruction> instructions,
                               String description, String imageUrl, String thumbnailUrl, String imageSource,
-                              String cuisine, BigDecimal ratingAvg, Integer ratingCount, LocalDate publishedDate) {
+                              String cuisine, BigDecimal ratingAvg, Integer ratingCount, LocalDate publishedDate,
+                              List<Tag> tags) {
 
     /** {@code basis} value: scaled from {@code servings} (the default, a range's lower bound). */
     public static final String BASIS_SERVINGS = "servings";
     /** {@code basis} value: scaled from {@code servingsMax} (a range's upper bound). */
     public static final String BASIS_MAX = "max";
+
+    /** A tag on the recipe: its name, its group (e.g. Tier, Ernährung, Zeit, Nährwerte, Küche) and its source. */
+    public record Tag(String name, String category, String source) {
+
+        static Tag from(TagRepository.RecipeTag tag) {
+            return new Tag(tag.name(), tag.category(), tag.source());
+        }
+    }
 
     /** Nutrition values as stored (per serving, from the HelloFresh import); any of them may be null when unknown. */
     public record Nutrition(Integer calories, Integer protein, Integer carbs, Integer fat, Integer fiber,
@@ -86,7 +97,8 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
      * {@code servings}; a recipe that is not a range ignores it.
      */
     static RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients,
-                                List<RecipeInstruction> instructions, Integer people, boolean useMax) {
+                                List<RecipeInstruction> instructions, List<TagRepository.RecipeTag> tags,
+                                Integer people, boolean useMax) {
         Nutrition nutrition = new Nutrition(recipe.getCalories(), recipe.getProtein(), recipe.getCarbs(),
                 recipe.getFat(), recipe.getFiber(), recipe.getSugar());
         Integer servingsMax = recipe.getServingsMax();
@@ -99,6 +111,7 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
                         .map(instruction -> Instruction.from(instruction, recipe, people, useMax))
                         .toList(),
                 recipe.getDescription(), recipe.getImageUrl(), recipe.getThumbnailUrl(), recipe.getImageSource(),
-                recipe.getCuisine(), recipe.getRatingAvg(), recipe.getRatingCount(), recipe.getPublishedDate());
+                recipe.getCuisine(), recipe.getRatingAvg(), recipe.getRatingCount(), recipe.getPublishedDate(),
+                tags.stream().map(Tag::from).toList());
     }
 }

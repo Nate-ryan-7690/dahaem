@@ -133,6 +133,36 @@ java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner -
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner --rematch --commit
 ```
 
+### Recipe tags
+
+Recipe tags come from DAHÄM's own data, in five groups (`tag_category`): **Tier** (Hähnchen, Pute, Rind,
+Schwein, Lamm, Kalb, Wild, Fisch, Meeresfrüchte), **Ernährung** (vegetarisch, vegan), **Zeit** (schnell =
+prep + cook ≤ 30 min, total known), **Nährwerte** (kalorienarm ≤ 600 kcal, proteinreich ≥ 30 g, per serving; thresholds in
+`config/recipe_tags.properties`) and **Küche** (the recipe's `recipe_cuisine`, migration 0010). Nothing in
+the catalogue records which animal a meat item is, so that is its own table, `inventory_item_animal`
+(migration 0011), filled in two steps with `ItemAnimalRunner` — everything the name does not say is
+marked REVIEW and only stored after a person has looked at it:
+
+```bash
+# 1. propose animals for the meat / fish items (read-only) -> TSV: item id, name, category, subcategory, proposed animals, CONFIDENT / REVIEW
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.ItemAnimalRunner --out items.tsv
+# 2. edit items.tsv: fix the animals of a REVIEW row (e.g. Schwein+Rind) and set its status to REVIEWED
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.ItemAnimalRunner --apply items.tsv            # dry run
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.ItemAnimalRunner --apply items.tsv --commit   # CONFIDENT + REVIEWED rows, one transaction
+```
+
+`RecipeTagRunner` then derives the tags and replaces only the `recipe_tag` rows whose `recipe_tag_source` is
+`derived`; tags added by hand (source `manual`, also anything added through the API) are never touched, and a
+re-run without changes changes nothing. A recipe with an ingredient that has no catalogue item gets neither
+vegetarisch nor vegan (unknown is not vegetarian). Dry run by default: it prints the count per tag and 10 example
+recipes per tag. `--animal-products` lists which catalogue items block vegetarisch / vegan, and why.
+
+```bash
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner                      # dry run
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner --commit             # one transaction
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner --animal-products
+```
+
 Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) with:
 
 ```bash
@@ -172,9 +202,9 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/inventory` | all items |
 | GET | `/api/inventory/expiring?days=7` | items expiring within N days |
 | GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
-| GET | `/api/recipes` | recipe list; each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range), and the page data `description`, `imageUrl`, `thumbnailUrl` (links: the browser loads the image from its source, nothing is copied), `imageSource` (`hellofresh` \| `own` \| `generated`, so images can be replaced in bulk; null without an image), `cuisine` (one German name), `ratingAvg` (0 – 5, 2 decimals), `ratingCount`, `publishedDate` (`YYYY-MM-DD`) — each null when missing (migration 0010, filled by `scripts/importer/enrich_recipes.py`) |
-| GET | `/api/recipes/{id}[?people=N][&basis=servings\|max]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown |
-| GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` |
+| GET | `/api/recipes` | recipe list; each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range), and the page data `description`, `imageUrl`, `thumbnailUrl` (links: the browser loads the image from its source, nothing is copied), `imageSource` (`hellofresh` \| `own` \| `generated`, so images can be replaced in bulk; null without an image), `cuisine` (one German name), `ratingAvg` (0 – 5, 2 decimals), `ratingCount`, `publishedDate` (`YYYY-MM-DD`) — each null when missing (migration 0010, filled by `scripts/importer/enrich_recipes.py`) Also `tags`: the recipe's tag names, sorted by group then name (`[]` when untagged). |
+| GET | `/api/recipes/{id}[?people=N][&basis=servings\|max]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). |
+| GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` (a hand-added tag is `manual`; adding one the tagger derived makes it `manual`) |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
 | POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |
 | GET | `/api/shopping-list?recipeIds=1,2[&people=N]` | build (not save) a shopping list; each line carries every current store option (cheapest till price first), never a pre-picked one; to-taste ingredients are left out; `people` scales each recipe from its `servings` (a range's lower bound) |

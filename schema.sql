@@ -136,11 +136,28 @@ CREATE TABLE recipe_tag (recipe_tag_recipe_id INTEGER,
 
 	recipe_tag_id INTEGER,
 
+	recipe_tag_source VARCHAR(10) NOT NULL DEFAULT 'manual',
+
 	PRIMARY KEY(recipe_tag_recipe_id,recipe_tag_id),
+
+	CONSTRAINT recipe_tag_source_valid CHECK (recipe_tag_source IN ('manual', 'derived')),
 
 	FOREIGN KEY(recipe_tag_recipe_id) REFERENCES recipe(recipe_id),
 
 	FOREIGN KEY(recipe_tag_id) REFERENCES tag(tag_id));
+
+CREATE INDEX recipe_tag_by_tag ON recipe_tag (recipe_tag_id, recipe_tag_recipe_id);
+
+-- Which animal(s) a meat / fish catalogue item comes from (migration 0011). Filled by ItemAnimalRunner
+-- --apply after review; an item can have several (gemischtes Hackfleisch = Rind + Schwein).
+CREATE TABLE inventory_item_animal (
+	inventory_item_animal_item_id INTEGER NOT NULL,
+	inventory_item_animal_animal VARCHAR(20) NOT NULL,
+	PRIMARY KEY (inventory_item_animal_item_id, inventory_item_animal_animal),
+	CONSTRAINT inventory_item_animal_is_tier
+		CHECK (inventory_item_animal_animal IN
+			('Hähnchen', 'Pute', 'Rind', 'Schwein', 'Lamm', 'Kalb', 'Wild', 'Fisch', 'Meeresfrüchte')),
+	FOREIGN KEY (inventory_item_animal_item_id) REFERENCES inventory_item(inventory_item_id));
 
 CREATE TABLE store_product (
     store_product_id                INTEGER PRIMARY KEY AUTO_INCREMENT,
