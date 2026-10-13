@@ -5,7 +5,10 @@ public enum AdjustmentType {
     POSITIONSRABATT(true),
     APP_RABATT(true),
     LOYALTY_STICKER(true),
-    /** PENNY app coupon ("App-Coupon", "App-Coupon 10% Waren", "Ferrero Kinder 25%"); attached to the product before it. */
+    /**
+     * PENNY app coupon. A plain "App-Coupon" and a brand coupon ("Ferrero Kinder 25%") are attached to the
+     * product before them; a group coupon ("App-Coupon 10% Waren") is not attached to any line.
+     */
     APP_COUPON(true),
     /** Reduced-for-quick-sale sticker ("Frischerabatt"). */
     FRESHNESS_DISCOUNT(true),

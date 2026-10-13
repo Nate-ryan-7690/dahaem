@@ -24,6 +24,13 @@ public record ParsedReceipt(String storeBrand, String storeAddress, String store
         unparsedLines = List.copyOf(unparsedLines);
     }
 
+    /** The same receipt with other adjustments (e.g. a discount moved off its line). */
+    public ParsedReceipt withAdjustments(List<ReceiptAdjustment> newAdjustments) {
+        return new ParsedReceipt(storeBrand, storeAddress, storeId, purchasedAt, currency, lines, newAdjustments,
+                total, taxBreakdown, totalSavings, loyaltyPointsEarned, unparsedLines, receiptNumber,
+                appSavings, otherSavings);
+    }
+
     /** What was actually paid for line {@code i}: printed total plus the discounts attached to it. */
     public BigDecimal paidTotal(int i) {
         BigDecimal paid = lines.get(i).lineTotal();

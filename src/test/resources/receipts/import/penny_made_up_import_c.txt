@@ -1,0 +1,47 @@
+           *** P E N N Y - M A R K T GmbH ***
+                     Musterweg 12
+                  12345 Beispielstadt
+                UID Nr.: DE000000000
+                                                EUR
+     TK GEMUESEPFANNE                      2,98 B
+     App-Coupon 10% Waren                 -0,58 B
+     SPEZI                                 0,95 A
+     App-Coupon 7% Chips                  -0,13 B
+     KINDER BUENO                          2,29 B
+     Ferrero Kinder 25%                   -0,57 B
+     BROT                                  1,49 B
+     App-Coupon                           -1,49 B
+     KAUGUMMI                              0,50 A
+     App-Coupon                           -1,00 A
+     CHIPS PAPRIKA                         1,79 B
+     ORANGENSAFT                           1,99 A
+     App-Coupon 5% Chips,                 -0,09 B
+     App-Coupon 5% Säfte                  -0,10 A
+     App-Coupon 10% Bäcke                 -0,15 B
+     --------------------------------------------
+     SUMME                    EUR          7,88
+     ============================================
+     Geg. EC-Cash             EUR          7,88
+
+                   * * Kundenbeleg * *
+     Datum:                          06.10.2026
+     Uhrzeit:                      17:12:05 Uhr
+     Beleg-Nr.                             0912
+     Trace-Nr.                           030405
+                      Kartenzahlung
+                       Contactless
+                        girocard
+     Nr.                  ############1234 0001
+     Terminal-ID                       11223344
+     Pos-Info                         07 315 19
+     AS-Zeit 06.10.                   17:12 Uhr
+                 Betrag EUR          7,88
+                     Zahlung erfolgt
+
+     Steuer %        Netto    Steuer   Brutto
+     A= 19,0%         1,97      0,37     2,34
+     B=  7,0%         5,18      0,36     5,54
+     Gesamtbetrag     7,15      0,73     7,88
+           Sie erhalten 0 Treuepunkt(e)
+           Wir danken für Ihren Einkauf
+                    www.penny.de

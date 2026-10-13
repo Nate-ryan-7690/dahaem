@@ -109,11 +109,28 @@ java --enable-native-access=ALL-UNNAMED -cp target/dahaem-1.0-SNAPSHOT.jar de.da
 PENNY receipts (`pdftotext -layout -enc UTF-8` output, one `.txt` per receipt) are imported as purchase
 history with `ReceiptImportRunner` — a dry run by default, `--commit` writes all new receipts in one
 transaction into the receipt tables (migration 0008). It never changes stock or `purchase_history`. Receipt
-texts are personal data: keep them outside the repo.
+texts are personal data: keep them outside the repo. Plain "App-Coupon" and brand coupons ("Ferrero Kinder
+25%") are booked on the product before them; PENNY's group coupons ("App-Coupon 10% Waren") belong to no
+single product and are stored without a line. A discount that would make a line's paid total negative is
+stored without a line too, and the report lists it.
 
 ```bash
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /path/to/receipt-texts            # dry run
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /path/to/receipt-texts --commit
+```
+
+Names left unmatched can be mapped later without importing again: edit `config/receipt_overrides.json`
+(move a key from `review` to `exact`, or add one — keys as the import report prints them), then
+`--rematch` re-runs the matcher on the stored lines. It looks only at lines whose `match_source` is NULL,
+`rule` or `override` — a line set to `manual` by hand is never changed — and updates item, match source
+and brand where the result differs; a key moved to `review` clears its former match. Dry run by default
+(per changed line old → new item, counts); `--commit` writes every change in one transaction. Receipts,
+adjustments, stock and `purchase_history` are never touched; override ids missing from `inventory_item`
+are refused.
+
+```bash
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner --rematch            # dry run
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner --rematch --commit
 ```
 
 Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) with:

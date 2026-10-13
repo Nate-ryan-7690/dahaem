@@ -88,8 +88,12 @@ document the contract. Its open decisions are settled with Nate one at a time.
   receipt link). Every line is stored, matched or not; coupons are adjustments on the product before
   them. `ReceiptImportRunner` (dry run, `--commit` = one transaction, duplicates by store + date-time +
   receipt number) never calls `PurchaseService` and never changes stock: the household's stock is built
-  from new purchases and check-ins, not reconstructed from old receipts. Next (llmbox, Nate): snapshot →
-  apply 0008 → dry run on the private receipt texts (gitignored, never in the repo) → review → `--commit`.
+  from new purchases and check-ins, not reconstructed from old receipts. First dry run on Nate's 22 receipts
+  (2026-10-13): 22 NEW, all balancing, €1,324.68. Fixed before the real `--commit`: PENNY group coupons
+  ("App-Coupon 10% Waren", one per tax class, printed after an unrelated product or as a block at the end)
+  are stored without a line instead of on the product before them; a discount that would make a paid total
+  negative is stored without a line and reported. New items 1818–1821 (migration 0009) and override
+  changes per Nate's decisions. Next (llmbox, Nate): snapshot → apply 0009 → rebuild → dry run → `--commit`.
   Uses: real regular prices (Penny publishes mostly UVPs), confirmed product → item matches, price
   history and budget.
 - **Receipt review** — `next`. Names left unmatched on purpose for Nate to map (they are in the
@@ -98,11 +102,22 @@ document the contract. Its open decisions are settled with Nate one at a time.
   the salted chips), Kinder Riegel, MOZZARELLA-STICK / LH MOZZ. STICKS; and the analysis's wrong rule
   matches: VIT.Z. RASPBERRY (≠ Himbeere), Krom FB Kirsche (Krombacher Fassbrause ≠ Kirsche), SALATSCHALE
   ORZO (≠ Orzo pasta), FRUCHTZWERGE (≠ Naturjoghurt; `store_overrides.json` maps "fruchtzwerge" to 386,
-  which is why the receipt import does not use the store overrides). Plus whatever the first dry run
-  lists as unmatched. Mapping one = move its key from `review` to `exact` (or set `match_source =
-  'manual'` on stored lines). Two seeded overrides to confirm: BACON / DEL. BACON / BACON XXL → 350
-  ("smoked bacon / geräucherter Speck" — the only bacon item; the catalogue doesn't say sliced), Bagels
-  Mehrkorn → 587 ("bagel vollkorn": Mehrkorn ≠ Vollkorn in wording).
+  which is why the receipt import does not use the store overrides).
+  From Nate's decisions on the first dry run (2026-10-13): **BACON / DEL. BACON / BACON XXL** moved from
+  `exact` (→ 350) to `review` — Nate checks the actual product (sliced / block / bits) before mapping;
+  BACON-STREIFEN → 1536 stays. **C & W Brötchen** — what product is it? ("C & W" looks like a brand.)
+  Still to confirm: Bagels Mehrkorn → 587 ("bagel vollkorn": Mehrkorn ≠ Vollkorn in wording).
+  The ~200 remaining unmatched names of the dry run are mapped AFTER the `--commit`, without re-importing:
+  edit the overrides (move a key from `review` to `exact`, or add one), then `ReceiptImportRunner --rematch`
+  (dry run) and `--rematch --commit`. A line can also be fixed by hand with `match_source = 'manual'`; the
+  rematch never changes those.
+- **Rosinenbrötchen unit** — `later`. "Rosinen Brötchen" now maps to the existing 575 rosinenbrötchen,
+  whose unit is `g` like most rolls; 569 Brötchen and Franzbrötchen were changed to `Stück` in 0004.
+  Rolls are bought per piece; switch 575 (and the other rolls) when Nate confirms. Left out of 0009,
+  which only adds.
+- **Sour Cream vs. Sauerrahm-Dip** — `idea`. 1821 Sour Cream (new, dairy) sits next to 1522 "sauerrahm
+  dip" (snacks / dips & spreads) and 368 saure sahne. If Penny's "SOUR CREAM" is really the dip, map it
+  to 1522 instead (rematch).
 - **Receipts + shopping list** — `idea`. Once the PHP shopping list is in use, match a new receipt's
   lines first against that trip's open list (`shopping_list_item` already has `inventory_item_id`,
   `store_item_id` with brand, `purchase_status`). Confirmed pairs tick the list item off with the real
