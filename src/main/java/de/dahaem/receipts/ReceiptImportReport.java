@@ -58,6 +58,26 @@ public record ReceiptImportReport(boolean committed, List<ReceiptImportService.R
         return sorted;
     }
 
+    /** PENNY group coupons ("App-Coupon 10% Waren") of the NEW receipts; they are stored without a line. */
+    public long groupCoupons() {
+        return receipts.stream().filter(r -> r.status() == ReceiptImportService.Status.NEW)
+                .flatMap(r -> r.receipt().adjustments().stream())
+                .filter(a -> a.type() == AdjustmentType.APP_COUPON && a.lineIndex() == null
+                        && PennyReceiptFormat.isGroupCoupon(a.description()))
+                .count();
+    }
+
+    /** Discounts of the NEW receipts the negative-paid safety net stored without their line. */
+    public long safetyNetUnattached() {
+        return receipts.stream().filter(r -> r.status() == ReceiptImportService.Status.NEW)
+                .mapToLong(r -> r.unattached().size()).sum();
+    }
+
+    /** Lines of the NEW receipts whose paid total is below zero; 0 unless the safety net is broken. */
+    public long negativePaidLines() {
+        return newLines().stream().filter(l -> l.paidTotal().signum() < 0).count();
+    }
+
     /** Sum of the printed totals of the NEW receipts. */
     public BigDecimal newTotal() {
         return receipts.stream().filter(r -> r.status() == ReceiptImportService.Status.NEW)
@@ -93,11 +113,15 @@ public record ReceiptImportReport(boolean committed, List<ReceiptImportService.R
             if (p != null && r.status() == ReceiptImportService.Status.NEW) {
                 p.unparsedLines().forEach(u -> sb.append("            unparsed: ").append(u).append('\n'));
             }
+            r.unattached().forEach(u -> sb.append("            stored without a line (paid would be negative): ")
+                    .append(u).append('\n'));
         }
         List<ReceiptImportService.PlannedLine> lines = newLines();
         sb.append(String.format("%nlines of new receipts: %d -- matched by override %d, by rule %d; excluded %d; unmatched %d%n",
                 lines.size(), linesBy(ReceiptMatcher.OVERRIDE), linesBy(ReceiptMatcher.RULE), excludedLines(),
                 unmatchedLines()));
+        sb.append(String.format("discounts without a line: %d group coupons, %d by the negative-paid safety net; "
+                + "lines with a negative paid total: %d%n", groupCoupons(), safetyNetUnattached(), negativePaidLines()));
         Map<String, Object[]> unmatched = unmatchedNames();
         if (!unmatched.isEmpty()) {
             sb.append(String.format("top unmatched names (%d distinct; count, key for receipt_overrides.json, as printed):%n",

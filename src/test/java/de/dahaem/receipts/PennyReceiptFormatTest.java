@@ -42,6 +42,11 @@ class PennyReceiptFormatTest {
         assertEquals(0, new BigDecimal(expected).compareTo(actual), "expected " + expected + " but was " + actual);
     }
 
+    /** Descriptions of the adjustments attached to no line, in printed order. */
+    private static List<String> unattached(ParsedReceipt r) {
+        return r.adjustments().stream().filter(a -> a.lineIndex() == null).map(ReceiptAdjustment::description).toList();
+    }
+
     private static int indexOf(ParsedReceipt r, String name) {
         for (int i = 0; i < r.lines().size(); i++) {
             if (r.lines().get(i).rawName().equals(name)) {
@@ -334,10 +339,10 @@ class PennyReceiptFormatTest {
         assertEquals(List.of("Contactless", "KINDERPONCHO"), ReceiptText.lines("Contactless\nKINDERPONCHO"));
     }
 
-    // ---- app coupons are adjustments on the product before them, not products ---------------
+    // ---- app coupons: plain and brand coupons belong to the product before them, group coupons to none
 
     @Test
-    void appCouponsAttachToThePrecedingProductAndTheReceiptStillBalances() {
+    void plainAndBrandCouponsAttachToThePrecedingProductGroupCouponsToNone() {
         ParsedReceipt r = penny("""
                      HACKFLEISCH                     4,49 B
                      App-Coupon                     -1,00 B
@@ -358,9 +363,72 @@ class PennyReceiptFormatTest {
         ReceiptAdjustment kinder = r.adjustmentsFor(indexOf(r, "KINDER RIEGEL")).get(0);
         assertEquals("Ferrero Kinder 25%", kinder.description());
         assertNum("-0.57", kinder.amount());
-        assertEquals("App-Coupon 10% Waren", r.adjustmentsFor(indexOf(r, "KONFITUERE")).get(0).description());
         assertNum("3.49", r.paidTotal(indexOf(r, "HACKFLEISCH")));
-        assertNum("1.66", r.paidTotal(indexOf(r, "CHIPS GESALZEN")));
+        assertEquals(List.of(), r.adjustmentsFor(indexOf(r, "KONFITUERE")), "a group coupon is not the product's");
+        assertNum("2.49", r.paidTotal(indexOf(r, "KONFITUERE")));
+        assertNum("1.79", r.paidTotal(indexOf(r, "CHIPS GESALZEN")));
+        assertEquals(List.of("App-Coupon 10% Waren", "App-Coupon 7% Chips"), unattached(r));
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void groupCouponBlockAfterTheLastProductBelongsToNoLine() {
+        ParsedReceipt r = penny("""
+                     TK GEMUESEPFANNE                2,98 B
+                     ORANGENSAFT                     1,99 A
+                     CHIPS PAPRIKA                   1,79 B
+                     App-Coupon 10% Waren           -0,30 B
+                     App-Coupon 5% Säfte            -0,10 A
+                     App-Coupon 10% Bäcke           -0,18 B
+                     SUMME                    EUR     6,18
+                """);
+        assertEquals(3, r.lines().size());
+        assertEquals(List.of("App-Coupon 10% Waren", "App-Coupon 5% Säfte", "App-Coupon 10% Bäcke"), unattached(r));
+        for (int i = 0; i < r.lines().size(); i++) {
+            assertEquals(r.lines().get(i).lineTotal(), r.paidTotal(i), "shelf price kept: " + r.lines().get(i).rawName());
+        }
+        assertNum("-0.10", r.adjustments().get(1).amount());
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void groupCouponAfterAnUnrelatedProductBelongsToNoLine() {
+        ParsedReceipt r = penny("""
+                     SPEZI                           0,95 A
+                     App-Coupon 7% Chips            -0,13 B
+                     App-Coupon                     -0,20 A
+                     BROT                            1,49 B
+                     App-Coupon 10%                 -0,15 B
+                     SUMME                    EUR     1,96
+                """);
+        assertNum("0.75", r.paidTotal(indexOf(r, "SPEZI"))); // only the plain coupon is the Spezi's
+        assertNum("1.49", r.paidTotal(indexOf(r, "BROT")));
+        assertEquals(List.of("App-Coupon 7% Chips", "App-Coupon 10%"), unattached(r), "a group word is optional");
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void groupCouponWithATrailingCommaIsStillAGroupCoupon() {
+        ParsedReceipt r = penny("""
+                     CHIPS PAPRIKA                   1,79 B
+                     App-Coupon 5% Chips,           -0,09 B
+                     SUMME                    EUR     1,70
+                """);
+        assertEquals(List.of("App-Coupon 5% Chips,"), unattached(r), "raw text kept as printed");
+        assertNum("1.79", r.paidTotal(0));
+        assertTrue(r.unparsedLines().isEmpty(), r.unparsedLines().toString());
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void aFullPlainCouponMakesTheItemFree() {
+        ParsedReceipt r = penny("""
+                     BROT                            1,49 B
+                     App-Coupon                     -1,49 B
+                     SUMME                    EUR     0,00
+                """);
+        assertNum("0.00", r.paidTotal(0));
+        assertEquals(1, r.adjustmentsFor(0).size());
         assertTrue(r.balances());
     }
 

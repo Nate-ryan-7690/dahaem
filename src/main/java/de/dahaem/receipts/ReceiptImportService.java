@@ -41,9 +41,15 @@ public class ReceiptImportService {
 
     public enum Status { NEW, DUPLICATE, SKIPPED }
 
-    /** One receipt's outcome; {@code receipt} and {@code lines} are null/empty when it could not be read. */
+    /**
+     * One receipt's outcome; {@code receipt} and {@code lines} are null/empty when it could not be read.
+     * {@code unattached} lists the discounts the negative-paid safety net moved off their line.
+     */
     public record ReceiptResult(String file, Status status, String reason, ParsedReceipt receipt, List<PlannedLine> lines,
-                                BigDecimal storedTotal) {
+                                BigDecimal storedTotal, List<String> unattached) {
+        public ReceiptResult {
+            unattached = unattached == null ? List.of() : List.copyOf(unattached);
+        }
     }
 
     private final ReceiptRepository repository;
@@ -64,7 +70,7 @@ public class ReceiptImportService {
 
     public ReceiptImportReport run(List<ReceiptFile> files, boolean commit) {
         List<CatalogItem> items = catalog.get();
-        checkOverrideIds(items);
+        checkOverrideIds(overrides, items);
         ReceiptMatcher matcher = new ReceiptMatcher(overrides, items);
 
         Integer storeId = repository.findStoreId(STORE_NAME);
@@ -77,7 +83,8 @@ public class ReceiptImportService {
                 boolean stored = storeId != null && repository.exists(storeId, p.purchasedAt(), p.receiptNumber());
                 if (!seen.add(p.purchasedAt() + "#" + p.receiptNumber()) || stored) {
                     r = new ReceiptResult(f.name(), Status.DUPLICATE,
-                            stored ? "already stored" : "same receipt twice in this run", p, r.lines(), r.storedTotal());
+                            stored ? "already stored" : "same receipt twice in this run", p, r.lines(), r.storedTotal(),
+                            r.unattached());
                 }
             }
             results.add(r);
@@ -95,7 +102,8 @@ public class ReceiptImportService {
         if (format != StoreFormat.PENNY) {
             return skipped(f, "not a PENNY receipt (" + format + ")", null);
         }
-        ParsedReceipt r = parser.parse(f.text(), format);
+        List<String> unattached = new ArrayList<>();
+        ParsedReceipt r = withoutNegativePaid(parser.parse(f.text(), format), unattached);
         List<String> missing = new ArrayList<>();
         if (r.purchasedAt() == null) {
             missing.add("date");
@@ -118,9 +126,36 @@ public class ReceiptImportService {
         BigDecimal stored = storedTotal(r, lines);
         if (stored.compareTo(r.total()) != 0) {
             return new ReceiptResult(f.name(), Status.SKIPPED, "does not balance: lines and adjustments give " + stored
-                    + ", printed " + r.total(), r, lines, stored);
+                    + ", printed " + r.total(), r, lines, stored, unattached);
         }
-        return new ReceiptResult(f.name(), Status.NEW, null, r, lines, stored);
+        return new ReceiptResult(f.name(), Status.NEW, null, r, lines, stored, unattached);
+    }
+
+    /**
+     * Safety net: a discount that would push its line's paid total below zero cannot belong to that line
+     * (a group coupon read as a single-product one). It is stored without a line instead, so the receipt
+     * still balances, and noted in {@code unattached} for the report. Discounts are taken in printed order.
+     */
+    static ParsedReceipt withoutNegativePaid(ParsedReceipt r, List<String> unattached) {
+        BigDecimal[] paid = r.lines().stream().map(ReceiptLine::lineTotal).toArray(BigDecimal[]::new);
+        List<ReceiptAdjustment> out = new ArrayList<>();
+        boolean changed = false;
+        for (ReceiptAdjustment a : r.adjustments()) {
+            if (inPaidTotal(a)) {
+                BigDecimal after = paid[a.lineIndex()].add(a.amount());
+                if (after.signum() < 0) {
+                    ReceiptLine line = r.lines().get(a.lineIndex());
+                    unattached.add(String.format("%s %s on line %d %s %s", a.description(), a.amount(),
+                            a.lineIndex() + 1, line.rawName(), line.lineTotal()));
+                    out.add(new ReceiptAdjustment(a.type(), a.description(), a.amount(), null));
+                    changed = true;
+                    continue;
+                }
+                paid[a.lineIndex()] = after;
+            }
+            out.add(a);
+        }
+        return changed ? r.withAdjustments(out) : r;
     }
 
     /** Line paid totals plus every adjustment not already inside one of them (deposits, returns, unattached discounts). */
@@ -142,7 +177,7 @@ public class ReceiptImportService {
     }
 
     /** An override pointing at an id the catalog doesn't have would fail the whole commit; refuse up front. */
-    private void checkOverrideIds(List<CatalogItem> items) {
+    static void checkOverrideIds(ReceiptMatcher.Overrides overrides, List<CatalogItem> items) {
         Set<Integer> ids = items.stream().map(CatalogItem::id).collect(Collectors.toSet());
         Set<String> bad = new TreeSet<>();
         for (Map.Entry<String, Integer> e : overrides.exact().entrySet()) {
@@ -156,6 +191,6 @@ public class ReceiptImportService {
     }
 
     private static ReceiptResult skipped(ReceiptFile f, String reason, ParsedReceipt r) {
-        return new ReceiptResult(f.name(), Status.SKIPPED, reason, r, List.of(), null);
+        return new ReceiptResult(f.name(), Status.SKIPPED, reason, r, List.of(), null, List.of());
     }
 }

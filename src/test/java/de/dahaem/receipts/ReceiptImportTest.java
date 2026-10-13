@@ -30,12 +30,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The receipt import end to end on a throwaway MariaDB (Testcontainers), never the live database:
- * schema.sql plus the real seed catalog and the real config/receipt_overrides.json, and two
- * made-up receipts in the PENNY layout (no real receipt is used).
+ * schema.sql plus the real seed catalog and the real config/receipt_overrides.json, and made-up
+ * receipts in the PENNY layout (no real receipt is used).
  */
 class ReceiptImportTest {
 
     private static final Path MIGRATION = Path.of("migrations", "0008_purchase_receipts.sql");
+    private static final Path CATALOG_MIGRATION = Path.of("migrations", "0009_catalog_receipt_items.sql");
     private static final ReceiptMatcher.Overrides OVERRIDES =
             ReceiptMatcher.Overrides.load(Path.of("config", "receipt_overrides.json"));
 
@@ -132,6 +133,7 @@ class ReceiptImportTest {
                 + "       AND a.purchase_receipt_adjustment_type NOT IN ('DEPOSIT', 'DEPOSIT_RETURN')))) "
                 + "FROM purchase_receipt r ORDER BY r.purchase_receipt_purchased_at");
         assertEquals(List.of("34.33=34.33", "7.27=7.27"), checks);
+        assertEquals(checks, balanceChecks());
         assertNum("41.60", report.newTotal());
         assertTrue(report.allBalanced());
         assertTrue(report.toText().contains("printed 34.33  OK"), report.toText());
@@ -141,19 +143,111 @@ class ReceiptImportTest {
     void couponsAndDiscountsAreAttachedToTheProductBefore() throws SQLException {
         service().run(receipts(), true);
 
-        assertEquals(List.of("App-Coupon 7% Chips APP_COUPON -0.13"), adjustmentsOf("LAYS GESALZEN"));
+        assertEquals(List.of("App-Coupon APP_COUPON -1.00"), adjustmentsOf("Hä.-Brustfilet"));
         assertEquals(List.of("Ferrero Kinder 25% APP_COUPON -0.57"), adjustmentsOf("Kinder Riegel"));
-        assertEquals(List.of("App-Coupon 10% Waren APP_COUPON -0.25"), adjustmentsOf("Landliebe Konfit"));
+        assertEquals(List.of(), adjustmentsOf("LAYS GESALZEN"), "a group coupon is not the product's");
+        assertEquals(List.of(), adjustmentsOf("Landliebe Konfit"));
         assertEquals(List.of("App-Preis-Rabatt APP_PRICE_DISCOUNT -0.50"), adjustmentsOf("Hackfleisch gem."));
         assertEquals(List.of("Frischerabatt FRESHNESS_DISCOUNT -0.90"), adjustmentsOf("FRUCHTZWERGE"));
         assertEquals(List.of("PFAND 0,25 EURO DEPOSIT 0.25"), adjustmentsOf("Krom FB Kirsche"));
-        assertNum("1.66", line("LAYS GESALZEN").get("purchase_receipt_line_paid_total"));
+        assertNum("1.79", line("LAYS GESALZEN").get("purchase_receipt_line_paid_total"));
         assertNum("1.79", line("LAYS GESALZEN").get("purchase_receipt_line_line_total"));
         assertNum("0.99", line("Krom FB Kirsche").get("purchase_receipt_line_paid_total")); // a deposit is not part of the price
         assertEquals(1, count("SELECT COUNT(*) FROM purchase_receipt_adjustment WHERE purchase_receipt_adjustment_line_id IS NULL "
                 + "AND purchase_receipt_adjustment_type = 'DEPOSIT_RETURN'"));
         assertEquals(0, count("SELECT COUNT(*) FROM purchase_receipt_line WHERE purchase_receipt_line_raw_name LIKE '%Coupon%' "
                 + "OR purchase_receipt_line_raw_name LIKE '%25\\%%'"));
+    }
+
+    @Test
+    void groupCouponsAreStoredWithoutALineAndProductsKeepTheirShelfPrice() throws SQLException {
+        ReceiptImportReport report = service().run(List.of(file("penny_made_up_import_c.txt")), true);
+
+        assertEquals(1, report.count(ReceiptImportService.Status.NEW));
+        // printed order; the plain "App-Coupon -1.00" is the safety-net case (see the next test)
+        assertEquals(List.of("App-Coupon 10% Waren -0.58", "App-Coupon 7% Chips -0.13", "App-Coupon -1.00",
+                "App-Coupon 5% Chips, -0.09", "App-Coupon 5% Säfte -0.10", "App-Coupon 10% Bäcke -0.15"),
+                strings("SELECT CONCAT(purchase_receipt_adjustment_raw_text, ' ', purchase_receipt_adjustment_amount) "
+                        + "FROM purchase_receipt_adjustment WHERE purchase_receipt_adjustment_line_id IS NULL "
+                        + "AND purchase_receipt_adjustment_type = 'APP_COUPON' ORDER BY purchase_receipt_adjustment_id"));
+        for (String name : List.of("TK GEMUESEPFANNE", "SPEZI", "CHIPS PAPRIKA", "ORANGENSAFT")) {
+            assertEquals(List.of(), adjustmentsOf(name), name);
+            assertEquals(0, new BigDecimal(line(name).get("purchase_receipt_line_line_total").toString())
+                    .compareTo(new BigDecimal(line(name).get("purchase_receipt_line_paid_total").toString())), name);
+        }
+        // plain and brand coupons stay on their product; a 100 % plain coupon is a free item
+        assertEquals(List.of("Ferrero Kinder 25% APP_COUPON -0.57"), adjustmentsOf("KINDER BUENO"));
+        assertNum("1.72", line("KINDER BUENO").get("purchase_receipt_line_paid_total"));
+        assertEquals(List.of("App-Coupon APP_COUPON -1.49"), adjustmentsOf("BROT"));
+        assertNum("0.00", line("BROT").get("purchase_receipt_line_paid_total"));
+        assertEquals(List.of("7.88=7.88"), balanceChecks());
+        assertEquals(5, report.groupCoupons());
+        assertTrue(report.toText().contains("discounts without a line: 5 group coupons, 1 by the negative-paid safety net; "
+                + "lines with a negative paid total: 0"), report.toText());
+    }
+
+    @Test
+    void aDiscountThatWouldMakeThePaidTotalNegativeIsStoredWithoutALineAndReported() throws SQLException {
+        ReceiptImportReport report = service().run(List.of(file("penny_made_up_import_c.txt")), true);
+
+        assertEquals(List.of(), adjustmentsOf("KAUGUMMI"));
+        assertNum("0.50", line("KAUGUMMI").get("purchase_receipt_line_paid_total"));
+        assertEquals(0, count("SELECT COUNT(*) FROM purchase_receipt_line WHERE purchase_receipt_line_paid_total < 0"));
+        ReceiptImportService.ReceiptResult r = report.receipts().get(0);
+        assertEquals(List.of("App-Coupon -1.00 on line 5 KAUGUMMI 0.50"), r.unattached());
+        assertEquals(1, report.safetyNetUnattached());
+        assertEquals(0, report.negativePaidLines());
+        assertTrue(report.toText().contains("stored without a line (paid would be negative): App-Coupon -1.00 on line 5 KAUGUMMI"),
+                report.toText());
+        assertTrue(report.allBalanced());
+    }
+
+    @Test
+    void everyMadeUpReceiptStillBalances() throws SQLException {
+        List<ReceiptImportService.ReceiptFile> all = new ArrayList<>(receipts());
+        all.add(file("penny_made_up_import_c.txt"));
+        all.add(file("penny_made_up_import_d.txt"));
+
+        ReceiptImportReport report = service().run(all, true);
+
+        assertEquals(4, report.count(ReceiptImportService.Status.NEW));
+        assertTrue(report.allBalanced(), report.toText());
+        assertEquals(0, report.negativePaidLines());
+        assertEquals(List.of("34.33=34.33", "7.88=7.88", "19.77=19.77", "7.27=7.27"), balanceChecks());
+    }
+
+    @Test
+    void nateDecisionsOfOctober13MapTheNewAndReusedItems() throws SQLException {
+        service().run(List.of(file("penny_made_up_import_d.txt")), true);
+
+        assertItem("Rosinen Brötchen", 575, "override");      // existing rosinenbrötchen, not 569 brötchen
+        assertItem("Gourmetbrötchen", 1818, "override");
+        assertItem("Mandarin Orangen", 892, "override");      // existing mandarinen dose, not 181 orange
+        assertItem("RINDERSALAMI", 1819, "override");
+        assertItem("EDELSALAMI", 302, "rule");                // stays salami
+        assertItem("GFL-FLEISCHWURST", 1820, "override");
+        assertItem("Minigurken", 59, "override");             // existing snackgurke, not 58 gurke
+        assertItem("SOUR CREAM", 1821, "override");
+        assertItem("BACON-STREIFEN", 1536, "override");
+        for (String name : List.of("BACON", "DEL. BACON", "BACON XXL", "C & W Brötchen")) {
+            assertNull(line(name).get("purchase_receipt_line_inventory_item_id"), name + " waits for Nate's review");
+            assertNull(line(name).get("purchase_receipt_line_match_source"), name);
+        }
+    }
+
+    @Test
+    void catalogMigrationOnlyAddsAndIsReRunnable() throws SQLException {
+        String seeded = newItems();
+        exec("DELETE FROM inventory_item WHERE inventory_item_id BETWEEN 1818 AND 1821"); // scratch DB only: state before 0009
+        String before = checksum();
+
+        TestDatabase.apply(List.of(CATALOG_MIGRATION));
+        TestDatabase.apply(List.of(CATALOG_MIGRATION));        // re-runnable
+
+        assertEquals(seeded, newItems(), "the migration adds the same rows as the seed");
+        assertEquals(4, count("SELECT COUNT(*) FROM inventory_item WHERE inventory_item_id BETWEEN 1818 AND 1821"));
+        exec("DELETE FROM inventory_item WHERE inventory_item_id BETWEEN 1818 AND 1821");
+        assertEquals(before, checksum(), "no other row changed");
     }
 
     @Test
@@ -290,6 +384,29 @@ class ReceiptImportTest {
         return List.of(
                 new ReceiptImportService.ReceiptFile("penny_made_up_import_a.txt", fixture("penny_made_up_import_a.txt")),
                 new ReceiptImportService.ReceiptFile("penny_made_up_import_b.txt", fixture("penny_made_up_import_b.txt")));
+    }
+
+    private static ReceiptImportService.ReceiptFile file(String name) {
+        return new ReceiptImportService.ReceiptFile(name, fixture(name));
+    }
+
+    /** Per stored receipt "printed total=lines' paid totals + the adjustments not inside them". */
+    private static List<String> balanceChecks() throws SQLException {
+        return strings("SELECT CONCAT(r.purchase_receipt_total, '=', "
+                + "(SELECT SUM(l.purchase_receipt_line_paid_total) FROM purchase_receipt_line l "
+                + "  WHERE l.purchase_receipt_line_receipt_id = r.purchase_receipt_id) + "
+                + "(SELECT COALESCE(SUM(a.purchase_receipt_adjustment_amount), 0) FROM purchase_receipt_adjustment a "
+                + "  WHERE a.purchase_receipt_adjustment_receipt_id = r.purchase_receipt_id "
+                + "  AND NOT (a.purchase_receipt_adjustment_line_id IS NOT NULL "
+                + "       AND a.purchase_receipt_adjustment_type NOT IN ('DEPOSIT', 'DEPOSIT_RETURN')))) "
+                + "FROM purchase_receipt r ORDER BY r.purchase_receipt_purchased_at");
+    }
+
+    private static String newItems() throws SQLException {
+        return String.join(";", strings("SELECT CONCAT_WS('|', inventory_item_id, inventory_item_name_english, "
+                + "inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, "
+                + "COALESCE(inventory_item_subcategory, '-')) FROM inventory_item "
+                + "WHERE inventory_item_id BETWEEN 1818 AND 1821 ORDER BY inventory_item_id"));
     }
 
     private static String fixture(String name) {
