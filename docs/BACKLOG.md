@@ -18,6 +18,12 @@ Status: `in progress` · `next` · `later` · `idea`
   flag); the draft SQL that `load_recipes.py` parses needs `recipe_servings_max`. (2) The shopping
   list scales from `servings` (the lower bound) only; `?basis=max` exists on `GET /api/recipes/{id}`
   only. (3) The per-household choice of how to read a range (lower / upper) is not built.
+- **Servings from the title is not reliable** — `next`. The title rule ("4P" / "für 4 Personen" =
+  4) was wrong for scraped bundles: 28164, 31475 and 32578 ("… Bundle 4P", "Weihnachtsmenü 4P") have
+  2-person ingredient lists; Nate approved setting them to servings 2 (guarded live fix, 2026-10-13).
+  28615 / 28616 really are 4-person lists. The importer should decide servings by comparing the
+  ingredient list with the step brackets (front value = 2 people, last = 4 people), not by the title;
+  re-check the other title-derived servings the same way.
 - **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
   2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
   and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
