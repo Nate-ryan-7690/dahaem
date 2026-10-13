@@ -37,8 +37,8 @@ public class RecipeController {
      * The recipe with its ingredients and instructions. An optional {@code ?people=N} adds each
      * ingredient's quantity scaled by {@code people / servings} as {@code scaledQuantity}; the stored
      * {@code quantity}, the stored instruction text and the nutrition are never changed; each instruction's
-     * {@code scaledInstruction} has its step amounts for {@code people} (HelloFresh's bracket values for a
-     * 2-serving recipe, otherwise scaled). An optional
+     * {@code scaledInstruction} has its step amounts for {@code people} (a bracket always means 2 / 3 / 4 people;
+     * otherwise the 2-person value scaled). An optional
      * {@code ?basis=max} scales a "3 – 4 Personen" range recipe from its upper bound
      * ({@code people / servingsMax}) instead; it is ignored for a recipe that is not a range, and
      * {@code ?basis=servings} is the default.

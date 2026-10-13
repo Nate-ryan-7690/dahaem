@@ -62,7 +62,7 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
      * {@code instruction} is the step as stored (HelloFresh's {@code 1 EL [1,5 EL | 2 EL] Butter*});
      * {@code scaledInstruction} is the same step with its amounts for {@code people} (see
      * {@link StepAmounts}) — without {@code people} it is the stored text with each bracket resolved to
-     * its 2-person value. Text that can't be read safely is left exactly as written.
+     * the recipe's own head count. Text that can't be read safely is left exactly as written.
      */
     public record Instruction(int stepNumber, String instruction, String scaledInstruction, String notes,
                               String source) {

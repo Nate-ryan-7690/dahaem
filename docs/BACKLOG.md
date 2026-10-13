@@ -142,3 +142,8 @@ Status: `in progress` · `next` · `later` · `idea`
   times, temperatures and settings (unit before or after the bracket, or `Stufe` before the number:
   `10 [12] Min.`, `200 [220] °C`, `Stufe 2 [3]`) are picked per size, never scaled; unreadable
   brackets and a missing `]` stay as written. Tests on made-up steps only.
+- Step brackets follow 2 / 3 / 4 people in every recipe (follow-up to #70): front = 2 people, middle = 3
+  (two values only), last = 4 (a single value = 4); other head counts scale the front value from 2. Without
+  `people`, brackets resolve for the recipe's own count (`servings`, or `servingsMax` with `basis=max`) so
+  steps match the ingredient list; 2-serving recipes unchanged. Amounts without a bracket scale as before.
+  0.125 shows as ⅛ for spoons, pinches and counts. No schema or data change.

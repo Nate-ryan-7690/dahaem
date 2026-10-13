@@ -13,19 +13,18 @@ import java.util.regex.Pattern;
 
 /**
  * Renders a cooking step's amounts for a number of people. HelloFresh writes step amounts as
- * {@code 1 EL [1,5 EL | 2 EL] Butter*}: the value outside the brackets is for 2 people, the ones
- * inside for 3 and 4 people (a single value inside, {@code 10 g [20 g] Öl*}, is the 4-person one).
+ * {@code 1 EL [1,5 EL | 2 EL] Butter*}: a bracket means 2 / 3 / 4 people in EVERY recipe, whatever its
+ * servings say. The value outside is for 2 people, the first inside for 3 and the last inside for 4 (a
+ * single value inside, {@code 10 g [20 g] Öl*}, is the 4-person one).
  *
  * <ul>
- *   <li>A 2-serving recipe (not a range) uses HelloFresh's own value for 2 / 3 / 4 people and drops
- *       the bracket; a missing size or any other head count scales the 2-person value with
- *       {@link Portions}.</li>
- *   <li>Any other recipe (ready meals, "3 – 4 Personen" ranges) does not trust the 2 / 3 / 4 mapping:
- *       the value outside the bracket is scaled from the recipe's servings (or servingsMax with
- *       {@code useMax}) and the bracket is dropped.</li>
- *   <li>Amounts without a bracket are scaled only when they are a number plus a measuring unit
- *       (g, kg, ml, l, EL, TL, Prise, Msp.); °C, times, Stufe, lengths, Watt, % and plain counts
- *       ("2 Pfannen") are never touched.</li>
+ *   <li>A bracket is resolved for a target head count: {@code people}, or without it the recipe's own count
+ *       (servings, or servingsMax with {@code useMax}), so the steps match the ingredient list. A target of
+ *       2 / 3 / 4 uses HelloFresh's exact value and drops the bracket; any other count scales the 2-person
+ *       (front) value with {@link Portions}.</li>
+ *   <li>Amounts without a bracket are scaled only when {@code people} is given, from the recipe's servings, and
+ *       only when they are a number plus a measuring unit (g, kg, ml, l, EL, TL, Prise, Msp.); °C, times,
+ *       Stufe, lengths, Watt, % and plain counts ("2 Pfannen") are never touched.</li>
  *   <li>Brackets of words ({@code Hälfte [drei Viertel | gesamte]}) or of times, temperatures and settings
  *       ({@code 18 Min. [19 Min. | 20 Min.]}, {@code 10 [12] Min.}, {@code 200 [220] °C}, {@code Stufe 2 [3]})
  *       pick HelloFresh's variant for 2 / 3 / 4 people and keep the 2-person text otherwise; never scaled.</li>
@@ -35,8 +34,8 @@ import java.util.regex.Pattern;
  * </ul>
  *
  * A {@code *} after a name marks a pantry item; it is part of the text after the amount and kept.
- * Without {@code people} the step comes back as written, with each readable bracket resolved to its
- * 2-person (outer) value.
+ * Without {@code people} the step comes back as written, with each readable bracket resolved for the
+ * recipe's own head count.
  */
 public final class StepAmounts {
 
@@ -106,7 +105,7 @@ public final class StepAmounts {
             "kompletten", "restliche", "restlichen", "rest", "alle", "doppelte", "doppelten");
 
     /**
-     * The step text for {@code people} (null = as written, brackets resolved to the 2-person value).
+     * The step text for {@code people} (null = as written, brackets resolved for the recipe's own head count).
      *
      * @param servings    the recipe's servings (a range's lower bound)
      * @param servingsMax a range's upper bound, null when the recipe is not a range
@@ -123,8 +122,7 @@ public final class StepAmounts {
         if (!bracketsBalanced(step)) {
             return step;   // a missing "]" (or "[") — can't tell what belongs to what
         }
-        Context ctx = new Context(people, Portions.scalingServings(servings, servingsMax, useMax),
-                servings == 2 && servingsMax == null);
+        Context ctx = new Context(people, Portions.scalingServings(servings, servingsMax, useMax));
 
         StringBuilder out = new StringBuilder();
         int copiedUpTo = 0;
@@ -156,9 +154,18 @@ public final class StepAmounts {
         return out.toString();
     }
 
-    private record Context(Integer people, int scaleFrom, boolean trustSizes) {
+    private record Context(Integer people, int scaleFrom) {
+        /** Plain amounts (no bracket) scale from the recipe's servings, and only when {@code people} is given. */
         boolean scales() {
             return people != null && Portions.isScalable(scaleFrom) && people != scaleFrom;
+        }
+
+        /**
+         * The head count a bracket is resolved for: {@code people}, else the recipe's own count (so the steps
+         * match the ingredient list); null when that is unknown (servings 0).
+         */
+        Integer bracketTarget() {
+            return people != null ? people : (Portions.isScalable(scaleFrom) ? scaleFrom : null);
         }
     }
 
@@ -254,10 +261,11 @@ public final class StepAmounts {
         if (chosen != null) {
             return new Replacement(from, format(chosen, followingUnit));
         }
-        if (nonAmount || !ctx.scales()) {
+        Integer target = ctx.bracketTarget();
+        if (nonAmount || target == null || target == 2) {
             return new Replacement(from, outerText);   // times etc. keep the 2-person value
         }
-        return new Replacement(from, format(scale(outerAmount, ctx), followingUnit));
+        return new Replacement(from, format(scaleFrom2(outerAmount, target), followingUnit));
     }
 
     /**
@@ -273,15 +281,19 @@ public final class StepAmounts {
         return isUnitIn(MEASURING_UNITS, unit) || isNonAmount(unit) ? unit : null;
     }
 
-    /** HelloFresh's own value for the requested size, or null (2 people, missing size, other counts, untrusted). */
+    /**
+     * HelloFresh's own bracket value for the target head count, or null (2 people = the front value, a single
+     * value has no 3-person one, any other count).
+     */
     private static <T> T exactSize(List<T> sizes, Context ctx) {
-        if (!ctx.trustSizes() || ctx.people() == null) {
+        Integer target = ctx.bracketTarget();
+        if (target == null) {
             return null;
         }
-        if (ctx.people() == 3 && sizes.size() == 2) {
+        if (target == 3 && sizes.size() == 2) {
             return sizes.get(0);
         }
-        if (ctx.people() == 4) {
+        if (target == 4) {
             return sizes.get(sizes.size() - 1);
         }
         return null;
@@ -406,10 +418,10 @@ public final class StepAmounts {
         return units.contains(u) || (u.endsWith(".") && units.contains(u.substring(0, u.length() - 1)));
     }
 
-    private static Amount scale(Amount amount, Context ctx) {
-        return new Amount(Portions.scaleRounded(amount.low(), ctx.people(), ctx.scaleFrom()),
-                amount.high() == null ? null : Portions.scaleRounded(amount.high(), ctx.people(), ctx.scaleFrom()),
-                amount.unit());
+    /** A bracket's front value is for 2 people; any head count outside the bracket's 2 / 3 / 4 scales from it. */
+    private static Amount scaleFrom2(Amount amount, int target) {
+        return new Amount(Portions.scaleRounded(amount.low(), target, 2),
+                amount.high() == null ? null : Portions.scaleRounded(amount.high(), target, 2), amount.unit());
     }
 
     /** Scales the measuring-unit amounts in a stretch of text without brackets. */
@@ -459,7 +471,7 @@ public final class StepAmounts {
 
     /**
      * German number formatting: decimals with a comma for g / kg / ml / l and non-amount units (grams and
-     * millilitres to one decimal, from 100 up as whole numbers), ½ ¼ ¾ ⅓ ⅔ for spoons, pinches and counts
+     * millilitres to one decimal, from 100 up as whole numbers), ½ ¼ ¾ ⅛ ⅓ ⅔ for spoons, pinches and counts
      * where they fit, otherwise a decimal.
      */
     static String formatNumber(BigDecimal value, String unit) {
@@ -476,6 +488,7 @@ public final class StepAmounts {
             case 25 -> "¼";
             case 50 -> "½";
             case 75 -> "¾";
+            case 13 -> "⅛";
             case 33 -> "⅓";
             case 67 -> "⅔";
             default -> null;
