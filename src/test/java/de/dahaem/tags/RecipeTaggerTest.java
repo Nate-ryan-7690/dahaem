@@ -87,11 +87,13 @@ class RecipeTaggerTest {
     }
 
     @Test
-    void schnellNeedsBothTimesAndThirtyMinutesAtMost() {
+    void schnellNeedsAKnownTotalOfThirtyMinutesAtMost() {
         assertTrue(names(TAGGER.derive(recipe(10, 20, null, null, null))).contains("schnell"));
         assertFalse(names(TAGGER.derive(recipe(10, 21, null, null, null))).contains("schnell"));
-        assertFalse(names(TAGGER.derive(recipe(0, 20, null, null, null))).contains("schnell"));
-        assertFalse(names(TAGGER.derive(recipe(10, 0, null, null, null))).contains("schnell"));
+        // imported recipes: HelloFresh's total time is stored as cook time, prep is 0
+        assertTrue(names(TAGGER.derive(recipe(0, 30, null, null, null))).contains("schnell"));
+        assertFalse(names(TAGGER.derive(recipe(0, 35, null, null, null))).contains("schnell"));
+        assertFalse(names(TAGGER.derive(recipe(0, 0, null, null, null))).contains("schnell"));
         assertTrue(TAGGER.derive(recipe(5, 5, null, null, null)).tags().contains(new DerivedTag("schnell", "Zeit")));
     }
 

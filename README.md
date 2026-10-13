@@ -137,7 +137,7 @@ java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner -
 
 Recipe tags come from DAHÄM's own data, in five groups (`tag_category`): **Tier** (Hähnchen, Pute, Rind,
 Schwein, Lamm, Kalb, Wild, Fisch, Meeresfrüchte), **Ernährung** (vegetarisch, vegan), **Zeit** (schnell =
-prep + cook ≤ 30 min), **Nährwerte** (kalorienarm ≤ 600 kcal, proteinreich ≥ 30 g, per serving; thresholds in
+prep + cook ≤ 30 min, total known), **Nährwerte** (kalorienarm ≤ 600 kcal, proteinreich ≥ 30 g, per serving; thresholds in
 `config/recipe_tags.properties`) and **Küche** (the recipe's `recipe_cuisine`, migration 0010). Nothing in
 the catalogue records which animal a meat item is, so that is its own table, `inventory_item_animal`
 (migration 0011), filled in two steps with `ItemAnimalRunner` — everything the name does not say is

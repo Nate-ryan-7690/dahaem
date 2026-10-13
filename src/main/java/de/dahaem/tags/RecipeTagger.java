@@ -12,7 +12,8 @@ import java.util.Set;
  *       or has an animal; <b>vegan</b>: vegetarisch and no dairy, egg, honey or other animal product
  *       ({@link AnimalProducts}). An ingredient with no item makes the diet unknown: neither tag, since
  *       unknown is not vegetarian. A recipe without any ingredient is unknown too.</li>
- *   <li><b>schnell</b>: prep + cook at most the configured minutes, only when both are above 0.</li>
+ *   <li><b>schnell</b>: prep + cook at most the configured minutes, only when the total is above 0
+ *       (imported recipes store the total time as cook time, prep 0).</li>
  *   <li><b>kalorienarm / proteinreich</b>: per-serving nutrition against the configured thresholds.</li>
  *   <li><b>Küche</b>: the recipe's cuisine.</li>
  * </ul>
@@ -55,8 +56,8 @@ public class RecipeTagger {
             }
         }
 
-        if (recipe.prepMinutes() > 0 && recipe.cookMinutes() > 0
-                && recipe.prepMinutes() + recipe.cookMinutes() <= settings.quickMaxMinutes()) {
+        int totalMinutes = recipe.prepMinutes() + recipe.cookMinutes();
+        if (totalMinutes > 0 && totalMinutes <= settings.quickMaxMinutes()) {
             tags.add(new DerivedTag(DerivedTag.SCHNELL, DerivedTag.ZEIT));
         }
         if (recipe.calories() != null && recipe.calories() > 0 && recipe.calories() <= settings.lowCalorieMaxKcal()) {
