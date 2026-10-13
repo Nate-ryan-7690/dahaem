@@ -12,6 +12,7 @@ repair tool that fixes the amounts of recipes imported before the parser fixes b
 | `load_recipes.py` / `load.py` | drafts -> MariaDB (`load.py` refuses drafts with REVIEW markers) | writes only with `--commit` |
 | `rematch.py` | re-match draft REVIEW lines against the current catalog | reads the catalog |
 | `repair_quantities.py` | pages -> guarded repair SQL + review TSV for recipes already in the DB | reads only, never writes |
+| `find_unmatched_ingredients.py` | cached pages -> the recipe lines that have no catalogue item (guarded SQL for `recipe_unmatched_ingredient` + report) | reads only, never writes |
 | `db.py` | the MariaDB connection, from environment variables | |
 
 `add_ingredients.py` and `dedup_catalog.py` are older catalog tools that still use the
@@ -98,6 +99,13 @@ python load_recipes.py --commit                              # writes; one trans
 ```
 
 New drafts record the page in `recipe.recipe_source_url`.
+
+A page line the importer cannot match to a catalogue item gets no `recipe_ingredient` row (the item id is NOT NULL),
+but it is no longer forgotten: `extract.py` writes it into the draft as `-- UNMATCHED <line no> <page line>`, and
+`load_recipes.py` stores it in `recipe_unmatched_ingredient` (`'unmatched'`) in the same transaction as the recipe.
+Older drafts only have the ingredient name in the REVIEW comment of their id-0 row; that name is stored without a
+line number. A `--commit` run stops when migration 0012 is not applied. A recipe with such a row is "unklar" for the
+diet filter and never gets vegetarisch / vegan.
 
 ## Repairing recipes already in the database
 
@@ -240,3 +248,33 @@ python enrich_recipes.py            # dry: writes the files only, nothing touche
 ```
 
 Check the row counts against the report's "recipes with an UPDATE" before the COMMIT.
+
+## Unmatched recipe lines (`find_unmatched_ingredients.py`)
+
+`recipe_ingredient.recipe_ingredient_item_id` is NOT NULL, so until now the importer **dropped every ingredient line it
+could not match to a catalogue item**. A recipe whose "Speck" line was dropped looks complete and could be tagged
+vegetarisch. This tool finds those lines for the recipes already in the database; going forward `load_recipes.py`
+stores them itself (above). It never writes: it reads the page cache of `repair_quantities.py` (`_cache/pages/`) and
+MariaDB (read-only transaction, `db.py`) and writes `_unmatched/unmatched_<stamp>.sql`, a `.tsv` with every line and a
+report `.txt` (all git-ignored; they hold real recipe lines).
+
+For every recipe with a `recipe_source_url` the cached `recipeIngredient` lines are parsed with `recipe_parse` and
+matched exactly as the importer and the repair tool do (the catalogue from the database plus `overrides.json`, water
+skipped). A line whose item is not among the recipe's stored ingredient items is `unmatched` (the raw line is stored,
+with its position on the page). A recipe without a URL, without a cached page, or whose page has no recipe gets ONE
+`unchecked` row without a line. The report counts the recipes checked, with unmatched lines and unchecked, and lists
+the 60 most common unmatched names with their line and recipe counts: map the top ones (overrides or catalogue items)
+so the recipes stop being unklar (see `docs/BACKLOG.md`, "Unmatched recipe ingredients").
+
+The SQL has one `INSERT` per row, each skipped when that row already exists (and when the recipe no longer exists), so
+it can be applied twice. No `BEGIN` / `COMMIT`: wrap the file in one transaction, after a snapshot and migration 0012.
+
+```bash
+python find_unmatched_ingredients.py     # writes the files only, nothing touches the database
+# review _unmatched/unmatched_<stamp>.txt, then apply (after a snapshot and migration 0012):
+{ echo 'SET NAMES utf8mb4; START TRANSACTION;'; cat _unmatched/unmatched_<stamp>.sql; echo 'COMMIT;'; } | \
+  docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"'
+```
+
+Then derive the tags again (`RecipeTagRunner`): every recipe with a row becomes unklar and loses a vegetarisch /
+vegan tag it may have had.

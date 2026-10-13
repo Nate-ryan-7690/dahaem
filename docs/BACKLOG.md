@@ -46,30 +46,46 @@ document the contract. Its open decisions are settled with Nate one at a time.
   PDFs, not in the scraped 2-person data.
 - **Display labels (PHP, Nate)** — `later`. Show "nach Bedarf" for to-taste items (fits salt and
   butter); fractions (0,5 / ½) for Stück, whole numbers for g/ml.
-- **Recipe tags derived from our own data** — `in progress` (this PR; migration 0011). Tier
-  (Hähnchen … Meeresfrüchte), Ernährung (vegetarisch / vegan), Zeit (schnell), Nährwerte
-  (kalorienarm / proteinreich) and Küche come from `inventory_item_animal`, the ingredients, the
-  times and the nutrition, written by `RecipeTagRunner` as `recipe_tag_source = 'derived'`; manual
-  tags are never touched. Nate still has to: apply 0011, review the animals (below), confirm the
-  thresholds in `config/recipe_tags.properties`, run the tagger. Küche reads
-  `recipe.recipe_cuisine` (migration 0010).
-- **Animal review** — `next`, Nate. `ItemAnimalRunner` proposes the animal(s) of the meat / fish
-  items by name; what the name does not say (Salami, Fleischwurst, Speck, Kasseler, Lyoner,
-  Wiener, Chorizo, Leberwurst, Schinken, Bifi …) is marked REVIEW with a suggestion and is only
-  stored after Nate sets the status to REVIEWED. Open decision: Ente, Gans, Kaninchen and Pferd
-  have no value in the Tier list (CHECK in `inventory_item_animal`); they stay REVIEW with no
-  animal until Nate adds values (Geflügel? Kaninchen?) or says to leave them. Items added to the
-  catalogue later show up in the next proposal.
+- **Recipe tags derived from our own data** — shipped in #77 (migration 0011): Tier, Ernährung, Zeit,
+  Nährwerte and Küche from `inventory_item_animal`, the ingredients, the times and the nutrition, written
+  by `RecipeTagRunner` as `recipe_tag_source = 'derived'`; manual tags are never touched. Thresholds
+  confirmed by Nate 2026-10-13: schnell ≤ 30 min (total time, prep + cook > 0), kalorienarm ≤ 600 kcal,
+  proteinreich ≥ 30 g protein, per serving (`config/recipe_tags.properties`).
+- **Diet filter: what a household does not eat** — `in progress`, this PR (migration 0012). New Tier values
+  (Geflügel, Ente, Gans, Kaninchen, Pferd); POSSIBLE animals for generic items (Salami, Fleischwurst,
+  Wiener, Lyoner, Leberwurst, Chorizo, Gelatine …: no Tier tag, but they block vegetarisch and make a
+  recipe "anpassbar"); the alcohol flag; Inhalt tags (Alkohol, Fleisch mit Milch); `unklar` for a recipe
+  with an unmatched ingredient line; presets in `config/diet_presets.json`; `GET /api/recipes` /
+  `/api/recipes/{id}` take hard rules (`diet`, `excludeTags`, `excludeItems`), soft rules (`avoidTags`,
+  `avoidItems`) and `includeUnclear`, and answer with the status OK / ANPASSBAR / UNCLEAR (HIDDEN recipes
+  are not returned). Presets filter INGREDIENTS only; meat certification (halal / kosher slaughter) stays the
+  shopper's responsibility. Nate still has to: snapshot, apply 0011 + 0012, rebuild `dahaem-api`, run
+  `find_unmatched_ingredients.py`, the animal review below, the tagger (run order in the PR description).
+  Decided in the PR, worth a look: HIDDEN under vegetarisch/vegan for a recipe whose only problem is a
+  possible animal (Gelatine: no allowed animal for a vegetarian), and a recipe without ingredients is unklar.
+- **Item diet review** — `next`, Nate. `ItemAnimalRunner` proposes, as a TSV, the certain animals, the POSSIBLE
+  animals (Salami: Schwein, Rind, Geflügel; Gelatine: Schwein, Rind; Schmalz: Schwein, Gans; Talg: Rind,
+  Lamm; Worcestersauce: Fisch …) and the alcohol flag; only names that say the animal (Entenbrust,
+  Kaninchenkeule, Pferdewurst, Geflügelbrust) and alcoholic drinks by subcategory are CONFIDENT, the rest is
+  REVIEW. Nate decides: which possible animals each generic item really has, which items contain alcohol
+  (cooking wine, Mirin, Reiswein, wine pastes …), and the items left without any animal (a meat item the name
+  does not explain, e.g. a canned stew). Items added to the catalogue later show up in the next proposal;
+  `--all` re-proposes the classified ones. Horse is disputed for halal and is not in the halal preset;
+  add `excludeTags=Pferd` per household if wanted.
 - **Vegetarian / vegan exclusion list: review** — `next`, Nate. `AnimalProducts` blocks the tags by
   category, subcategory and name (listed in the PR; `RecipeTagRunner --animal-products` prints it).
   It errs towards blocking; extend or loosen it there. Things it cannot know: rennet in cheese,
   gelatine in sweets, bone char in sugar, milk powder in bread or chocolate.
-- **Unmatched recipe ingredients are not stored** — `next`. `recipe_ingredient` cannot hold a line
-  without a catalogue item (the importer drops it and only reports it), so a recipe whose
-  ingredient was dropped looks complete and can get `vegetarisch` / `vegan` wrongly. The tagger
-  already withholds both for an ingredient without an item, but today it never sees one. Store
-  the unmatched lines (e.g. a nullable item id plus the raw text) or record per recipe that
-  lines were dropped.
+- **Unmatched recipe ingredients** — `next`, Nate. `recipe_ingredient` cannot hold a line without a catalogue
+  item, so the importer used to drop it and a recipe with a dropped "Speck" line looked complete. Now they are
+  stored in `recipe_unmatched_ingredient` (migration 0012): `find_unmatched_ingredients.py` for the recipes
+  already imported (report: the 60 most common unmatched names), `load_recipes.py` for new ones. A recipe with
+  any row is "unklar" and never vegetarisch / vegan. Nate: map the top unmatched names (overrides or new
+  catalogue items). **Follow-up tool, not built yet:** once a name is mapped, a rematch should read the
+  recipe's rows, insert the `recipe_ingredient` row (amount parsed as the repair tool does), delete the
+  `recipe_unmatched_ingredient` row and leave the recipe free to become vegetarisch again after the next
+  tagger run; until then the rows stay (`find_unmatched_ingredients.py` only ever adds). 202 recipes have no
+  URL and 'unchecked' stays until someone checks them by hand.
 - **"versch. Sorten" / multi-item offers** — `next`. One offer counts for every item it covers,
   but only the variants that exist in the ADVERTISED PACK SIZE (Coca-Cola 1,25 l ≠ cans). Named
   variants ("A / B", "oder", commas) are split directly. Otherwise look up brand + size once,
@@ -182,7 +198,10 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 - **Recipe search and paging** — `next`. `GET /api/recipes` returns all ~11,000 recipes. Server-side
   search (name, ingredient), filters on data that actually exists (time, tags, servings), paging, and a
   small card DTO; the planner's recipe picker uses the same endpoint. Tags are ready to filter on:
-  each recipe in the list carries its tag names and `recipe_tag` has an index on the tag id.
+  each recipe in the list carries its tag names and `recipe_tag` has an index on the tag id. The diet
+  filter (`RecipeDietFilter` / `DietFilterService`, package `de.dahaem.diet`) takes rules and returns a
+  verdict per recipe id, so search and paging can reuse it; today it loads the facts of every recipe per
+  request (a few hundred ms) — cache or push the tag part into SQL when paging arrives.
 - **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
@@ -196,7 +215,15 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 - **Allergens** — `idea`. Needs allergen data per item (the pages hold no allergens, diet flags or tags);
   nothing to show or filter on until the catalogue carries it. Idea: per catalogue item like
   `inventory_item_animal` (gluten, milk, egg, nuts, fish, soy …), derived to recipes the same way,
-  shown as warnings; needs Nate's allergen list and a rule for "may contain".
+  shown as warnings; needs Nate's allergen list and a rule for "may contain". The certain / possible split
+  and the diet filter (`diet`, `excludeTags`) are the model to reuse.
+- **Ambiguous items in shopping and offers** — `later`. The shopping list and the offers still treat "Salami"
+  as one item. A household without pork should see only beef / poultry salami offers: needs the possible
+  animals of generic items on the product side (store products and offers), the same surface-don't-decide
+  hints as for recipes, never an automatic pick.
+- **Kosher fish (fins and scales)** — `idea`. The Tier tag is just "Fisch"; fish without fins and scales
+  (Aal, Wels, Stör, Hai …) are not kosher but cannot be told apart yet. Needs a fish-species value (or a
+  flag) per item and a rule in the koscher preset; until then the preset's note says so.
 - **Recipe opportunities with evidence** — `next`. `/api/suggestions/by-savings` and `/by-expiring`
   exist; extend them so each suggestion says which ingredients are covered by which offer (store,
   product, price, valid until), which are already in stock and which are still uncovered. Suggestions
@@ -214,7 +241,12 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   Store logos / banners: check the usage rights, fall back to a neutral DAHÄM card.
 - **Personal vs household settings** — `later`, needs Nate's decision (spec decision 7). Greeting,
   language, theme per user; plan, stock, list and purchases shared per household.
-
+- **Food questionnaire** — `next`, PHP / Nate. A page per person: "Was esse ich nicht?" (hard rule) and "Was esse
+  ich lieber nicht?" (soft rule), on tags (Schwein, Alkohol, vegetarisch …, or a preset) AND on single
+  ingredients (Pilze, Koriander). The API side is ready: the PHP passes the answers as `diet`,
+  `excludeTags`, `excludeItems` (hard) and `avoidTags`, `avoidItems` (soft) and `includeUnclear`. Open: where
+  the answers are stored (see "Personal vs household settings") and per person vs household.
+  Recommendation: the hard rules of EVERY member apply to the shared meal plan, soft rules only mark.
 ## Platform
 
 - **Support tickets: backend foundation** — `next` per the spec (it says "do now"; Nate sets the

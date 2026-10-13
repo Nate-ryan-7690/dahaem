@@ -1,0 +1,29 @@
+{
+  "_note": "Diet presets for GET /api/recipes?diet=<name> (repeatable). They filter INGREDIENTS only: the app cannot certify halal or kosher (slaughter, certification, what a product is made with beyond its ingredient list); meat certification stays the shopper's responsibility. excludeTags: a recipe with one of these tags is hidden. requireTags: a recipe without them is hidden (or UNCLEAR when it has unmatched ingredient lines). A POSSIBLE animal of a generic item (Salami: Schwein, Rind, Geflügel) makes a recipe 'anpassbar', not hidden, as long as one of the item's possible animals is allowed. Tags are the derived recipe tags (RecipeTagRunner): Tier = animal, Inhalt = Alkohol / Fleisch mit Milch, Ernährung = vegetarisch / vegan.",
+  "presets": {
+    "halal": {
+      "label": "halal (Zutaten, keine Zertifizierung)",
+      "excludeTags": ["Schwein", "Alkohol"],
+      "requireTags": [],
+      "note": "Filters ingredients only: pork and alcohol. Horse is disputed and is NOT excluded here (add excludeTags=Pferd if wanted). Whether the meat is halal-slaughtered is the shopper's responsibility."
+    },
+    "koscher": {
+      "label": "koscher (Zutaten, keine Zertifizierung)",
+      "excludeTags": ["Schwein", "Meeresfrüchte", "Kaninchen", "Pferd", "Fleisch mit Milch"],
+      "requireTags": [],
+      "note": "Filters ingredients only. Fish without fins and scales (Aal, Wels, Stör ...) cannot be detected yet: the Tier tag is just 'Fisch' (see docs/BACKLOG.md, Kosher fish). Slaughter and certification are the shopper's responsibility."
+    },
+    "vegetarisch": {
+      "label": "vegetarisch",
+      "excludeTags": [],
+      "requireTags": ["vegetarisch"],
+      "note": "Only recipes tagged vegetarisch: every ingredient known and none of animal origin, certain or possible."
+    },
+    "vegan": {
+      "label": "vegan",
+      "excludeTags": [],
+      "requireTags": ["vegan"],
+      "note": "Only recipes tagged vegan. Hidden animal products the catalogue does not list (rennet, bone char ...) cannot be seen."
+    }
+  }
+}

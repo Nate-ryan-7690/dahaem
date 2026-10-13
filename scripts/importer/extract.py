@@ -221,7 +221,11 @@ def process(hash_id, pdf_path, cat, rename, delay):
         if not steps: why.append("no steps")
         return None, [f"empty recipe ({', '.join(why)}) - skipped, nothing to import"], "empty"
 
-    sql = build_sql(title, servings, cook, nutvals, matched, steps, recipe_url(hash_id))
+    # Lines whose item is not among the recipe's rows are dropped by the loader (item id 0): keep them in the
+    # draft so load_recipes.py can store them in recipe_unmatched_ingredient (the recipe is "unklar" for diets).
+    stored_items = {m[4] for m in matched if m[4] is not None}
+    unmatched = [(n, raw) for n, raw, _name in recipe_parse.unmatched_lines(rec, parsed, stored_items)]
+    sql = build_sql(title, servings, cook, nutvals, matched, steps, recipe_url(hash_id), unmatched)
     os.makedirs(DRAFTS, exist_ok=True)
     fn = pascal(title) + ".sql"
     open(os.path.join(DRAFTS, fn), "w", encoding="utf-8").write(sql)
@@ -230,17 +234,24 @@ def process(hash_id, pdf_path, cat, rename, delay):
         if os.path.abspath(newpdf) != os.path.abspath(pdf_path) and not os.path.exists(newpdf):
             os.rename(pdf_path, newpdf)
     return ({"title": title, "file": fn, "cook": cook, "servings": servings, "nut": nutvals,
-             "ings": matched, "reviews": reviews, "steps": len(steps), "flags": flags}, flags, "ok")
+             "ings": matched, "reviews": reviews, "unmatched": unmatched, "steps": len(steps), "flags": flags}, flags, "ok")
 
-def build_sql(title, servings, cook, nut, matched, steps, source_url=None):
-    """Draft SQL for one recipe. matched: (name, unit, qty Decimal|None, to_taste, item_id, conf, note)."""
+UNMATCHED_MARK = "-- UNMATCHED "
+
+def build_sql(title, servings, cook, nut, matched, steps, source_url=None, unmatched=()):
+    """Draft SQL for one recipe. matched: (name, unit, qty Decimal|None, to_taste, item_id, conf, note).
+    unmatched: (line_no, raw page line) of the lines that get no row; they are written as `-- UNMATCHED <no> <raw>`
+    comment lines BEFORE the ingredient INSERT (so rematch.py, which rewrites that block, leaves them alone) and
+    load_recipes.py stores them in recipe_unmatched_ingredient."""
     n = {k: ("NULL" if v is None else v) for k, v in nut.items()}
     sub = f"(SELECT recipe_id FROM recipe WHERE recipe_name='{sql_str(title)}')"
     url = "NULL" if not source_url else f"'{sql_str(source_url)}'"
     L = ["BEGIN;",
          "INSERT INTO recipe (recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, recipe_calories, recipe_protein, recipe_carbs, recipe_fat, recipe_fibre, recipe_sugar, recipe_source_url)",
-         f"VALUES ('{sql_str(title)}', {servings}, {cook}, 0, {n['cal']}, {n['prot']}, {n['carb']}, {n['fat']}, {n['fibre']}, {n['sugar']}, {url});",
-         "INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed, recipe_ingredient_to_taste) VALUES"]
+         f"VALUES ('{sql_str(title)}', {servings}, {cook}, 0, {n['cal']}, {n['prot']}, {n['carb']}, {n['fat']}, {n['fibre']}, {n['sugar']}, {url});"]
+    for line_no, raw in unmatched:
+        L.append(UNMATCHED_MARK + ("-" if line_no is None else str(line_no)) + " " + " ".join((raw or "").split()))
+    L += ["INSERT INTO recipe_ingredient (recipe_ingredient_recipe_id, recipe_ingredient_item_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed, recipe_ingredient_to_taste) VALUES"]
     rows = []
     for name, unit, qty, to_taste, iid, conf, note in matched:
         tag = "" if conf in CONFIDENT else f"   -- REVIEW ({conf}): {name} | {note}"

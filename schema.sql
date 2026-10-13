@@ -13,7 +13,9 @@ CREATE TABLE inventory_item (
 	inventory_item_unit	TEXT NOT NULL,
 	inventory_item_category	TEXT NOT NULL,
 	inventory_item_subcategory	TEXT,
-	inventory_item_earliest_exp_date DATE);
+	inventory_item_earliest_exp_date DATE,
+	-- contains alcohol as an ingredient (wine, beer, spirits, liqueur, cooking wine ...); migration 0012
+	inventory_item_alcohol BOOLEAN NOT NULL DEFAULT FALSE);
 
 CREATE TABLE meal_plan ( meal_plan_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
@@ -148,16 +150,39 @@ CREATE TABLE recipe_tag (recipe_tag_recipe_id INTEGER,
 
 CREATE INDEX recipe_tag_by_tag ON recipe_tag (recipe_tag_id, recipe_tag_recipe_id);
 
--- Which animal(s) a meat / fish catalogue item comes from (migration 0011). Filled by ItemAnimalRunner
+-- Which animal(s) a catalogue item comes from (migrations 0011 / 0012). Filled by ItemAnimalRunner
 -- --apply after review; an item can have several (gemischtes Hackfleisch = Rind + Schwein).
+-- certainty: 'certain' = the item IS from this animal (gives the recipe a Tier tag); 'possible' = a generic
+-- item (Salami, Gelatine ...) that exists from this animal and the recipe does not say: no Tier tag, but it
+-- blocks vegetarisch and makes a recipe "anpassbar" for a household that excludes the animal.
 CREATE TABLE inventory_item_animal (
 	inventory_item_animal_item_id INTEGER NOT NULL,
 	inventory_item_animal_animal VARCHAR(20) NOT NULL,
+	inventory_item_animal_certainty VARCHAR(10) NOT NULL DEFAULT 'certain',
 	PRIMARY KEY (inventory_item_animal_item_id, inventory_item_animal_animal),
 	CONSTRAINT inventory_item_animal_is_tier
 		CHECK (inventory_item_animal_animal IN
-			('Hähnchen', 'Pute', 'Rind', 'Schwein', 'Lamm', 'Kalb', 'Wild', 'Fisch', 'Meeresfrüchte')),
+			('Hähnchen', 'Pute', 'Geflügel', 'Ente', 'Gans', 'Rind', 'Schwein', 'Lamm', 'Kalb', 'Wild',
+			 'Kaninchen', 'Pferd', 'Fisch', 'Meeresfrüchte')),
+	CONSTRAINT inventory_item_animal_certainty_valid
+		CHECK (inventory_item_animal_certainty IN ('certain', 'possible')),
 	FOREIGN KEY (inventory_item_animal_item_id) REFERENCES inventory_item(inventory_item_id));
+
+-- Recipe lines that have no catalogue item (migration 0012): 'unmatched' = a line the importer could not
+-- match (raw_text is the page line), 'unchecked' = the recipe's page could not be compared (no line).
+-- A recipe with ANY row here is "unklar" for diet purposes: it is never tagged vegetarisch / vegan.
+CREATE TABLE recipe_unmatched_ingredient (
+	recipe_unmatched_ingredient_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+	recipe_unmatched_ingredient_recipe_id INTEGER NOT NULL,
+	recipe_unmatched_ingredient_line_no INTEGER NULL,
+	recipe_unmatched_ingredient_raw_text VARCHAR(500) NOT NULL,
+	recipe_unmatched_ingredient_reason VARCHAR(10) NOT NULL,
+	recipe_unmatched_ingredient_created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	CONSTRAINT recipe_unmatched_ingredient_reason_valid
+		CHECK (recipe_unmatched_ingredient_reason IN ('unmatched', 'unchecked')),
+	FOREIGN KEY (recipe_unmatched_ingredient_recipe_id) REFERENCES recipe(recipe_id));
+
+CREATE INDEX recipe_unmatched_ingredient_by_recipe ON recipe_unmatched_ingredient (recipe_unmatched_ingredient_recipe_id);
 
 CREATE TABLE store_product (
     store_product_id                INTEGER PRIMARY KEY AUTO_INCREMENT,

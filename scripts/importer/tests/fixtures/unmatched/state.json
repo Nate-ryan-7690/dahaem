@@ -1,0 +1,91 @@
+{
+ "_comment": "Database state for the unmatched-lines tool test (made-up recipes). FindUnmatchedSqlTest (Java) loads the same file into a throwaway MariaDB and applies expected_unmatched.sql to it.",
+ "items": [
+  [
+   40,
+   "onions",
+   "zwiebel"
+  ],
+  [
+   2,
+   "spaghetti",
+   "spaghetti"
+  ]
+ ],
+ "recipes": [
+  {
+   "id": 1,
+   "name": "Made-up Pasta mit Speck",
+   "source_url": "https://example.test/recipes/speck-0001"
+  },
+  {
+   "id": 2,
+   "name": "Made-up Pasta komplett",
+   "source_url": "https://example.test/recipes/komplett-0002"
+  },
+  {
+   "id": 3,
+   "name": "Made-up Rezept ohne URL",
+   "source_url": null
+  },
+  {
+   "id": 4,
+   "name": "Made-up Rezept ohne Seite",
+   "source_url": "https://example.test/recipes/fehlt-0004"
+  },
+  {
+   "id": 5,
+   "name": "Made-up Rezept Seite weg",
+   "source_url": "https://example.test/recipes/weg-0005"
+  },
+  {
+   "id": 6,
+   "name": "Made-up Pasta nie gespeichert",
+   "source_url": "https://example.test/recipes/nie-0006"
+  },
+  {
+   "id": 7,
+   "name": "Made-up Wasser und Soße",
+   "source_url": "https://example.test/recipes/sosse-0007/"
+  },
+  {
+   "id": 8,
+   "name": "Made-up doppelter Speck",
+   "source_url": "https://example.test/recipes/doppelt-0008"
+  }
+ ],
+ "ingredients": [
+  {
+   "recipe_id": 1,
+   "item_id": 40
+  },
+  {
+   "recipe_id": 1,
+   "item_id": 2
+  },
+  {
+   "recipe_id": 2,
+   "item_id": 40
+  },
+  {
+   "recipe_id": 2,
+   "item_id": 2
+  },
+  {
+   "recipe_id": 3,
+   "item_id": 40
+  },
+  {
+   "recipe_id": 6,
+   "item_id": 40
+  },
+  {
+   "recipe_id": 7,
+   "item_id": 40
+  },
+  {
+   "recipe_id": 8,
+   "item_id": 40
+  }
+ ]
+}

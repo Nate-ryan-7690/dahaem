@@ -82,8 +82,8 @@ class RecipeTagServiceTest {
         assertEquals(List.of("Hähnchen", "kalorienarm", "schnell"), tags(meaty, "derived"));
         assertEquals(List.of("kalorienarm", "schnell"), tags(sausage, "derived"),
                 "meat with no recorded animal is not vegetarian, and gets no Tier tag");
-        assertEquals(List.of("kalorienarm", "schnell"), tags(empty, "derived"),
-                "no ingredients: diet unknown, so neither vegetarisch nor vegan");
+        assertEquals(List.of("kalorienarm", "schnell", "unklar"), tags(empty, "derived"),
+                "no ingredients: diet unknown, so neither vegetarisch nor vegan, and the recipe is unklar");
         assertEquals(1, plan.recipesWithoutIngredients());
         assertEquals(0, plan.recipesWithUnlinkedIngredient(), "recipe_ingredient cannot hold a line without an item");
     }
@@ -205,5 +205,108 @@ class RecipeTagServiceTest {
         assertTrue(byReason.get("not vegetarian: category meat").stream().anyMatch(i -> i.id() == unclassifiedSausage));
         assertTrue(byReason.get("not vegan: category dairy").stream().anyMatch(i -> i.id() == butter));
         assertFalse(byReason.get("not vegan: category dairy").stream().anyMatch(i -> i.id() == oat));
+    }
+
+    @Test
+    void aRecipeWithAnUnmatchedLineIsUnklarAndNeverVegetarianOrVegan() {
+        int soup = TagFixtures.recipe("Möhrensuppe mit Speck", 10, 20, 300, 8);
+        TagFixtures.ingredient(soup, carrot);
+        TagFixtures.unmatched(soup, 2, "50 g Speck", "unmatched");   // the line the importer dropped
+        int unchecked = TagFixtures.recipe("Möhrensuppe ohne Seite", 10, 20, 300, 8);
+        TagFixtures.ingredient(unchecked, carrot);
+        TagFixtures.unmatched(unchecked, null, "(keine Quell-URL)", "unchecked");
+        int plain = TagFixtures.recipe("Möhrensuppe", 10, 20, 300, 8);
+        TagFixtures.ingredient(plain, carrot);
+
+        RecipeTagService.Plan plan = service.commit(service.plan());
+
+        assertEquals(List.of("kalorienarm", "schnell", "unklar"), tags(soup, "derived"));
+        assertEquals(List.of("kalorienarm", "schnell", "unklar"), tags(unchecked, "derived"));
+        assertEquals(List.of("kalorienarm", "schnell", "vegan", "vegetarisch"), tags(plain, "derived"));
+        assertEquals(2, plan.recipesDietUnknown());
+        assertEquals(1, plan.recipesUnmatched());
+        assertEquals(1, plan.recipesUnchecked());
+        assertEquals(1, count("SELECT COUNT(*) FROM tag WHERE tag_name = 'unklar' AND tag_category = 'Ernährung'"));
+        String text = plan.toText();
+        assertTrue(text.contains("unmatched ingredient lines (recipe_unmatched_ingredient 'unmatched'): 1")
+                && text.contains("page not checked (recipe_unmatched_ingredient 'unchecked'): 1"), text);
+    }
+
+    @Test
+    void unklarGoesAwayWhenTheRowsAreRemovedAndTheRerunDerivesVegetarianAgain() {
+        int soup = TagFixtures.recipe("Möhrensuppe", 10, 20, 300, 8);
+        TagFixtures.ingredient(soup, carrot);
+        TagFixtures.unmatched(soup, 2, "50 g Speck", "unmatched");
+        service.commit(service.plan());
+        assertTrue(tags(soup, "derived").contains("unklar"));
+
+        TagFixtures.run("DELETE FROM recipe_unmatched_ingredient WHERE recipe_unmatched_ingredient_recipe_id = ?", soup);
+        service.commit(service.plan());
+
+        assertEquals(List.of("kalorienarm", "schnell", "vegan", "vegetarisch"), tags(soup, "derived"));
+    }
+
+    @Test
+    void aPossibleAnimalGivesNoTierTagButBlocksVegetarian() {
+        TagFixtures.animalWithCertainty(unclassifiedSausage, "Schwein", "possible");
+        TagFixtures.animalWithCertainty(unclassifiedSausage, "Rind", "possible");
+        int jelly = TagFixtures.item("gelatine", "baking supplies", null);   // not meat: only its possible animals block
+        TagFixtures.animalWithCertainty(jelly, "Schwein", "possible");
+        TagFixtures.animalWithCertainty(jelly, "Rind", "possible");
+        int dessert = TagFixtures.recipe("Panna Cotta", 10, 20, 300, 8);
+        TagFixtures.ingredient(dessert, jelly);
+        TagFixtures.ingredient(dessert, carrot);
+        int sausage = TagFixtures.recipe("Wurstsalat", 10, 20, 400, 8);
+        TagFixtures.ingredient(sausage, unclassifiedSausage);
+
+        service.commit(service.plan());
+
+        assertEquals(List.of("kalorienarm", "schnell"), tags(dessert, "derived"),
+                "possible Schwein / Rind: no Tier tag, not vegetarisch");
+        assertEquals(List.of("kalorienarm", "schnell"), tags(sausage, "derived"));
+    }
+
+    @Test
+    void alcoholAndMeatWithMilkAreInhaltTags() {
+        int wine = TagFixtures.item("rotwein", "beverages", "wine");
+        TagFixtures.alcohol(wine);
+        int cheese = TagFixtures.item("gouda", "dairy", "cheese");
+        int stew = TagFixtures.recipe("Rindergulasch mit Rotwein", 30, 90, 700, 40);
+        TagFixtures.ingredient(stew, mince);
+        TagFixtures.ingredient(stew, wine);
+        int gratin = TagFixtures.recipe("Hähnchen überbacken", 20, 20, 800, 50);
+        TagFixtures.ingredient(gratin, chicken);
+        TagFixtures.ingredient(gratin, cheese);
+        int possibleOnly = TagFixtures.recipe("Salami-Pizza", 20, 20, 800, 10);
+        TagFixtures.animalWithCertainty(unclassifiedSausage, "Schwein", "possible");
+        TagFixtures.ingredient(possibleOnly, unclassifiedSausage);
+        TagFixtures.ingredient(possibleOnly, cheese);
+        int fishWithCream = TagFixtures.recipe("Lachs in Sahne", 20, 20, 500, 10);
+        int salmon = TagFixtures.item("lachsfilet", "fish & seafood", "fresh fish");
+        TagFixtures.animal(salmon, "Fisch");
+        TagFixtures.ingredient(fishWithCream, salmon);
+        TagFixtures.ingredient(fishWithCream, butter);
+        int veg = TagFixtures.recipe("Möhren in Butter", 20, 20, 500, 10);
+        TagFixtures.ingredient(veg, carrot);
+        TagFixtures.ingredient(veg, butter);
+
+        service.commit(service.plan());
+
+        assertTrue(tags(stew, "derived").contains("Alkohol"));
+        assertEquals(1, count("SELECT COUNT(*) FROM tag WHERE tag_name = 'Alkohol' AND tag_category = 'Inhalt'"));
+        assertFalse(tags(stew, "derived").contains("Fleisch mit Milch"));
+        assertTrue(tags(gratin, "derived").contains("Fleisch mit Milch"));
+        assertEquals(1, count("SELECT COUNT(*) FROM tag WHERE tag_name = 'Fleisch mit Milch' AND tag_category = 'Inhalt'"));
+        assertTrue(tags(possibleOnly, "derived").contains("Fleisch mit Milch"), "a possible land animal counts");
+        assertFalse(tags(fishWithCream, "derived").contains("Fleisch mit Milch"), "fish is not meat for this");
+        assertFalse(tags(veg, "derived").contains("Fleisch mit Milch"));
+        assertFalse(tags(veg, "derived").contains("Alkohol"));
+    }
+
+    @Test
+    void theRunStopsWithAClearMessageWhenMigration0012IsMissing() {
+        TagFixtures.run("DROP TABLE recipe_unmatched_ingredient");
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> service.plan());
+        assertTrue(e.getMessage().contains("0012_diet_filter.sql"), e.getMessage());
     }
 }

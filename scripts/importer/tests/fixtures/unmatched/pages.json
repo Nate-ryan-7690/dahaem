@@ -1,0 +1,84 @@
+{
+ "https://example.test/recipes/speck-0001": {
+  "name": "Made-up Pasta mit Speck",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "2 Stück Zwiebel",
+   "200 g Spaghetti",
+   "50 g Speck"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles kochen."
+   }
+  ]
+ },
+ "https://example.test/recipes/komplett-0002": {
+  "name": "Made-up Pasta komplett",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "2 Stück Zwiebel",
+   "200 g Spaghetti"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles kochen."
+   }
+  ]
+ },
+ "https://example.test/recipes/nie-0006": {
+  "name": "Made-up Pasta nie gespeichert",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "2 Stück Zwiebel",
+   "200 g Spaghetti"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles kochen."
+   }
+  ]
+ },
+ "https://example.test/recipes/sosse-0007": {
+  "name": "Made-up Wasser und Soße",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "1 Liter Wasser",
+   "2 Stück Zwiebel",
+   "100 g Mamas 'Spezial' Soße",
+   "Stück Speck"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles kochen."
+   }
+  ]
+ },
+ "https://example.test/recipes/doppelt-0008": {
+  "name": "Made-up doppelter Speck",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "100 g Speck",
+   "2 Stück Zwiebel",
+   "100 g Speck"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles kochen."
+   }
+  ]
+ },
+ "https://example.test/recipes/ohne-bestand-0009": {
+  "name": "Made-up Seite ohne Rezept in der DB",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "1 Stück Zwiebel",
+   "3 Stück Tofu"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles kochen."
+   }
+  ]
+ }
+}

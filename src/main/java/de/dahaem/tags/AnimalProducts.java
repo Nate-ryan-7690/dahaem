@@ -109,6 +109,28 @@ public final class AnimalProducts {
         return Optional.empty();
     }
 
+    /** Milk products only (not egg, not mayonnaise): what "Fleisch mit Milch" is about. */
+    private static final Pattern MILK_WORD = Pattern.compile(
+            "milch|sahne(?!steif)|rahm|butter(?!nut|brot)|joghurt|jogurt|quark|käse|kase|kefir|molke|ghee|schmand"
+                    + "|crème fraîche|creme fraiche|mascarpone|ricotta|mozzarella|parmesan");
+
+    /**
+     * True if the item is a milk product (milk, cream, butter, cheese, yoghurt ...). An item that is itself meat
+     * or has an animal in its name (Leberkäse) is not; plant drinks and spreads are not.
+     */
+    public static boolean isMilkProduct(CatalogItem item) {
+        String name = AnimalClassifier.normalise(item.name());
+        if (isPlantBased(item, name) || MEAT_CATEGORIES.contains(item.category())
+                || AnimalClassifier.mentionsAnimal(name)) {
+            return false;
+        }
+        String plainName = PLANT_DAIRY_WORD.matcher(name).replaceAll(" ");
+        if (DAIRY_CATEGORIES.contains(item.category())) {
+            return !DAIRY_ALTERNATIVE.matcher(name).find() && !EGG.matcher(name).find();
+        }
+        return MILK_WORD.matcher(plainName).find();
+    }
+
     private static boolean isPlantBased(CatalogItem item, String name) {
         return item.category().equals("plant-based") || PLANT_BASED.matcher(name).find();
     }

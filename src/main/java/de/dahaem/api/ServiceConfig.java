@@ -2,6 +2,9 @@ package de.dahaem.api;
 
 import de.dahaem.auth.AccountRepository;
 import de.dahaem.auth.AccountService;
+import de.dahaem.diet.DietFilterRepository;
+import de.dahaem.diet.DietFilterService;
+import de.dahaem.diet.DietPresets;
 import de.dahaem.finance.PurchaseRepository;
 import de.dahaem.finance.PurchaseService;
 import de.dahaem.inventory.InventoryRepository;
@@ -115,5 +118,21 @@ public class ServiceConfig {
     @Bean
     public SuggestionService suggestionService(SuggestionRepository suggestionRepository) {
         return new SuggestionService(suggestionRepository);
+    }
+
+    @Bean
+    public DietFilterRepository dietFilterRepository() {
+        return new DietFilterRepository();
+    }
+
+    /** Presets come from config/diet_presets.json (relative to the working directory, /app in the container). */
+    @Bean
+    public DietPresets dietPresets() {
+        return DietPresets.load(DietPresets.DEFAULT_FILE);
+    }
+
+    @Bean
+    public DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets) {
+        return new DietFilterService(dietFilterRepository, dietPresets);
     }
 }

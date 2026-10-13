@@ -82,16 +82,24 @@ needs the item, no amount). To-taste rows never reach a shopping list. Changed b
 `recipe_instructions_step_number`, `recipe_instructions_instruction`,
 `recipe_instructions_notes` (nullable), `recipe_instructions_source`.
 
-### `tag`, `recipe_tag`, `inventory_item_animal` — recipe tags
+### `tag`, `recipe_tag`, `inventory_item_animal`, `recipe_unmatched_ingredient` — recipe tags and the diet filter
 
-`tag`: `tag_id` (PK), `tag_name` (UNIQUE), `tag_category` (the group: Tier, Ernährung, Zeit, Nährwerte,
+`tag`: `tag_id` (PK), `tag_name` (UNIQUE), `tag_category` (the group: Tier, Ernährung, Inhalt, Zeit, Nährwerte,
 Küche for the derived tags). `recipe_tag`: `(recipe_tag_recipe_id, recipe_tag_id)` PK, FKs to `recipe` and
 `tag`, `recipe_tag_source` `'manual'` (default; added by a person or the API) or `'derived'` (written by
 `RecipeTagRunner`, the only rows it ever replaces), and an index `recipe_tag_by_tag (recipe_tag_id,
 recipe_tag_recipe_id)` for "all recipes with tag X". `inventory_item_animal`: `(inventory_item_animal_item_id,
-inventory_item_animal_animal)` PK, FK to `inventory_item`, CHECK animal in Hähnchen, Pute, Rind, Schwein,
-Lamm, Kalb, Wild, Fisch, Meeresfrüchte; an item can have several. All added by migration 0011; SQL in
-`TagRepository`, `ItemAnimalRepository` and `RecipeTagRepository` (package `de.dahaem.tags`).
+inventory_item_animal_animal)` PK, FK to `inventory_item`, CHECK animal in Hähnchen, Pute, Geflügel, Ente, Gans, Rind,
+Schwein, Lamm, Kalb, Wild, Kaninchen, Pferd, Fisch, Meeresfrüchte; an item can have several;
+`inventory_item_animal_certainty` `'certain'` (default; gives a Tier tag) or `'possible'` (a generic item such as
+Salami or Gelatine that may be from this animal: no Tier tag, blocks vegetarisch, feeds "anpassbar").
+`inventory_item.inventory_item_alcohol` (BOOLEAN, default FALSE): the item contains alcohol as an ingredient.
+`recipe_unmatched_ingredient`: `recipe_unmatched_ingredient_id` (PK), `_recipe_id` (FK to `recipe`, indexed),
+`_line_no` (position on the recipe page, NULL for an unchecked recipe), `_raw_text` (the page line, VARCHAR(500)),
+`_reason` `'unmatched'` (a line with no catalogue item; `recipe_ingredient_item_id` is NOT NULL, so the importer used
+to drop it) or `'unchecked'` (no URL / page; no line), `_created_at`. A recipe with ANY row here is "unklar". Added by
+migrations 0011 and 0012; SQL in `TagRepository`, `ItemAnimalRepository`, `RecipeTagRepository` (package
+`de.dahaem.tags`) and `DietFilterRepository` (package `de.dahaem.diet`).
 
 ### `store`, `brand`
 
