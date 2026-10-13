@@ -283,7 +283,8 @@ class ApiSmokeTest {
     @Test
     void instructionsGainAScaledInstructionForPeopleAndBasis() throws Exception {
         // Made-up steps in HelloFresh's notation: 2-person value [3-person | 4-person].
-        String butter = "Erhitze 1 EL [1,5 EL | 2 EL] Butter* und gib 500 g Wasser* dazu. Backe 20 Min. bei 200 °C.";
+        // Every amount keeps its own unit: 1 EL butter and 250 ml water are two separate amounts.
+        String butter = "Erhitze 1 EL [1,5 EL | 2 EL] Butter* und gib 250 ml Wasser* dazu.";
         String varoma = "Gib 10 g [20 g] Öl* in den Mixtopf [und im Varoma-Behälter].";
         int recipeId = insertRecipe("Schritt-Mengen-Testrezept", 2);
         int rangeId = insertRecipe("Schritt-Mengen-Spanne-Testrezept", 3, 4);
@@ -298,7 +299,7 @@ class ApiSmokeTest {
                     .andExpect(jsonPath("$.instructions[0].stepNumber").value(1))
                     .andExpect(jsonPath("$.instructions[0].instruction").value(butter))
                     .andExpect(jsonPath("$.instructions[0].scaledInstruction")
-                            .value("Erhitze 1 EL Butter* und gib 500 g Wasser* dazu. Backe 20 Min. bei 200 °C."))
+                            .value("Erhitze 1 EL Butter* und gib 250 ml Wasser* dazu."))
                     .andExpect(jsonPath("$.instructions[1].scaledInstruction")
                             .value("Gib 10 g Öl* in den Mixtopf [und im Varoma-Behälter]."));
 
@@ -307,21 +308,21 @@ class ApiSmokeTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.instructions[0].instruction").value(butter))
                     .andExpect(jsonPath("$.instructions[0].scaledInstruction")
-                            .value("Erhitze 1½ EL Butter* und gib 750 g Wasser* dazu. Backe 20 Min. bei 200 °C."))
+                            .value("Erhitze 1½ EL Butter* und gib 375 ml Wasser* dazu."))
                     .andExpect(jsonPath("$.instructions[1].scaledInstruction")
                             .value("Gib 15 g Öl* in den Mixtopf [und im Varoma-Behälter]."));
 
             mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.instructions[0].scaledInstruction")
-                            .value("Erhitze 2 EL Butter* und gib 1000 g Wasser* dazu. Backe 20 Min. bei 200 °C."))
+                            .value("Erhitze 2 EL Butter* und gib 500 ml Wasser* dazu."))
                     .andExpect(jsonPath("$.instructions[1].scaledInstruction")
                             .value("Gib 20 g Öl* in den Mixtopf [und im Varoma-Behälter]."));
 
             mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "1"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.instructions[0].scaledInstruction")
-                            .value("Erhitze ½ EL Butter* und gib 250 g Wasser* dazu. Backe 20 Min. bei 200 °C."));
+                            .value("Erhitze ½ EL Butter* und gib 125 ml Wasser* dazu."));
 
             // a "3 – 4 Personen" range scales the outer value from servings, or from servingsMax with basis=max
             mvc.perform(get("/api/recipes/{id}", rangeId).param("people", "2"))

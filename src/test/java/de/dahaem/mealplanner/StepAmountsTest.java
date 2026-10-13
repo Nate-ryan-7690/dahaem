@@ -258,6 +258,67 @@ class StepAmountsTest {
                 "Backe alles bei 200 °C.");
     }
 
+    // --- a unit at the end of a sentence ("Minuten.", "Grad.", "g.") --------------------------------
+
+    @Test
+    void timeWordAtTheSentenceEndAfterATwoValueBracket() {
+        assertAllSizes("Backe 10 [12 | 14] Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 12 Minuten.",
+                "Backe 14 Minuten.",
+                "Backe 10 Minuten.");
+    }
+
+    @Test
+    void timeWordAtTheSentenceEndAfterASingleValueBracket() {
+        assertAllSizes("Backe 10 [12] Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 10 Minuten.",
+                "Backe 12 Minuten.",
+                "Backe 10 Minuten.");
+    }
+
+    @Test
+    void gradAtTheSentenceEnd() {
+        assertAllSizes("Heize auf 200 [220] Grad.",
+                "Heize auf 200 Grad.",
+                "Heize auf 200 Grad.",
+                "Heize auf 200 Grad.",
+                "Heize auf 200 Grad.",
+                "Heize auf 220 Grad.",
+                "Heize auf 200 Grad.");
+    }
+
+    @Test
+    void stufeWithTheBracketAtTheSentenceEnd() {
+        assertAllSizes("Rühre auf Stufe 2 [3].",
+                "Rühre auf Stufe 2.",
+                "Rühre auf Stufe 2.",
+                "Rühre auf Stufe 2.",
+                "Rühre auf Stufe 2.",
+                "Rühre auf Stufe 3.",
+                "Rühre auf Stufe 2.");
+    }
+
+    @Test
+    void measuringUnitAtTheSentenceEndIsStillGrams() {
+        assertAllSizes("Gib 150 [225 | 300] g.",
+                "Gib 150 g.",
+                "Gib 75 g.",
+                "Gib 150 g.",
+                "Gib 225 g.",
+                "Gib 300 g.",
+                "Gib 450 g.");
+        // formatted as grams (7,5), not as a count (7½)
+        assertEquals("Gib 7,5 g.", two("Gib 15 [25 | 30] g.", 1));
+        assertEquals("Gib 25 g.", two("Gib 15 [25 | 30] g.", 3));
+        assertEquals("Gib 22,5 g.", two("Gib 15 [30] g.", 3));   // no 3-person value: scaled, as grams
+    }
+
     @Test
     void nonAmountBracketsInARangeRecipeKeepThe2PersonValue() {
         assertEquals("Backe 10 Min.", StepAmounts.render("Backe 10 [12] Min.", 3, 4, 6, false));

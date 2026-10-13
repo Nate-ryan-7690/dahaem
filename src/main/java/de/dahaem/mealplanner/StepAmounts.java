@@ -93,6 +93,7 @@ public final class StepAmounts {
     private static final Set<String> MEASURING_UNITS = Set.of("g", "kg", "ml", "l", "el", "tl", "prise", "prisen",
             "msp.", "msp");
     private static final Set<String> DECIMAL_UNITS = Set.of("g", "kg", "ml", "l");
+    private static final Set<String> WHOLE_FROM_100_UNITS = Set.of("g", "ml");
 
     // Units that are not amounts: picked per size like words, never scaled.
     private static final Set<String> NON_AMOUNT_UNITS = Set.of("min", "min.", "minute", "minuten", "sek", "sek.",
@@ -269,7 +270,7 @@ public final class StepAmounts {
             return null;
         }
         String unit = m.group(1);
-        return MEASURING_UNITS.contains(unit.toLowerCase(Locale.ROOT)) || isNonAmount(unit) ? unit : null;
+        return isUnitIn(MEASURING_UNITS, unit) || isNonAmount(unit) ? unit : null;
     }
 
     /** HelloFresh's own value for the requested size, or null (2 people, missing size, other counts, untrusted). */
@@ -389,7 +390,20 @@ public final class StepAmounts {
     }
 
     private static boolean isNonAmount(String unit) {
-        return unit != null && NON_AMOUNT_UNITS.contains(unit.toLowerCase(Locale.ROOT));
+        return isUnitIn(NON_AMOUNT_UNITS, unit);
+    }
+
+    /**
+     * Whether a unit word is in {@code units}, as written or with one trailing dot removed: a sentence-ending
+     * full stop is captured with the word ("Backe 10 [12] Minuten.", "Gib 150 [225 | 300] g."), while "Min." /
+     * "Msp." are listed with their dot. Only the lookup ignores the dot; the text keeps it.
+     */
+    private static boolean isUnitIn(Set<String> units, String unit) {
+        if (unit == null) {
+            return false;
+        }
+        String u = unit.toLowerCase(Locale.ROOT);
+        return units.contains(u) || (u.endsWith(".") && units.contains(u.substring(0, u.length() - 1)));
     }
 
     private static Amount scale(Amount amount, Context ctx) {
@@ -449,10 +463,9 @@ public final class StepAmounts {
      * where they fit, otherwise a decimal.
      */
     static String formatNumber(BigDecimal value, String unit) {
-        String u = unit == null ? "" : unit.toLowerCase(Locale.ROOT);
         BigDecimal v = value.setScale(2, RoundingMode.HALF_UP);
-        if (DECIMAL_UNITS.contains(u) || isNonAmount(unit)) {
-            if (u.equals("g") || u.equals("ml")) {
+        if (isUnitIn(DECIMAL_UNITS, unit) || isNonAmount(unit)) {
+            if (isUnitIn(WHOLE_FROM_100_UNITS, unit)) {
                 v = v.setScale(v.compareTo(BigDecimal.valueOf(100)) >= 0 ? 0 : 1, RoundingMode.HALF_UP);
             }
             return decimal(v);
