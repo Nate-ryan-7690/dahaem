@@ -10,10 +10,10 @@ import static de.dahaem.receipts.ReceiptText.MONEY;
 /**
  * PENNY (REWE Group) layout. Item lines end in a tax group letter ("NAME  2,79 B") -- the
  * opposite letter meaning to ALDI's digits, which is why the mapping is read from the footer.
- * A trailing " *" after the letter marks a product excluded from discounts. Discounts, Pfand,
- * Leergut and Treueartikel are recognised before the generic item pattern, because several of
- * them end in "amount letter" too. Known header/footer and card-payment lines are recognised and
- * skipped; card number, Terminal-ID, Trace-Nr., Pos-Info, AS-Zeit and signature/serial lines are
+ * A trailing " *" after the letter marks a product excluded from discounts. Discounts, app
+ * coupons, Pfand, Leergut and Treueartikel are recognised before the generic item pattern,
+ * because several of them end in "amount letter" too. Known header/footer and card-payment
+ * lines are recognised and skipped; card number, Terminal-ID, Trace-Nr., Pos-Info, AS-Zeit and signature/serial lines are
  * never kept (most are already dropped by {@link ReceiptText#lines}).
  */
 final class PennyReceiptFormat implements ReceiptStoreFormat {
@@ -25,6 +25,15 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
     private static final Pattern WEIGHT = Pattern.compile("^(\\d+,\\d{3})\\s*kg\\s*x\\s*(\\d+,\\d{2})\\s*EUR\\s*/\\s*kg$");
     private static final Pattern MULTI = Pattern.compile("^(\\d+)\\s*Stk\\s*x\\s*(\\d+,\\d{2})$");
     private static final Pattern APP_RABATT = Pattern.compile("^(App-Preis-Rabatt)\\s+(" + MONEY + ")\\s+[A-Z](\\s*\\*)?$");
+    /**
+     * App coupons print like a product with a negative amount: "App-Coupon  -0,50 B",
+     * "App-Coupon 10% Waren  -1,20 B", or a brand with a percentage, "Ferrero Kinder 25%  -0,50 B".
+     * They are discounts on the product line before them, never products themselves. A "...Rabatt nn%"
+     * line stays a generic discount.
+     */
+    private static final Pattern COUPON = Pattern.compile(
+            "^(?!.*[Rr]abatt)(App-?Coupon\\b.*?|.*?\\S\\s+\\d{1,2}\\s?%)\\s+([-−]\\d+,\\d{2})(\\s+[A-Z])?(\\s*\\*)?$");
+    private static final Pattern FRESHNESS = Pattern.compile("(?i)^Frische-?rabatt\\b.*");
     private static final Pattern OTHER_RABATT = Pattern.compile("^(.*[Rr]abatt.*?)\\s+([-−]\\d+,\\d{2})(\\s+[A-Z])?(\\s*\\*)?$");
     private static final Pattern PFAND = Pattern.compile("^(PFAND\\s+\\d+,\\d{2}\\s*EURO?)\\s+(" + MONEY + ")\\s+[A-Z](\\s*\\*)?$");
     /** A deposit return on one line: "LEERGUT EINWEG  -0,75 A *", "LEERG. EW E. ST  -0,50 B *". */
@@ -158,6 +167,8 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
             Last now = Last.OTHER;
             if ((m = APP_RABATT.matcher(line)).matches()) {
                 b.adjust(AdjustmentType.APP_RABATT, m.group(1), ReceiptText.money(m.group(2)));
+            } else if ((m = COUPON.matcher(line)).matches()) {
+                b.adjust(AdjustmentType.APP_COUPON, m.group(1).strip(), ReceiptText.money(m.group(2)));
             } else if ((m = PFAND.matcher(line)).matches()) {
                 b.adjust(AdjustmentType.PFAND_DEPOSIT, m.group(1), ReceiptText.money(m.group(2)));
                 now = Last.PFAND;
@@ -180,7 +191,9 @@ final class PennyReceiptFormat implements ReceiptStoreFormat {
                 // count line of a multi-unit Pfand or Leergut line, not of the product
                 b.annotateLastAdjustment(Integer.parseInt(m.group(1)), ReceiptText.money(m.group(2)), line);
             } else if ((m = OTHER_RABATT.matcher(line)).matches()) {
-                b.adjust(AdjustmentType.OTHER, m.group(1).strip(), ReceiptText.money(m.group(2)));
+                String what = m.group(1).strip();
+                b.adjust(FRESHNESS.matcher(what).matches() ? AdjustmentType.FRESHNESS_DISCOUNT : AdjustmentType.OTHER,
+                        what, ReceiptText.money(m.group(2)));
             } else if ((m = WEIGHT.matcher(line)).matches()
                     && b.weight(ReceiptText.kilos(m.group(1)), ReceiptText.money(m.group(2)))) {
                 // handled

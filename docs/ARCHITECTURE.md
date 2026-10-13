@@ -16,7 +16,7 @@ split:
 | `repository` | All SQL for that feature, parameterized      | Business logic               |
 | `service`    | Business logic only                          | SQL, UI/console code         |
 
-Console runners (`Main`, `ShoppingListDemo`, `StoreImportRunner`) sit outside this
+Console runners (`Main`, `ShoppingListDemo`, `StoreImportRunner`, `ReceiptImportRunner`) sit outside this
 split on purpose: they are temporary entry points that exercise the services until
 a web layer replaces them, and are expected to disappear without the service layer
 changing. New code should call into a `*Service`, not open a `Connection` or issue
@@ -40,6 +40,9 @@ src/main/java/de/dahaem/
   stores/       importers + raw/verified store data model (see below)
   shopping/     shopping list assembly (in progress)
   finance/      purchases (planned — currently empty stub classes only)
+  receipts/     receipt text -> ParsedReceipt (ReceiptParser, per-store formats); PENNY receipt import into
+                purchase_receipt* (ReceiptNames, ReceiptMatcher, ReceiptRepository, ReceiptImportService,
+                ReceiptImportRunner) -- never touches stock
 ```
 
 - **`auth`** — the identity model: `household`, `app_user` and

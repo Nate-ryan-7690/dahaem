@@ -333,4 +333,94 @@ class PennyReceiptFormatTest {
         assertEquals(List.of(), ReceiptText.lines("XyZaBcDeFgHiJkLmNoPq\nAbCdEfGhIjKlMnOp\nQUJDREVGR0g=\n"));
         assertEquals(List.of("Contactless", "KINDERPONCHO"), ReceiptText.lines("Contactless\nKINDERPONCHO"));
     }
+
+    // ---- app coupons are adjustments on the product before them, not products ---------------
+
+    @Test
+    void appCouponsAttachToThePrecedingProductAndTheReceiptStillBalances() {
+        ParsedReceipt r = penny("""
+                     HACKFLEISCH                     4,49 B
+                     App-Coupon                     -1,00 B
+                     KONFITUERE                      2,49 B
+                     App-Coupon 10% Waren           -0,25 B
+                     CHIPS GESALZEN                  1,79 B
+                     App-Coupon 7% Chips            -0,13 B
+                     KINDER RIEGEL                   2,29 B
+                     Ferrero Kinder 25%             -0,57 B
+                     SUMME                    EUR     9,11
+                """);
+        assertEquals(List.of("HACKFLEISCH", "KONFITUERE", "CHIPS GESALZEN", "KINDER RIEGEL"),
+                r.lines().stream().map(ReceiptLine::rawName).toList(), "coupons are not products");
+        assertTrue(r.unparsedLines().isEmpty(), r.unparsedLines().toString());
+        assertEquals(4, r.adjustments().size());
+        assertTrue(r.adjustments().stream().allMatch(a -> a.type() == AdjustmentType.APP_COUPON && a.type().isDiscount()));
+
+        ReceiptAdjustment kinder = r.adjustmentsFor(indexOf(r, "KINDER RIEGEL")).get(0);
+        assertEquals("Ferrero Kinder 25%", kinder.description());
+        assertNum("-0.57", kinder.amount());
+        assertEquals("App-Coupon 10% Waren", r.adjustmentsFor(indexOf(r, "KONFITUERE")).get(0).description());
+        assertNum("3.49", r.paidTotal(indexOf(r, "HACKFLEISCH")));
+        assertNum("1.66", r.paidTotal(indexOf(r, "CHIPS GESALZEN")));
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void couponAfterAppPriceDiscountStillAttachesToTheSameProduct() {
+        ParsedReceipt r = penny("""
+                     ESL MILCH 3,5%                  1,19 B
+                     App-Preis-Rabatt               -0,20 B
+                     App-Coupon                     -0,10 B
+                     SUMME                    EUR     0,89
+                """);
+        assertEquals(1, r.lines().size());
+        assertEquals(2, r.adjustmentsFor(0).size());
+        assertNum("0.89", r.paidTotal(0));
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void productNamesWithAPercentageStayProducts() {
+        ParsedReceipt r = penny("""
+                     ESL MILCH 3,5%                  1,19 B
+                     JOGHURT 10%                     0,79 B
+                     SUMME                    EUR     1,98
+                """);
+        assertEquals(2, r.lines().size());
+        assertTrue(r.adjustments().isEmpty());
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void freshnessDiscountHasItsOwnType() {
+        ParsedReceipt r = penny("""
+                     FRUCHTZWERGE                    1,79 B
+                     Frischerabatt                  -0,90 B
+                     SUMME                    EUR     0,89
+                """);
+        ReceiptAdjustment a = r.adjustmentsFor(0).get(0);
+        assertEquals(AdjustmentType.FRESHNESS_DISCOUNT, a.type());
+        assertTrue(a.type().isDiscount());
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void aPercentageRabattLineStaysAGenericDiscount() {
+        ParsedReceipt r = penny("""
+                     BROT                            1,89 B
+                     Rabatt 20%                     -0,38 B
+                     SUMME                    EUR     1,51
+                """);
+        assertEquals(AdjustmentType.OTHER, r.adjustmentsFor(0).get(0).type());
+        assertTrue(r.balances());
+    }
+
+    @Test
+    void boxDrawingApostropheIsReadAsAnApostrophe() {
+        ParsedReceipt r = penny("""
+                     Ben & Jerry┤s                   4,99 B
+                     SUMME                    EUR     4,99
+                """);
+        assertEquals("Ben & Jerry's", r.lines().get(0).rawName());
+        assertTrue(r.balances());
+    }
 }

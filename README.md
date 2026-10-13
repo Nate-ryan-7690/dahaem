@@ -106,6 +106,16 @@ Run the console entry point from your IDE (`de.dahaem.Main`), or a store importe
 java --enable-native-access=ALL-UNNAMED -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.stores.StoreImportRunner offers all
 ```
 
+PENNY receipts (`pdftotext -layout -enc UTF-8` output, one `.txt` per receipt) are imported as purchase
+history with `ReceiptImportRunner` — a dry run by default, `--commit` writes all new receipts in one
+transaction into the receipt tables (migration 0008). It never changes stock or `purchase_history`. Receipt
+texts are personal data: keep them outside the repo.
+
+```bash
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /path/to/receipt-texts            # dry run
+java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner /path/to/receipt-texts --commit
+```
+
 Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) with:
 
 ```bash

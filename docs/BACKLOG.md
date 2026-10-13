@@ -77,13 +77,35 @@ Status: `in progress` · `next` · `later` · `idea`
 
 ## Receipts and purchases
 
-- **Receipts → purchase history** — `next`. 22 Penny receipts (June–Oct 2026, PDFs) parse to
-  the cent (#64). Next: copy them to llmbox (gitignored, personal data, never in the repo);
-  read-only analysis of how many distinct receipt names exist and how many already match;
-  review the abbreviations ("LH FRISCHK.NATUR", "H-SCHMAND OGT") once; import into
-  `purchase_history` with duplicate protection via the receipt number; snapshot first.
-  Uses: real regular prices (Penny publishes mostly UVPs), confirmed product → item matches,
-  consumption for the inventory, price history and budget.
+- **Receipts → purchase history** — `in progress`. 22 Penny receipts (June–Oct 2026, PDFs) parse to
+  the cent (#64); read-only analysis: 541 lines, 300 distinct names, €1,324.68. Receipts get their OWN
+  tables (`purchase_receipt`, `purchase_receipt_line`, `purchase_receipt_adjustment`, migration 0008) —
+  NOT `purchase_history`, which doesn't fit (store_item / expiration date NOT NULL, INTEGER quantity, no
+  receipt link). Every line is stored, matched or not; coupons are adjustments on the product before
+  them. `ReceiptImportRunner` (dry run, `--commit` = one transaction, duplicates by store + date-time +
+  receipt number) never calls `PurchaseService` and never changes stock: the household's stock is built
+  from new purchases and check-ins, not reconstructed from old receipts. Next (llmbox, Nate): snapshot →
+  apply 0008 → dry run on the private receipt texts (gitignored, never in the repo) → review → `--commit`.
+  Uses: real regular prices (Penny publishes mostly UVPs), confirmed product → item matches, price
+  history and budget.
+- **Receipt review** — `next`. Names left unmatched on purpose for Nate to map (they are in the
+  `review` list of `config/receipt_overrides.json`, so the name rules can't guess them): CHEDDAR
+  HERZHAFT, KERRYGOLD CHEDD., MINI GEFL WIENER (poultry, not the pork Wiener), LAYS S.CREAM&ON. (not
+  the salted chips), Kinder Riegel, MOZZARELLA-STICK / LH MOZZ. STICKS; and the analysis's wrong rule
+  matches: VIT.Z. RASPBERRY (≠ Himbeere), Krom FB Kirsche (Krombacher Fassbrause ≠ Kirsche), SALATSCHALE
+  ORZO (≠ Orzo pasta), FRUCHTZWERGE (≠ Naturjoghurt; `store_overrides.json` maps "fruchtzwerge" to 386,
+  which is why the receipt import does not use the store overrides). Plus whatever the first dry run
+  lists as unmatched. Mapping one = move its key from `review` to `exact` (or set `match_source =
+  'manual'` on stored lines). Two seeded overrides to confirm: BACON / DEL. BACON / BACON XXL → 350
+  ("smoked bacon / geräucherter Speck" — the only bacon item; the catalogue doesn't say sliced), Bagels
+  Mehrkorn → 587 ("bagel vollkorn": Mehrkorn ≠ Vollkorn in wording).
+- **Receipts + shopping list** — `idea`. Once the PHP shopping list is in use, match a new receipt's
+  lines first against that trip's open list (`shopping_list_item` already has `inventory_item_id`,
+  `store_item_id` with brand, `purchase_status`). Confirmed pairs tick the list item off with the real
+  price / quantity, take the brand from the list's `store_item` and are saved as receipt overrides.
+  Surface differences (on the list but not bought / bought but not on the list), never decide. A store
+  offer valid that day at the same price is a second brand hint. New (live) receipts then DO add to
+  stock; only the historical import must not.
 - **Receipt parser cleanup** — `later`. Two receipts leave the paid total on its own line in
   `unparsedLines` (harmless, no payment data).
 

@@ -42,13 +42,21 @@ final class ReceiptText {
             return out;
         }
         for (String line : raw.split("\\R")) {
-            String s = line.replace(' ', ' ').strip();
+            String s = apostrophes(line.replace(' ', ' ')).strip();
             if (s.isEmpty() || SEPARATOR.matcher(s).matches() || isSensitive(s)) {
                 continue;
             }
             out.add(s);
         }
         return out;
+    }
+
+    /**
+     * pdftotext turns the receipt font's apostrophe into a box-drawing character ("Ben & Jerry┤s");
+     * it is put back so names read and match as printed.
+     */
+    static String apostrophes(String s) {
+        return s.replace('┤', '\'');
     }
 
     static boolean isSensitive(String s) {
