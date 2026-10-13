@@ -214,3 +214,29 @@ These are listed in the TSV but **not** written to the SQL:
 3. Read every `review-*` row. They change nothing. Fix them by hand later (or improve
    `overrides.json` and re-run with `--offline`) if they matter.
 4. Only then apply the SQL in one transaction.
+
+## Recipe enrichment (`enrich_recipes.py`)
+
+Fills the recipe columns of `migrations/0010_recipe_enrichment.sql` (description, image links, thumbnail,
+image source, cuisine, rating, publish date) from the JSON-LD that `repair_quantities.py` already cached
+in `_cache/pages/`. It never writes: it reads that cache and MariaDB (read-only transaction, `db.py`) and
+writes `_enrich/enrich_<stamp>.sql` (git-ignored) and a report `.txt`. Cache pages are matched to recipes
+by `recipe_source_url` only.
+
+- Images are **linked** (URLs only; the browser loads them from HelloFresh) and `recipe_image_source` is
+  `hellofresh`, so they can be replaced in bulk later (`own`, `generated`). The two URLs and the source are
+  one group: set together, only while all three are NULL.
+- Cuisine goes through `config/cuisine_map.json` (raw value -> one German name, `0` / empty -> none). A raw
+  value that is not in the map stays NULL and is counted in the report: add it to the map and re-run.
+- One `UPDATE` per recipe, each field set only while it is NULL (`COALESCE`), `WHERE recipe_id = N AND` one of
+  its fields is still NULL: a re-run changes nothing, a value set later is never overwritten. No
+  `BEGIN` / `COMMIT`: wrap the file in one transaction.
+
+```bash
+python enrich_recipes.py            # dry: writes the files only, nothing touches the database
+# review _enrich/enrich_<stamp>.txt, then apply (after a snapshot and migration 0010):
+{ echo 'START TRANSACTION;'; cat _enrich/enrich_<stamp>.sql; echo 'COMMIT;'; } | \
+  docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"'
+```
+
+Check the row counts against the report's "recipes with an UPDATE" before the COMMIT.

@@ -146,9 +146,18 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 - **Recipe search and paging** — `next`. `GET /api/recipes` returns all ~11,000 recipes. Server-side
   search (name, ingredient), filters on data that actually exists (time, tags, servings), paging, and a
   small card DTO; the planner's recipe picker uses the same endpoint.
-- **Recipe images** — `next`, needs Nate's decision (spec open decision 5). There is no image column;
-  check what the scraped sources hold, store a URL / file per recipe, a thumbnail size for calendar and
-  cards, a larger one for the detail view; the PHP shows a designed fallback when there is none.
+- **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
+  copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
+  HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
+  bulk later (bought licence, own photos or AI-generated). The PHP shows a designed fallback when there is
+  none. Next (llmbox, Nate): snapshot → apply 0010 → rebuild `dahaem-api` → `enrich_recipes.py` → review →
+  apply the SQL in one transaction. Same PR adds description, cuisine (German, `config/cuisine_map.json`),
+  rating and publish date.
+- **1,294 cached recipes never imported** — `later`. The page cache holds 12,162 pages; 10,868 tie to a DB
+  recipe, 1,294 have none (read-only check 2026-10-13). Decide whether to import them (extract + load) or
+  drop them from the cache; `enrich_recipes.py` only counts them.
+- **Allergens** — `idea`. Needs allergen data per item (the pages hold no allergens, diet flags or tags);
+  nothing to show or filter on until the catalogue carries it.
 - **Recipe opportunities with evidence** — `next`. `/api/suggestions/by-savings` and `/by-expiring`
   exist; extend them so each suggestion says which ingredients are covered by which offer (store,
   product, price, valid until), which are already in stock and which are still uncovered. Suggestions

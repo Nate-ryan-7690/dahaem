@@ -1,0 +1,46 @@
+{
+  "https://example.test/recipes/full-0001": {
+    "name": "Made-up Pfanne",
+    "description": "Ein erfundener Text mit 'Anführungszeichen' und \\ Backslash.",
+    "image": "https://img.example.test/full-0001.jpg",
+    "thumbnailUrl": "https://img.example.test/thumb/full-0001.jpg",
+    "recipeCuisine": "Svensk",
+    "aggregateRating": {"@type": "AggregateRating", "ratingValue": "4.3333", "ratingCount": "120"},
+    "datePublished": "2024-03-05T10:00:00.000Z",
+    "recipeCategory": "Hauptgericht"
+  },
+  "https://example.test/recipes/sparse-0002": {
+    "name": "Made-up Suppe",
+    "description": "",
+    "image": ["https://img.example.test/sparse-0002.jpg"],
+    "recipeCuisine": 0,
+    "datePublished": "kein Datum"
+  },
+  "https://example.test/recipes/unmapped-0003": {
+    "name": "Made-up Eintopf",
+    "description": "Nur ein Satz.",
+    "recipeCuisine": "Klingonisch",
+    "aggregateRating": {"ratingValue": 9, "ratingCount": 3}
+  },
+  "https://example.test/recipes/own-image-0004": {
+    "name": "Made-up Salat",
+    "description": "Neuer Text, der nichts überschreiben darf.",
+    "image": "https://img.example.test/own-image-0004.jpg",
+    "thumbnailUrl": "https://img.example.test/thumb/own-image-0004.jpg",
+    "recipeCuisine": "American",
+    "aggregateRating": {"ratingValue": 5, "ratingCount": 1},
+    "datePublished": "2023-12-31"
+  },
+  "https://example.test/recipes/done-0005": {
+    "name": "Made-up Pasta",
+    "description": "Schon befüllt.",
+    "recipeCuisine": "Deutsch"
+  },
+  "https://example.test/recipes/orphan-0006": {
+    "name": "Made-up Waise",
+    "description": "Zu dieser Seite gibt es kein Rezept."
+  },
+  "https://example.test/recipes/orphan-0007/": {
+    "name": "Made-up Waise 2"
+  }
+}

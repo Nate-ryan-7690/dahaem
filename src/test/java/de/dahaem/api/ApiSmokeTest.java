@@ -228,6 +228,59 @@ class ApiSmokeTest {
     }
 
     @Test
+    void recipeEnrichmentFieldsAreNullWhenMissingAndReturnedWhenSet() throws Exception {
+        // a recipe without enrichment: every new field is present and null
+        int plainId = recipeId("Klassische Rinder-Bolognese");
+        String detail = mvc.perform(get("/api/recipes/{id}", plainId)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        for (String field : List.of("description", "imageUrl", "thumbnailUrl", "imageSource", "cuisine", "ratingAvg",
+                "ratingCount", "publishedDate")) {
+            org.junit.jupiter.api.Assertions.assertTrue(detail.contains("\"" + field + "\":null"), field);
+        }
+
+        int recipeId = insertRecipe("Anreicherungs-Testrezept", 2);
+        try {
+            try (Connection con = Database.getConnection();
+                 PreparedStatement ps = con.prepareStatement("UPDATE recipe SET recipe_description = ?, "
+                         + "recipe_image_url = ?, recipe_thumbnail_url = ?, recipe_image_source = 'hellofresh', "
+                         + "recipe_cuisine = 'Schwedisch', recipe_rating_avg = 4.33, recipe_rating_count = 120, "
+                         + "recipe_published_date = '2024-03-05' WHERE recipe_id = ?")) {
+                ps.setString(1, "Ein erfundener Text.");
+                ps.setString(2, "https://img.example.test/a.jpg");
+                ps.setString(3, "https://img.example.test/thumb/a.jpg");
+                ps.setInt(4, recipeId);
+                ps.executeUpdate();
+            }
+
+            mvc.perform(get("/api/recipes"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].description", contains("Ein erfundener Text.")))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].imageUrl", contains("https://img.example.test/a.jpg")))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].thumbnailUrl",
+                            contains("https://img.example.test/thumb/a.jpg")))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].imageSource", contains("hellofresh")))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].cuisine", contains("Schwedisch")))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].ratingAvg", contains(4.33)))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].ratingCount", contains(120)))
+                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].publishedDate", contains("2024-03-05")))
+                    .andExpect(jsonPath("$[?(@.id == " + plainId + ")].imageUrl", contains(nullValue())));
+
+            mvc.perform(get("/api/recipes/{id}", recipeId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.description").value("Ein erfundener Text."))
+                    .andExpect(jsonPath("$.imageUrl").value("https://img.example.test/a.jpg"))
+                    .andExpect(jsonPath("$.thumbnailUrl").value("https://img.example.test/thumb/a.jpg"))
+                    .andExpect(jsonPath("$.imageSource").value("hellofresh"))
+                    .andExpect(jsonPath("$.cuisine").value("Schwedisch"))
+                    .andExpect(jsonPath("$.ratingAvg").value(4.33))
+                    .andExpect(jsonPath("$.ratingCount").value(120))
+                    .andExpect(jsonPath("$.publishedDate").value("2024-03-05"));
+        } finally {
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
     void rangeRecipeScalesFromLowerBoundByDefaultAndFromMaxWithBasisMax() throws Exception {
         int recipeId = insertRecipe("Spanne-Testrezept", 3, 4);   // "3 – 4 Personen"
         try {
