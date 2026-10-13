@@ -1,0 +1,68 @@
+           *** P E N N Y - M A R K T GmbH ***
+                     Musterweg 12
+                  12345 Beispielstadt
+                UID Nr.: DE000000000
+                                                EUR
+     ESL MILCH 3,5%                        1,19 B
+     ESL MILCH 1,5%                        2,38 B
+                   2 Stk x 1,19
+     Hackfleisch gem.                      4,49 B
+     App-Preis-Rabatt                     -0,50 B
+     Hä.-Brustfilet                        6,99 B
+     App-Coupon                           -1,00 B
+     SF Passierte Tom                      0,59 B
+     Landliebe Konfit                      2,49 B
+     App-Coupon 10% Waren                 -0,25 B
+     LH FRISCHK.NATUR                      0,99 B
+     LAYS GESALZEN                         1,79 B
+     App-Coupon 7% Chips                  -0,13 B
+     Kinder Riegel                         2,29 B
+     Ferrero Kinder 25%                   -0,57 B
+     Ben & Jerry┤s                         4,99 B
+     VIT.Z. RASPBERRY                      1,29 A
+     PFAND 0,25 EURO                       0,25 A *
+     Krom FB Kirsche                       0,99 A
+     PFAND 0,25 EURO                       0,25 A *
+     SALATSCHALE ORZO                      2,99 B
+     FRUCHTZWERGE                          1,79 B
+     Frischerabatt                        -0,90 B
+     DUSCHGEL SPORT                        1,45 A
+     BANANEN                               1,23 B
+          0,820 kg x 1,50 EUR/kg
+     LEERGUT EINWEG                       -0,75 A *
+                   3 Stk x 0,25
+     --------------------------------------------
+     SUMME                    EUR         34,33
+     ============================================
+     Geg. EC-Cash             EUR         34,33
+
+                   * * Kundenbeleg * *
+     Datum:                          05.10.2026
+     Uhrzeit:                      18:03:11 Uhr
+     Beleg-Nr.                             0815
+     Trace-Nr.                           010203
+                      Kartenzahlung
+                       Contactless
+                        girocard
+     Nr.                  ############1234 0001
+     Terminal-ID                       11223344
+     Pos-Info                         07 315 19
+     AS-Zeit 05.10.                   18:03 Uhr
+                 Betrag EUR           34,33
+                     Zahlung erfolgt
+
+     Steuer %        Netto    Steuer   Brutto
+     A= 19,0%         2,92      0,56     3,48
+     B=  7,0%        28,83      2,02    30,85
+     Gesamtbetrag    31,75      2,58    34,33
+
+     TSE-Signatur:
+     MEUCIQDmadeUpMadeUpMadeUpMadeUpMadeUpMadeUp4567
+     TSE-Signaturzaehler:                    43
+     Seriennnummer Kasse: MADEUP00SERIAL
+           Mit der PENNY App 2,45 EUR gespart
+              Sonstige Vorteile 0,90
+           Sie erhalten 2 Treuepunkt(e)
+           Wir danken für Ihren Einkauf
+                  Erstmal zu Penny.
+                    www.penny.de
