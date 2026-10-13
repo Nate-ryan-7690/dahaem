@@ -464,6 +464,64 @@ class ApiSmokeTest {
     }
 
     @Test
+    void recipeListAndDetailCarryTheTagsWithGroupAndSource() throws Exception {
+        int recipeId = insertRecipe("Tag-Test Gericht", 2);
+        try {
+            mvc.perform(post("/api/recipes/{id}/tags", recipeId).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\": \"TagTest-Hand\", \"category\": \"Eigene\"}"))
+                    .andExpect(status().isCreated());
+            try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
+                st.executeUpdate("INSERT INTO tag (tag_name, tag_category) VALUES ('TagTest-Tier', 'Tier')");
+                st.executeUpdate("INSERT INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id, recipe_tag_source) "
+                        + "SELECT " + recipeId + ", tag_id, 'derived' FROM tag WHERE tag_name = 'TagTest-Tier'");
+            }
+
+            mvc.perform(get("/api/recipes/{id}", recipeId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.tags.length()").value(2))
+                    .andExpect(jsonPath("$.tags[?(@.name=='TagTest-Tier')].category").value(contains("Tier")))
+                    .andExpect(jsonPath("$.tags[?(@.name=='TagTest-Tier')].source").value(contains("derived")))
+                    .andExpect(jsonPath("$.tags[?(@.name=='TagTest-Hand')].source").value(contains("manual")));
+
+            mvc.perform(get("/api/recipes"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.id==" + recipeId + ")].tags[*]", contains("TagTest-Hand", "TagTest-Tier")))
+                    .andExpect(jsonPath("$[?(@.name=='Klassische Rinder-Bolognese')].tags").isArray());
+        } finally {
+            try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
+                st.executeUpdate("DELETE FROM recipe_tag WHERE recipe_tag_recipe_id = " + recipeId);
+                st.executeUpdate("DELETE FROM tag WHERE tag_name IN ('TagTest-Tier', 'TagTest-Hand')");
+            }
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
+    void addingATagByHandTakesOverADerivedOne() throws Exception {
+        int recipeId = insertRecipe("Tag-Test Handarbeit", 2);
+        try {
+            try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
+                st.executeUpdate("INSERT INTO tag (tag_name, tag_category) VALUES ('TagTest-Zeit', 'Zeit')");
+                st.executeUpdate("INSERT INTO recipe_tag (recipe_tag_recipe_id, recipe_tag_id, recipe_tag_source) "
+                        + "SELECT " + recipeId + ", tag_id, 'derived' FROM tag WHERE tag_name = 'TagTest-Zeit'");
+            }
+            mvc.perform(post("/api/recipes/{id}/tags", recipeId).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\": \"TagTest-Zeit\", \"category\": \"Zeit\"}"))
+                    .andExpect(status().isCreated());
+            mvc.perform(get("/api/recipes/{id}", recipeId))
+                    .andExpect(jsonPath("$.tags[0].source").value("manual"));
+        } finally {
+            try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
+                st.executeUpdate("DELETE FROM recipe_tag WHERE recipe_tag_recipe_id = " + recipeId);
+                st.executeUpdate("DELETE FROM tag WHERE tag_name = 'TagTest-Zeit'");
+            }
+            deleteTestRecipe(recipeId);
+        }
+    }
+
+    @Test
     void mealPlansCanBeCreatedAndFilled() throws Exception {
         int recipeId = recipeId("Gemüse-Gnocchi in Tomatensauce");
 

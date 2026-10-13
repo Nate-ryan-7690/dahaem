@@ -82,8 +82,16 @@ needs the item, no amount). To-taste rows never reach a shopping list. Changed b
 `recipe_instructions_step_number`, `recipe_instructions_instruction`,
 `recipe_instructions_notes` (nullable), `recipe_instructions_source`.
 
-A `recipe_tag` table is mentioned in `RecipeRepository`'s class comment but no
-query in the repo currently reads or writes it.
+### `tag`, `recipe_tag`, `inventory_item_animal` — recipe tags
+
+`tag`: `tag_id` (PK), `tag_name` (UNIQUE), `tag_category` (the group: Tier, Ernährung, Zeit, Nährwerte,
+Küche for the derived tags). `recipe_tag`: `(recipe_tag_recipe_id, recipe_tag_id)` PK, FKs to `recipe` and
+`tag`, `recipe_tag_source` `'manual'` (default; added by a person or the API) or `'derived'` (written by
+`RecipeTagRunner`, the only rows it ever replaces), and an index `recipe_tag_by_tag (recipe_tag_id,
+recipe_tag_recipe_id)` for "all recipes with tag X". `inventory_item_animal`: `(inventory_item_animal_item_id,
+inventory_item_animal_animal)` PK, FK to `inventory_item`, CHECK animal in Hähnchen, Pute, Rind, Schwein,
+Lamm, Kalb, Wild, Fisch, Meeresfrüchte; an item can have several. All added by migration 0011; SQL in
+`TagRepository`, `ItemAnimalRepository` and `RecipeTagRepository` (package `de.dahaem.tags`).
 
 ### `store`, `brand`
 
