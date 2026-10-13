@@ -51,6 +51,25 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_source_url TEXT,
 
+	recipe_description TEXT NULL,
+
+	recipe_image_url TEXT NULL,
+
+	recipe_thumbnail_url TEXT NULL,
+
+	recipe_image_source VARCHAR(20) NULL,
+
+	recipe_cuisine VARCHAR(60) NULL,
+
+	recipe_rating_avg DECIMAL(3,2) NULL,
+
+	recipe_rating_count INT NULL,
+
+	recipe_published_date DATE NULL,
+
+	CONSTRAINT recipe_image_source_valid
+		CHECK (recipe_image_source IS NULL OR recipe_image_source IN ('hellofresh', 'own', 'generated')),
+
 	CONSTRAINT recipe_servings_max_above_servings
 		CHECK (recipe_servings_max IS NULL OR recipe_servings_max > recipe_servings));
 

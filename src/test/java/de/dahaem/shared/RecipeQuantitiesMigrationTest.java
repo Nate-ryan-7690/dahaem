@@ -30,7 +30,9 @@ class RecipeQuantitiesMigrationTest {
     private static final Path OLD_TABLES = Path.of("src", "test", "resources", "migrations", "pre_0005_recipe_tables.sql");
     private static final Path MIGRATION = Path.of("migrations", "0005_recipe_quantities.sql");
     // schema.sql also carries the later recipe migrations, so the comparison applies them in order too.
-    private static final List<Path> LATER_MIGRATIONS = List.of(Path.of("migrations", "0006_recipe_servings_max.sql"));
+    private static final List<Path> LATER_MIGRATIONS = List.of(
+            Path.of("migrations", "0006_recipe_servings_max.sql"),
+            Path.of("migrations", "0010_recipe_enrichment.sql"));
 
     @AfterAll
     static void close() throws IOException {
