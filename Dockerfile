@@ -15,11 +15,11 @@ FROM eclipse-temurin:21-jre
 RUN useradd --system --no-create-home dahaem
 WORKDIR /app
 COPY --from=build /build/target/dahaem-1.0-SNAPSHOT.jar app.jar
-# The store refresh works relative to /app. It reads config/ (store_overrides.json is baked in
+# The store refresh and the receipt import work relative to /app. They read config/ (the overrides are baked in
 # here; compose mounts the repo's config/ over it so stores.properties, which is gitignored, is
 # there too) and writes its unmatched-item reports to data/stores, which must belong to the
 # non-root user. A named volume on /app/data takes over that ownership.
-COPY config/store_overrides.json config/
+COPY config/store_overrides.json config/receipt_overrides.json config/
 RUN mkdir -p data/stores && chown -R dahaem data
 USER dahaem
 

@@ -97,7 +97,8 @@ class RecipeQuantitiesMigrationTest {
                 }
             }
             try (ResultSet rs = st.executeQuery("SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM information_schema.CHECK_CONSTRAINTS "
-                    + "WHERE CONSTRAINT_SCHEMA = DATABASE() ORDER BY CONSTRAINT_NAME")) {
+                    + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME IN ('recipe', 'recipe_ingredient') "
+                    + "ORDER BY CONSTRAINT_NAME")) {
                 while (rs.next()) {
                     out.add("check " + rs.getString(1) + ": " + rs.getString(2));
                 }

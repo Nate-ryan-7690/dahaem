@@ -173,6 +173,31 @@ See `StoreRepository.java`'s `SCHEMA` array for the exact DDL (types,
 constraints, foreign keys) — it's the closest thing to a source of truth this
 repo has for these six tables.
 
+## Purchase receipts (`purchase_receipt`, `purchase_receipt_line`, `purchase_receipt_adjustment`)
+
+Migration `0008`, written by `de.dahaem.receipts.ReceiptImportRunner` (PENNY receipts as
+`pdftotext -layout` text). `purchase_history` does not fit a till receipt (it needs a `store_item`
+and an expiration date, has an INTEGER quantity and no receipt link), and `PurchaseService` adds to
+stock, which a historical import must never do — so receipts have their own tables and the import
+writes neither `purchase_history` nor `inventory_item`.
+
+- **`purchase_receipt`** — one row per receipt: store, `purchased_at`, `receipt_number` (4 digits,
+  repeats over time), printed `total`, app / other savings, loyalty points, `imported_at`.
+  `UNIQUE (store_id, purchased_at, receipt_number)` is the duplicate guard; a re-run reports the
+  receipt as a duplicate and writes nothing.
+- **`purchase_receipt_line`** — EVERY printed product line, matched or not: `raw_name` as printed,
+  `brand` only from a known prefix (`LH` = Lindenhof; usually NULL), quantity (pieces or kg), unit /
+  weight / price per kg, `line_total` (printed) and `paid_total` (after the discounts attached to the
+  line), tax symbol and rate, the `*` discount-excluded marker, Pfand per unit, and the optional
+  `inventory_item_id` with its `match_source` (`override` | `rule` | `manual`; NULL when unmatched).
+- **`purchase_receipt_adjustment`** — discounts, app coupons, Treueartikel, Frischerabatt, Pfand and
+  Leergut with their signed amount and printed text; `line_id` is the product they follow, NULL if none.
+  Coupons ("App-Coupon …", "Ferrero Kinder 25%") are adjustments on the product line before them.
+
+Per receipt: `SUM(paid_total)` + every adjustment that is not a discount already inside a line
+(deposits, returns, unattached discounts) = `total`. The importer checks this before it writes and
+skips (and reports) a receipt that does not balance.
+
 ## Dates and times
 
 `DATE` columns are bound and read as `java.time.LocalDate`; `store_import_run`'s

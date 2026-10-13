@@ -149,8 +149,11 @@ public class StoreMatchService {
         return new ImportSummary(storeName, "MATCH", "OK", 0, matches.size(), List.of(), notes);
     }
 
-    /** Convenience overload for callers with no category available (guard is skipped). */
-    Integer match(String storeName, List<CatalogItem> catalog) {
+    /**
+     * Convenience overload for callers with no category available (guard is skipped). Public for the receipt
+     * import, which runs the same rules on receipt names (built with no store overrides).
+     */
+    public Integer match(String storeName, List<CatalogItem> catalog) {
         return match(storeName, null, catalog);
     }
 

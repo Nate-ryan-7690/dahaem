@@ -1,0 +1,35 @@
+           *** P E N N Y - M A R K T GmbH ***
+                     Musterweg 12
+                  12345 Beispielstadt
+                UID Nr.: DE000000000
+                                                EUR
+     BACON-STREIFEN                        1,99 B
+     MINI GEFL WIENER                      2,49 B
+     EIER BH 10ER OKT                      2,79 B
+     --------------------------------------------
+     SUMME                    EUR          7,27
+     ============================================
+     Geg. EC-Cash             EUR          7,27
+
+                   * * Kundenbeleg * *
+     Datum:                          12.10.2026
+     Uhrzeit:                      09:30:42 Uhr
+     Beleg-Nr.                             0815
+     Trace-Nr.                           020304
+                      Kartenzahlung
+                       Contactless
+                        girocard
+     Nr.                  ############1234 0001
+     Terminal-ID                       11223344
+     Pos-Info                         07 315 19
+     AS-Zeit 12.10.                   09:30 Uhr
+                 Betrag EUR            7,27
+                     Zahlung erfolgt
+
+     Steuer %        Netto    Steuer   Brutto
+     B=  7,0%         6,79      0,48     7,27
+     Gesamtbetrag     6,79      0,48     7,27
+
+           Sie erhalten 0 Treuepunkt(e)
+           Wir danken für Ihren Einkauf
+                    www.penny.de

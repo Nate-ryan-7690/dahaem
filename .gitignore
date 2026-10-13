@@ -33,6 +33,12 @@ venv/
 Thumbs.db
 .DS_Store
 
+# Personal data: receipt texts (pdftotext output of real receipts) and database snapshots
+/receipts/
+/data/receipts/
+/snapshots/
+/sql/snapshots/
+
 # Internal working log (kept local, not part of the public repo)
 HANDOFF.md
 
