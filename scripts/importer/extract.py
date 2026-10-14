@@ -106,10 +106,30 @@ def strip_html(s):
     return re.sub(r"\s+", " ", s).strip()
 
 # ---------- ingredient parsing + matching ----------
+def words_inside(needle, hay):
+    """Do the words of `needle` stand next to each other in `hay`, as whole words? The LAST word may also be
+      - a word with a short ending (Gurke / Gurken, Tomate / Tomaten), or
+      - the end of a longer compound word (Gurke / Snackgurke: the head of a German compound, 4+ letters).
+    It is not a substring test: "cola" is not in "chocolate", "rum" is not in "crumble" or "rumpsteak",
+    "aprikose" is not in "aprikosennektar" (these were wrong 'like' matches)."""
+    k = len(needle)
+    if not k or k > len(hay):
+        return False
+    for start in range(len(hay) - k + 1):
+        if all(hay[start + j] == needle[j] for j in range(k - 1)):
+            last, word = needle[-1], hay[start + k - 1]
+            if word.startswith(last) and len(word) - len(last) <= 2:
+                return True
+            if len(last) >= 4 and word.endswith(last):
+                return True
+    return False
+
+
 class Catalog:
     """Matches an ingredient name to an inventory_item id. items: (id, name_english, name_deutsch)."""
     def __init__(self, items, overrides):
         self.rows = [(i, normalize(de or ""), en) for i, en, de in items]
+        self.tokens = {i: nd.split() for i, nd, _en in self.rows}
         self.exact = overrides.get("exact", {})
         self.rules = overrides.get("contains_rules", [])
         self.by_norm = {}
@@ -126,7 +146,9 @@ class Catalog:
         if n in self.by_norm:
             c = self.by_norm[n]
             return (c[0][0], "exact", c[0][1]) if len(c) == 1 else (c[0][0], "exact-multi", "; ".join(f"#{i} {e}" for i, e in c))
-        subs = [(i, en) for i, nd, en in self.rows if nd and (n in nd or nd in n)]
+        nt = n.split()
+        subs = [(i, en) for i, nd, en in self.rows
+                if nd and (words_inside(nt, self.tokens[i]) or words_inside(self.tokens[i], nt))]
         if len(subs) == 1:
             return subs[0][0], "like", subs[0][1]
         if subs:

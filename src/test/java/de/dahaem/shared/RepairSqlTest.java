@@ -88,7 +88,7 @@ class RepairSqlTest {
         assertRow(2, 40, "0.667", "Stück", false);     // ⅔-bug: 667 -> 0.667
         assertRow(2, 1061, "2.000", "Prise", false);   // 2 Stück -> 2 Prise: the old parser's reading of "2 Prisen"
         assertRow(2, 1070, "1.000", "Stück", false);   // "1 TL Honig": unit change the old parser can't explain: held
-        assertRow(2, 143, "1.000", "Stück", false);    // "Bratapfelgewürz" fuzzily matched to Apfel: held
+        assertRow(2, 143, "1.000", "Stück", false);    // "Bratapfel" fuzzily matched to Apfel: held
 
         assertRow(7, 40, "0.500", "Stück", false);     // ½-bug fixed even though ...
         assertEquals(2, count("SELECT recipe_servings FROM recipe WHERE recipe_id = 7"));   // ... no recipeYield: kept

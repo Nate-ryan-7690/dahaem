@@ -107,6 +107,14 @@ class ToTasteTest(unittest.TestCase):
     def test_zero_amount_is_to_taste(self):
         self.assertTrue(parse_ingredient("0 g Salz").to_taste)
 
+    def test_nach_geschmack_after_an_amount_is_not_part_of_the_item_name(self):
+        # "nach Geschmack Salz" stayed a no-item name in the 2026-10-14 rematch: the words were in the name
+        self.assertEqual(Line("1 Prise nach Geschmack Salz", Decimal(1), "Prise", "Salz", False),
+                         parse_ingredient("1 Prise nach Geschmack Salz"))
+        self.assertEqual(("Öl", Decimal(2), "EL"), (lambda l: (l.name, l.quantity, l.unit))(
+            parse_ingredient("2 EL Nach Geschmack: Öl")))
+        self.assertEqual("nach Geschmack Salz".split()[-1], parse_ingredient("nach Geschmack Salz").name)
+
 
 class ServingsTest(unittest.TestCase):
 
