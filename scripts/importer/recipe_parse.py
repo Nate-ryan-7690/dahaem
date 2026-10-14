@@ -383,24 +383,25 @@ def _resolve_amountless(raw, line, fam, steps, merge_ok):
     return line, None, "REVIEW: no amount in the ingredient list or the steps"
 
 
-def parse_recipe(rec, catalog, is_pantry=None):
+def parse_recipe(rec, catalog, is_pantry=None, merge=True):
     """JSON-LD Recipe dict -> dict(title, servings, servings_max, notes, lines, reviews). lines are
     merged per item and carry item_id/conf/note from catalog.match(name), plus origin ('steps': the
     amount was read from the cooking steps, 'one': 'Stück X' without a number = 1 Stück).
     reviews are amountless lines that need a human (never written). is_pantry(name) lines (water)
-    are skipped."""
+    are skipped. Every line and review carries line_no, the 1-based position in recipeIngredient. merge=False
+    keeps two lines on the same item as two lines (no summing): rematch_unmatched.py decides about those itself."""
     notes = []
     sinfo = servings_info(rec)
     servings, servings_source = sinfo["servings"], sinfo["source"]
     notes += sinfo["notes"]
     steps = instruction_steps(rec)
     entries = []                                  # every usable line of the page, matched once
-    for raw in rec.get("recipeIngredient") or []:
+    for line_no, raw in enumerate(rec.get("recipeIngredient") or [], 1):
         line = parse_ingredient(raw)
         if not line.name or (is_pantry and is_pantry(line.name)):
             continue
         iid, conf, note = catalog.match(line.name)
-        entries.append({"raw": raw, "line": line, "iid": iid, "conf": conf, "note": note,
+        entries.append({"raw": raw, "line_no": line_no, "line": line, "iid": iid, "conf": conf, "note": note,
                         "fam": step_amounts.ingredient_key(line.name)[1]})
     numbered_items = {e["iid"] for e in entries if not e["line"].to_taste and e["iid"] is not None}
     kind_items = {}                               # family -> the catalog items of that kind in this recipe
@@ -423,15 +424,15 @@ def parse_recipe(rec, catalog, is_pantry=None):
                         line, origin, why = None, None, "no row of its own: the steps amount was already taken"
                     from_steps.add(iid)
         if line is None or (why and why.startswith(("REVIEW", "no row"))):
-            reviews.append({"raw": raw, "name": (line or e["line"]).name, "item_id": iid, "conf": e["conf"],
-                            "reason": why})
+            reviews.append({"raw": raw, "line_no": e["line_no"], "name": (line or e["line"]).name, "item_id": iid,
+                            "conf": e["conf"], "reason": why})
             continue
         note = e["note"]
         if why:
             note = (note + "; " if note else "") + why
-        items.append({"raw": raw, "name": line.name, "quantity": line.quantity, "unit": line.unit,
+        items.append({"raw": raw, "line_no": e["line_no"], "name": line.name, "quantity": line.quantity, "unit": line.unit,
                       "to_taste": line.to_taste, "item_id": iid, "conf": e["conf"], "note": note, "origin": origin})
-    lines, mnotes = merge_lines(items)
+    lines, mnotes = merge_lines(items) if merge else (items, [])
     notes += mnotes
     return {"title": cut_title(rec.get("name")), "servings": servings, "servings_max": sinfo["servings_max"],
             "servings_source": servings_source, "notes": notes, "lines": lines, "reviews": reviews}

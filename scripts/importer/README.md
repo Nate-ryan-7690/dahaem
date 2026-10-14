@@ -13,6 +13,8 @@ repair tool that fixes the amounts of recipes imported before the parser fixes b
 | `rematch.py` | re-match draft REVIEW lines against the current catalog | reads the catalog |
 | `repair_quantities.py` | pages -> guarded repair SQL + review TSV for recipes already in the DB | reads only, never writes |
 | `find_unmatched_ingredients.py` | cached pages -> the recipe lines that have no catalogue item (guarded SQL for `recipe_unmatched_ingredient` + report) | reads only, never writes |
+| `rematch_unmatched.py` | the stored unmatched lines re-sorted against the current catalogue: guarded SQL (inserts + deletes), review TSV, no-item list, report | reads only, never writes |
+| `non_food.json` | config: recipe lines that are not food (Holzspieße, Backpapier ...) | |
 | `db.py` | the MariaDB connection, from environment variables | |
 
 `add_ingredients.py` and `dedup_catalog.py` are older catalog tools that still use the
@@ -278,3 +280,38 @@ python find_unmatched_ingredients.py     # writes the files only, nothing touche
 
 Then derive the tags again (`RecipeTagRunner`): every recipe with a row becomes unklar and loses a vegetarisch /
 vegan tag it may have had.
+
+## Re-sorting the unmatched lines (`rematch_unmatched.py`)
+
+Most stored unmatched lines are pantry staples (Öl, Honig, Essig, Zucker, Mehl, Salz ...) that DO have a catalogue item
+today: older imports dropped them, so those recipes also miss them in the shopping list. This tool reads the stored
+`recipe_unmatched_ingredient` rows of reason `unmatched`, re-matches each against the CURRENT catalogue and
+`overrides.json` (the importer's matching, confident matches only) and sorts every one into exactly one case
+(decided by Nate, 2026-10-14):
+
+| Case | What happens |
+|------|--------------|
+| a) matches an item now | **covered** when the recipe already has the item or an item of the same family: `Öl` / `Olivenöl` / `(Oliven-)Öl*` with an olive oil (or `Öl`) the recipe has; the Essig family as `step_amounts.py` defines it (the same wording, or one side is the bare `Essig`; two specific vinegars differ); `Salz` / `nach Geschmack Salz` and `Pfeffer` (the bare word) with any salt / pepper the recipe has. No insert, the unmatched row is resolved. **Otherwise INSERT** a `recipe_ingredient` row with quantity / unit / to-taste exactly as the importer parses the line (to taste for salt, pepper, oil, vinegar ... without an amount; amounts from the cooking steps via `step_amounts.py`, like the repair tool) and resolve the row. Two lines for the same new item in one recipe: same unit are summed, an amount beats a to-taste line, **different units go to REVIEW** and nothing is inserted |
+| b) non-food | `non_food.json` (Holzspieße, Backpapier, Alufolie ...): resolved as ignored, the recipe is not unklar because of it. `Schaschlikspieße` only when a cooking step puts food on them (else it might be the prepared meat skewers: REVIEW) |
+| c) no item yet | stays unmatched, the recipe stays unklar; the name goes to `_noitem.tsv` with line / recipe counts (catalogue batch 2) |
+| d) ambiguous | **REVIEW TSV**, nothing changed: an uncertain item match (`like`, `like-multi`, `exact-multi`), an amountless line the steps cannot settle, a line no longer on the cached page, a page missing from the cache, different units for one item |
+
+It only READS (MariaDB read-only transaction via `db.py`, and the page cache `_cache/pages/`; `unchecked` rows are never
+touched) and writes to `_rematch/` (git-ignored: real recipe lines): `rematch_<stamp>.sql`, `.tsv` (every row with its
+case), `_review.tsv` (case d only), `_noitem.tsv` and the report `.txt` (counts per case, rows to insert / delete,
+recipes that stop being unklar, the 60 most common names that stay).
+
+The SQL has no `BEGIN` / `COMMIT`. Every `INSERT` is skipped when the recipe or the item is missing or a
+`(recipe, item)` row exists; every `DELETE` is by id and only fires while the row is still what the tool read and, for
+case a, while the recipe now has the item that resolves it. It can be applied twice. Last statement: a `SELECT` that
+must say 0 on the first run.
+
+```bash
+python rematch_unmatched.py              # writes the files only, nothing touches the database
+# read _rematch/rematch_<stamp>.txt and _review.tsv, then (after a snapshot, migrations 0012 + 0013 and the rebuild):
+{ echo 'SET NAMES utf8mb4; START TRANSACTION;'; cat _rematch/rematch_<stamp>.sql; echo 'COMMIT;'; } | \
+  docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"'
+```
+
+Compare the number of `INSERT` and `DELETE` statements in the file with the report before the `COMMIT`. Then derive the
+tags again (`RecipeTagRunner`): recipes without a row left may become vegetarisch / vegan again.

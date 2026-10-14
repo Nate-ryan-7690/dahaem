@@ -48,6 +48,20 @@ class AnimalProductsTest {
     }
 
     @Test
+    void aCurrywurstSauceIsASauceWithoutMeat() {
+        assertFalse(notVegetarian("currywurst sauce", "condiments & sauces", "ketchup & tomato sauces"));
+        assertFalse(notVegetarian("maggi fix currywurst sauce", "spices & seasonings",
+                "fix products & seasoning sachets"));
+        assertFalse(notVegetarian("Currywurst Soße", "condiments & sauces", ""));
+        assertFalse(AnimalClassifier.isAnimalCandidate(new CatalogItem(1, "currywurst sauce", "condiments & sauces",
+                "ketchup & tomato sauces")));
+        // the sausage itself still blocks
+        assertTrue(notVegetarian("currywurst", "meat", "würstchen"));
+        assertTrue(AnimalClassifier.isAnimalCandidate(new CatalogItem(1, "currywurst", "meat", "würstchen")));
+        assertTrue(notVegetarian("currywurst im glas", "canned & jarred goods", ""));
+    }
+
+    @Test
     void plantBasedAndLookAlikesDoNotBlockVegetarian() {
         assertFalse(notVegetarian("vegane Filetstücke Hähnchen-Art", "plant-based", ""));
         assertFalse(notVegetarian("veganes Hack", "plant-based", ""));

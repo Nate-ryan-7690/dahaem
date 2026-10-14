@@ -1,0 +1,448 @@
+{
+ "_comment": "Database state for the rematch tool test (made-up recipes, made-up JSON-LD). RematchUnmatchedSqlTest (Java) loads the same file into a throwaway MariaDB and applies expected_rematch.sql to it.",
+ "items": [
+  [
+   40,
+   "onions",
+   "zwiebel"
+  ],
+  [
+   1022,
+   "olive oil",
+   "olivenöl"
+  ],
+  [
+   1023,
+   "olive oil mild",
+   "olivenöl mild"
+  ],
+  [
+   1028,
+   "sunflower oil",
+   "sonnenblumenöl"
+  ],
+  [
+   1148,
+   "table salt",
+   "speisesalz"
+  ],
+  [
+   1156,
+   "black pepper ground",
+   "schwarzer pfeffer gemahlen"
+  ],
+  [
+   1061,
+   "white sugar",
+   "weißer zucker"
+  ],
+  [
+   1070,
+   "honey",
+   "honig"
+  ],
+  [
+   1055,
+   "vinegar",
+   "essig"
+  ],
+  [
+   1050,
+   "white wine vinegar",
+   "weißweinessig"
+  ],
+  [
+   1053,
+   "balsamic vinegar",
+   "balsamico essig"
+  ],
+  [
+   1051,
+   "red wine vinegar",
+   "rotweinessig"
+  ],
+  [
+   1660,
+   "beef strips",
+   "Rindergeschnetzeltes"
+  ],
+  [
+   1822,
+   "venison steak",
+   "Hirschsteak"
+  ],
+  [
+   1823,
+   "sliced roast pork",
+   "Schweinsbraten-Aufschnitt"
+  ],
+  [
+   2001,
+   "potato salad",
+   "kartoffelsalat"
+  ],
+  [
+   1152,
+   "himalayan salt",
+   "himalaya salz"
+  ]
+ ],
+ "recipes": [
+  {
+   "id": 1,
+   "name": "Made-up Öl-Familie",
+   "source_url": "https://example.test/recipes/oel-0001"
+  },
+  {
+   "id": 2,
+   "name": "Made-up Honig zweimal gleiche Einheit",
+   "source_url": "https://example.test/recipes/honig-0002"
+  },
+  {
+   "id": 3,
+   "name": "Made-up Honig verschiedene Einheiten",
+   "source_url": "https://example.test/recipes/honig-0003"
+  },
+  {
+   "id": 4,
+   "name": "Made-up Essig generisch",
+   "source_url": "https://example.test/recipes/essig-0004"
+  },
+  {
+   "id": 5,
+   "name": "Made-up Zwei Essigsorten",
+   "source_url": "https://example.test/recipes/essig-0005"
+  },
+  {
+   "id": 6,
+   "name": "Made-up Spieße als Zubehör",
+   "source_url": "https://example.test/recipes/spiesse-0006"
+  },
+  {
+   "id": 7,
+   "name": "Made-up Fertige Schaschlikspieße",
+   "source_url": "https://example.test/recipes/schaschlik-0007"
+  },
+  {
+   "id": 8,
+   "name": "Made-up Kein Artikel",
+   "source_url": "https://example.test/recipes/kein-0008"
+  },
+  {
+   "id": 9,
+   "name": "Made-up Fleisch",
+   "source_url": "https://example.test/recipes/fleisch-0009"
+  },
+  {
+   "id": 10,
+   "name": "Made-up Nur unchecked",
+   "source_url": null
+  },
+  {
+   "id": 11,
+   "name": "Made-up Unchecked und Honig",
+   "source_url": "https://example.test/recipes/unchecked-0011"
+  },
+  {
+   "id": 12,
+   "name": "Made-up Unsichere Zuordnung",
+   "source_url": "https://example.test/recipes/unsicher-0012"
+  },
+  {
+   "id": 13,
+   "name": "Made-up Zeile nicht mehr auf der Seite",
+   "source_url": "https://example.test/recipes/weg-0013"
+  },
+  {
+   "id": 14,
+   "name": "Made-up Seite fehlt",
+   "source_url": "https://example.test/recipes/fehlt-0014"
+  },
+  {
+   "id": 15,
+   "name": "Made-up Honig aus den Schritten",
+   "source_url": "https://example.test/recipes/schritte-0015"
+  },
+  {
+   "id": 16,
+   "name": "Made-up Honig schon da",
+   "source_url": "https://example.test/recipes/da-0016"
+  },
+  {
+   "id": 17,
+   "name": "Made-up Salz doppelt",
+   "source_url": "https://example.test/recipes/salz-0017"
+  },
+  {
+   "id": 18,
+   "name": "Made-up Zucker mit Menge und nach Geschmack",
+   "source_url": "https://example.test/recipes/zucker-0018"
+  }
+ ],
+ "ingredients": [
+  {
+   "recipe_id": 1,
+   "item_id": 40
+  },
+  {
+   "recipe_id": 1,
+   "item_id": 1023
+  },
+  {
+   "recipe_id": 1,
+   "item_id": 1152
+  },
+  {
+   "recipe_id": 4,
+   "item_id": 1055
+  },
+  {
+   "recipe_id": 5,
+   "item_id": 1053
+  },
+  {
+   "recipe_id": 16,
+   "item_id": 1070
+  }
+ ],
+ "unmatched": [
+  {
+   "id": 1,
+   "recipe_id": 1,
+   "line_no": 2,
+   "raw_text": "Öl",
+   "reason": "unmatched"
+  },
+  {
+   "id": 2,
+   "recipe_id": 1,
+   "line_no": 3,
+   "raw_text": "(Oliven-)Öl*",
+   "reason": "unmatched"
+  },
+  {
+   "id": 3,
+   "recipe_id": 1,
+   "line_no": 4,
+   "raw_text": "nach Geschmack Salz",
+   "reason": "unmatched"
+  },
+  {
+   "id": 4,
+   "recipe_id": 1,
+   "line_no": 5,
+   "raw_text": "Pfeffer",
+   "reason": "unmatched"
+  },
+  {
+   "id": 5,
+   "recipe_id": 1,
+   "line_no": 6,
+   "raw_text": "2 Esslöffel Sonnenblumenöl",
+   "reason": "unmatched"
+  },
+  {
+   "id": 6,
+   "recipe_id": 2,
+   "line_no": 1,
+   "raw_text": "100 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 7,
+   "recipe_id": 2,
+   "line_no": 2,
+   "raw_text": "50 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 8,
+   "recipe_id": 3,
+   "line_no": 1,
+   "raw_text": "100 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 9,
+   "recipe_id": 3,
+   "line_no": 2,
+   "raw_text": "2 Esslöffel Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 10,
+   "recipe_id": 4,
+   "line_no": 1,
+   "raw_text": "Essig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 11,
+   "recipe_id": 4,
+   "line_no": 2,
+   "raw_text": "Weißweinessig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 12,
+   "recipe_id": 5,
+   "line_no": 2,
+   "raw_text": "Weißweinessig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 13,
+   "recipe_id": 6,
+   "line_no": 1,
+   "raw_text": "8 Stück Holzspieße",
+   "reason": "unmatched"
+  },
+  {
+   "id": 14,
+   "recipe_id": 6,
+   "line_no": 2,
+   "raw_text": "4 Stück Schaschlikspieße",
+   "reason": "unmatched"
+  },
+  {
+   "id": 15,
+   "recipe_id": 7,
+   "line_no": 1,
+   "raw_text": "4 Stück Schaschlikspieße",
+   "reason": "unmatched"
+  },
+  {
+   "id": 16,
+   "recipe_id": 8,
+   "line_no": 1,
+   "raw_text": "Zauberpulver XY",
+   "reason": "unmatched"
+  },
+  {
+   "id": 17,
+   "recipe_id": 8,
+   "line_no": 2,
+   "raw_text": "100 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 18,
+   "recipe_id": 9,
+   "line_no": 1,
+   "raw_text": "300 g Hirschsteak",
+   "reason": "unmatched"
+  },
+  {
+   "id": 19,
+   "recipe_id": 9,
+   "line_no": 2,
+   "raw_text": "400 g Rinderkeulenstreifen",
+   "reason": "unmatched"
+  },
+  {
+   "id": 20,
+   "recipe_id": 9,
+   "line_no": 3,
+   "raw_text": "100 g Schweinsbraten-Aufschnitt mit grünem Pfeffer",
+   "reason": "unmatched"
+  },
+  {
+   "id": 21,
+   "recipe_id": 11,
+   "line_no": 1,
+   "raw_text": "100 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 22,
+   "recipe_id": 12,
+   "line_no": 1,
+   "raw_text": "300 g Kartoffel",
+   "reason": "unmatched"
+  },
+  {
+   "id": 23,
+   "recipe_id": 13,
+   "line_no": 9,
+   "raw_text": "5 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 24,
+   "recipe_id": 14,
+   "line_no": 1,
+   "raw_text": "100 g Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 25,
+   "recipe_id": 14,
+   "line_no": 2,
+   "raw_text": "4 Stück Holzspieße",
+   "reason": "unmatched"
+  },
+  {
+   "id": 26,
+   "recipe_id": 14,
+   "line_no": 3,
+   "raw_text": "Zauberpulver XY",
+   "reason": "unmatched"
+  },
+  {
+   "id": 27,
+   "recipe_id": 15,
+   "line_no": 1,
+   "raw_text": "Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 28,
+   "recipe_id": 16,
+   "line_no": 1,
+   "raw_text": "3 Esslöffel Honig",
+   "reason": "unmatched"
+  },
+  {
+   "id": 29,
+   "recipe_id": 17,
+   "line_no": 1,
+   "raw_text": "Salz",
+   "reason": "unmatched"
+  },
+  {
+   "id": 30,
+   "recipe_id": 17,
+   "line_no": 2,
+   "raw_text": "nach Geschmack Salz",
+   "reason": "unmatched"
+  },
+  {
+   "id": 31,
+   "recipe_id": 18,
+   "line_no": 1,
+   "raw_text": "100 g Zucker",
+   "reason": "unmatched"
+  },
+  {
+   "id": 32,
+   "recipe_id": 18,
+   "line_no": 2,
+   "raw_text": "Zucker nach Geschmack",
+   "reason": "unmatched"
+  },
+  {
+   "id": 33,
+   "recipe_id": 10,
+   "line_no": null,
+   "raw_text": "(keine Quell-URL)",
+   "reason": "unchecked"
+  },
+  {
+   "id": 34,
+   "recipe_id": 11,
+   "line_no": null,
+   "raw_text": "(Seite nicht im Cache)",
+   "reason": "unchecked"
+  }
+ ]
+}

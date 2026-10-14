@@ -1,0 +1,27 @@
+{
+  "_comment": "Recipe ingredient lines that are not food: they are never bought as an ingredient, never block a diet tag and never make a recipe 'unklar'. rematch_unmatched.py resolves a stored unmatched line of this kind as ignored. Names are NORMALIZED like overrides.json keys (lowercase, umlauts asciified ae/oe/ue/ss, punctuation stripped). Nate, 2026-10-14. Add a name here when the report lists one; anything doubtful goes to the review TSV instead.",
+  "exact": [
+    "holzspiesse",
+    "holzspiess",
+    "grillspiesse",
+    "bambusspiesse",
+    "zahnstocher",
+    "backpapier",
+    "backtrennpapier",
+    "alufolie",
+    "aluminiumfolie",
+    "frischhaltefolie",
+    "kuechengarn",
+    "kuechenpapier"
+  ],
+  "contains": [
+    "holzspiess",
+    "bambusspiess",
+    "metallspiess",
+    "edelstahlspiess"
+  ],
+  "if_steps": {
+    "_comment": "A name that can be the skewers OR a food. 'Schaschlikspiesse' is the skewers only when a cooking step puts food on them; otherwise (the prepared meat skewers, or no step to read) the line goes to the review TSV. The pattern is a case-insensitive regex over the steps.",
+    "schaschlikspiesse": "spie(?:ß|ss)en|auf(?:ge)?stecken|(?:auf|an)\\s+(?:die|den|jeweils|zwei|drei|vier|\\d+)?\\s*[\\wäöüß-]*spie(?:ß|ss)|spie(?:ß|ss)e?\\w*\\s+(?:bestücken|belegen|befüllen|stecken)"
+  }
+}

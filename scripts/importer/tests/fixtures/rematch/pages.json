@@ -1,0 +1,212 @@
+{
+ "https://example.test/recipes/oel-0001": {
+  "name": "Made-up Öl-Familie",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "2 Stück Zwiebel",
+   "Öl",
+   "(Oliven-)Öl*",
+   "nach Geschmack Salz",
+   "Pfeffer",
+   "2 Esslöffel Sonnenblumenöl",
+   "2 Esslöffel Olivenöl mild",
+   "Himalaya Salz"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/honig-0002": {
+  "name": "Made-up Honig zweimal gleiche Einheit",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "100 g Honig",
+   "50 g Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/honig-0003": {
+  "name": "Made-up Honig verschiedene Einheiten",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "100 g Honig",
+   "2 Esslöffel Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/essig-0004": {
+  "name": "Made-up Essig generisch",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "Essig",
+   "Weißweinessig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/essig-0005": {
+  "name": "Made-up Zwei Essigsorten",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "2 Esslöffel Balsamicoessig",
+   "Weißweinessig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/spiesse-0006": {
+  "name": "Made-up Spieße als Zubehör",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "8 Stück Holzspieße",
+   "4 Stück Schaschlikspieße"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Fleisch und Paprika abwechselnd auf die Schaschlikspieße stecken."
+   }
+  ]
+ },
+ "https://example.test/recipes/schaschlik-0007": {
+  "name": "Made-up Fertige Schaschlikspieße",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "4 Stück Schaschlikspieße"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Spieße 8 Minuten in der Pfanne braten."
+   }
+  ]
+ },
+ "https://example.test/recipes/kein-0008": {
+  "name": "Made-up Kein Artikel",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "Zauberpulver XY",
+   "100 g Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/fleisch-0009": {
+  "name": "Made-up Fleisch",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "300 g Hirschsteak",
+   "400 g Rinderkeulenstreifen",
+   "100 g Schweinsbraten-Aufschnitt mit grünem Pfeffer"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/unchecked-0011": {
+  "name": "Made-up Unchecked und Honig",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "100 g Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/unsicher-0012": {
+  "name": "Made-up Unsichere Zuordnung",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "300 g Kartoffel"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/weg-0013": {
+  "name": "Made-up Zeile nicht mehr auf der Seite",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "2 Stück Zwiebel",
+   "100 g Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/schritte-0015": {
+  "name": "Made-up Honig aus den Schritten",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Honig [1,5 EL | 2 EL] mit dem Dressing verrühren, dazu 1 EL Honig [1,5 EL | 2 EL] geben."
+   }
+  ]
+ },
+ "https://example.test/recipes/da-0016": {
+  "name": "Made-up Honig schon da",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "3 Esslöffel Honig"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/salz-0017": {
+  "name": "Made-up Salz doppelt",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "Salz",
+   "nach Geschmack Salz"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ },
+ "https://example.test/recipes/zucker-0018": {
+  "name": "Made-up Zucker mit Menge und nach Geschmack",
+  "recipeYield": "2",
+  "recipeIngredient": [
+   "100 g Zucker",
+   "Zucker nach Geschmack"
+  ],
+  "recipeInstructions": [
+   {
+    "text": "Alles zubereiten."
+   }
+  ]
+ }
+}

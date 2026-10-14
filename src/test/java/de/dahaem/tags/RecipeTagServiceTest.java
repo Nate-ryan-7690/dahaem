@@ -51,7 +51,7 @@ class RecipeTagServiceTest {
 
     @Test
     void mixedMinceGivesRindAndSchwein() {
-        int bolognese = TagFixtures.recipe("Bolognese", 15, 40, 750, 35);
+        int bolognese = TagFixtures.recipe("Bolognese", 15, 40, 750, 38);   // 38 g x 4 / 750 kcal = 20.3 % of the energy: proteinreich
         TagFixtures.ingredient(bolognese, mince);
         TagFixtures.ingredient(bolognese, carrot);
 
