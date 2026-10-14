@@ -578,7 +578,7 @@ classDiagram
 
 Entry point for the REST API. A thin web layer over the existing services: controllers
 translate HTTP to service calls and service results to DTOs, nothing more.
-The console runners (de.dahaem.Main, StoreImportRunner, ...) stay separate entry points.
+The console runners (StoreImportRunner, ReceiptImportRunner, ...) stay separate entry points.
 
 The database is MariaDB, configured from the DAHAEM_DB_URL, DAHAEM_DB_USER
 and DAHAEM_DB_PASSWORD environment variables (see de.dahaem.shared.Database).

@@ -36,8 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * The login gate, end to end through the real Spring Security filter chain against a temporary
- * SQLite file. Unlike ApiSmokeTest nothing is faked here: the user is created with the real
+ * The login gate, end to end through the real Spring Security filter chain against a throwaway
+ * MariaDB database. Unlike ApiSmokeTest nothing is faked here: the user is created with the real
  * AccountService, logs in with a real password, and CSRF tokens are fetched from /api/auth/csrf
  * exactly the way the frontend does it.
  */

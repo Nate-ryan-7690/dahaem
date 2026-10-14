@@ -197,6 +197,16 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(0, gd.main(["--root", self.tmp]))
         self.assertEqual(0, gd.main(["--root", self.tmp, "--check"]))
 
+    def test_a_page_of_a_removed_package_is_deleted_and_reported(self):
+        self.assertEqual(0, gd.main(["--root", self.tmp]))
+        gone = os.path.join(self.tmp, "docs", "classes", "old.md")
+        with open(gone, "w", encoding="utf-8") as f:
+            f.write("left behind")
+        self.assertEqual(1, gd.main(["--root", self.tmp, "--check"]))
+        self.assertEqual(0, gd.main(["--root", self.tmp]))
+        self.assertFalse(os.path.exists(gone))
+        self.assertEqual(0, gd.main(["--root", self.tmp, "--check"]))
+
     def test_output_does_not_depend_on_the_hash_seed(self):
         import subprocess
         script = os.path.join(os.path.dirname(HERE), "generate_docs.py")

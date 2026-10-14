@@ -19,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the meal-planning slice against a real, temporary SQLite file built from the
+ * Exercises the meal-planning slice against a real, throwaway MariaDB database built from the
  * subset of the schema it needs (recipe + meal_plan + meal_plan_recipe).
- * The repository under test is never mocked: only Database's target file is swapped out.
+ * The repository under test is never mocked: only Database's target is swapped out.
  */
 class MealPlanServiceTest {
 

@@ -17,8 +17,8 @@ repair tool that fixes the amounts of recipes imported before the parser fixes b
 | `non_food.json` | config: recipe lines that are not food (Holzspieße, Backpapier ...) | |
 | `db.py` | the MariaDB connection, from environment variables | |
 
-`add_ingredients.py` and `dedup_catalog.py` are older catalog tools that still use the
-SQLite file from before the MariaDB move. They are not part of the import pipeline.
+New catalogue items are added through a numbered migration in `migrations/` plus the same rows in
+`seed/inventory_catalog.sql` (see 0009, 0013, 0014), not through a script.
 
 ## Setup
 

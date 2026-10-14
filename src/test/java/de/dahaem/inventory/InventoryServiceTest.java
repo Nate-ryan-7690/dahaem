@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises InventoryService (and, through it, InventoryRepository) against a real, temporary
- * SQLite file built from just the inventory_item table. The repository under test is never
- * mocked: only Database's target file is swapped out, same approach as ShoppingListServiceTest.
+ * Exercises InventoryService (and, through it, InventoryRepository) against a real, throwaway
+ * MariaDB database built from just the inventory_item table. The repository under test is never
+ * mocked: only Database's target is swapped out, same approach as ShoppingListServiceTest.
  */
 class InventoryServiceTest {
 

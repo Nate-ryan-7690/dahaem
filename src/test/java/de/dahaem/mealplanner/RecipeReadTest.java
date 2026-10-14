@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Exercises the recipe read slice (RecipeService and, through it and directly, RecipeRepository)
- * against a real, temporary SQLite file built from just the recipe/recipe_ingredient/
+ * against a real, throwaway MariaDB database built from just the recipe/recipe_ingredient/
  * recipe_instructions/inventory_item tables it needs. Nothing is mocked: only Database's target
- * file is swapped out, same approach as ShoppingListServiceTest.
+ * is swapped out, same approach as ShoppingListServiceTest.
  *
  * meal_plan and tag/recipe_tag are intentionally out of scope here; separate PRs cover those.
  */

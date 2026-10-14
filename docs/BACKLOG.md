@@ -146,8 +146,6 @@ document the contract. Its open decisions are settled with Nate one at a time.
   "bis …" dates are only on each offer's own page. Fetch only offers not seen before.
 - **Seed sync** — `later`. 9 live inventory items are missing from `seed/inventory_catalog.sql`
   (ids 129, 1034, 1179, 1216, 1218, 1431, 1432, 1433, 1505); export them into the seed.
-- **Old SQLite tools** — `later`. `scripts/importer/add_ingredients.py` and `dedup_catalog.py`
-  still target SQLite; port or retire.
 
 ## Receipts and purchases
 
@@ -332,6 +330,10 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   redefining them; every PR names its tests and verification.
 
 ## Done
+
+- Cleanup: the old SQLite catalogue tools (`add_ingredients.py`, `dedup_catalog.py`, `scan_ingredients.py`), the
+  console runners `Main` / `ShoppingListDemo` and the SQLite-era `docs/CODE_REVIEW.md` are removed; stale SQLite
+  wording fixed in the README, docs and test comments.
 
 - Rematch of the unmatched recipe lines, catalogue items 1822 / 1823, the canned-dish corrections (877 chili sin
   carne → canned legumes, 887 gemüsetopf → canned vegetables), the currywurst-sauce tagger fix and the EU

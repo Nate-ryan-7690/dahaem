@@ -240,7 +240,7 @@ MariaDB.
 
 ## Gaps
 
-- **No migration tool.** `migrations/` holds numbered `.sql` files that were written for the old
-  SQLite file and are kept for history; MariaDB changes need to be written and applied by hand
+- **No migration tool.** `migrations/` holds numbered `.sql` files; 0001 and 0002 were written for the
+  old SQLite file and are kept for history, 0003 onwards are MariaDB. Each is applied by hand
   (snapshot first — see `CLAUDE.md`). Worth a lightweight tool (e.g. Flyway) before the schema
   changes much more.

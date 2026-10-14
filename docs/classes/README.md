@@ -15,9 +15,8 @@ flowchart TD
     inventory["inventory (3)"]
     mealplanner["mealplanner (13)"]
     receipts["receipts (30)"]
-    root["root (1)"]
     shared["shared (5)"]
-    shopping["shopping (12)"]
+    shopping["shopping (11)"]
     stores["stores (41)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
@@ -34,7 +33,6 @@ flowchart TD
     finance -->|1| inventory
     finance -->|1| stores
     receipts -->|8| stores
-    root -->|3| inventory
     shopping -->|2| inventory
     shopping -->|2| mealplanner
 ```
@@ -52,9 +50,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`inventory`](inventory.md) | 3 | The item catalogue and the pantry. |
 | [`mealplanner`](mealplanner.md) | 13 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
-| [`root`](root.md) | 1 | The `Main` console entry point that exercises the services. |
 | [`shared`](shared.md) | 5 | The database connection pool, units and portion arithmetic. |
-| [`shopping`](shopping.md) | 12 | Shopping-list generation from recipes and the store options per line. |
+| [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
 | [`stores`](stores.md) | 41 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 3 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
@@ -132,7 +129,6 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ItemDto`](api.md#itemdto) | api | record | One inventory item as returned by /api/inventory. |
 | [`JsonUtil`](stores.md#jsonutil) | stores | class | Small null-safe helpers for reading store JSON. |
 | [`KnownProduct`](stores.md#knownproduct) | stores | record | What the database already knows about a store product. |
-| [`Main`](root.md#main) | root | class | Temporary console runner. |
 | [`MatchGate`](stores.md#matchgate) | stores | class | Plausibility gate between "the name matched an inventory_item" and "create a store_item + discount". |
 | [`MatchGate.References`](stores.md#matchgatereferences) | stores | class | Reference prices per base unit, by inventory_item id and unit family. |
 | [`MatchGate.Verdict`](stores.md#matchgateverdict) | stores | record |  |
@@ -225,7 +221,6 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ServiceConfig`](api.md#serviceconfig) | api | class | Wires the existing plain-Java repositories and services as Spring beans. |
 | [`ShoppingList`](shopping.md#shoppinglist) | shopping | record | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
 | [`ShoppingListController`](api.md#shoppinglistcontroller) | api | class |  |
-| [`ShoppingListDemo`](shopping.md#shoppinglistdemo) | shopping | class | Temporary console runner for the shopping-list slice, same idea as de.dahaem.Main: proves the aggregation + store-matching logic works before there is a UI for it. |
 | [`ShoppingListDto`](api.md#shoppinglistdto) | api | record | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |
 | [`ShoppingListDto.Line`](api.md#shoppinglistdtoline) | api | record |  |
 | [`ShoppingListDto.StoreOptionDto`](api.md#shoppinglistdtostoreoptiondto) | api | record | One store's current price for a line: what it costs at the till (sale/deal price where one applies, plus deposit), plus whether this pack's unit is even comparable to what's needed. |
