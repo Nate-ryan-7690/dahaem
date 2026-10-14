@@ -21,6 +21,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m unittest discover -s scripts/importer/tests -v
+      # Doc generator (class diagrams, API reference): reader and generators on a made-up source tree.
+      - run: python -m unittest discover -s scripts/docs/tests -v
 
       - uses: actions/setup-java@v4
         with:
