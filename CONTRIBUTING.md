@@ -32,6 +32,19 @@ jar. Tests hit a real, throwaway MariaDB started by Testcontainers (see
 `de.dahaem.testsupport.TestDatabase`), not mocks, so **Docker must be running**;
 no separate test-database setup is needed.
 
+### Generated documentation
+
+`docs/API.md`, `docs/USE_CASES.md` and `docs/classes/` are generated from the Java sources. After a change that
+touches a class, a controller or an import, run
+
+```bash
+python3 scripts/docs/generate_docs.py     # --check only reports whether the committed files are current
+```
+
+and commit the result with the code. The `docs` job in CI fails when the committed files differ from a fresh run
+and puts the diff in the run summary, so a reviewer sees the structural effect of the change (new classes,
+relationships, endpoints) next to the code. CI never commits anything itself.
+
 ## Code conventions
 
 - **Layering.** Every feature package (`inventory`, `mealplanner`, `stores`,

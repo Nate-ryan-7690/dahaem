@@ -33,3 +33,63 @@ jobs:
       # No -q: print per-class test progress so a hang is diagnosable from the log
       # (the last "Running de.dahaem.…Test" line is the class that stalled).
       - run: mvn -B -DskipTests=false verify
+
+  # The generated documentation (docs/API.md, docs/USE_CASES.md, docs/classes/) must match the Java code in the
+  # same PR. Three different failures, three different messages:
+  #   1. the generator itself fails           -> a bug in the generator or a source file it cannot read;
+  #   2. a second run gives another result    -> the output is not deterministic (noisy diffs);
+  #   3. the committed docs differ from a run -> the docs only need regenerating: the diff is in the run summary
+  #      and in the docs-diff artifact. The PR author runs the generator and commits; CI never pushes anything.
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate the documentation (a failure here is a generator error, not stale docs)
+        run: PYTHONHASHSEED=1 python scripts/docs/generate_docs.py
+
+      - name: Generation is deterministic (second run, other hash seed, changes nothing)
+        run: |
+          PYTHONHASHSEED=2 python scripts/docs/generate_docs.py --check \
+            || { echo "::error::The generator gave a different result on a second run. Fix the ordering in scripts/docs/generate_docs.py."; exit 1; }
+
+      - name: Committed documentation is up to date
+        run: |
+          git add -N docs        # new generated files count as changes too
+          if git diff --quiet -- docs; then
+            echo "Generated documentation matches the code."
+            exit 0
+          fi
+          git diff -- docs > docs.patch
+          {
+            echo "## Generated documentation is out of date"
+            echo
+            echo "The code in this PR changes the generated docs. Run \`python3 scripts/docs/generate_docs.py\`, review the diff and commit it."
+            echo
+            echo '```'
+            git diff --stat -- docs
+            echo '```'
+            echo
+            echo "<details><summary>Diff (first 60 kB; the full patch is the docs-diff artifact)</summary>"
+            echo
+            echo '```diff'
+            head -c 60000 docs.patch
+            echo
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Generated docs are out of date. Run: python3 scripts/docs/generate_docs.py and commit the result (diff in the run summary)."
+          exit 1
+
+      - name: Keep the diff
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-diff
+          path: docs.patch
+          if-no-files-found: ignore
