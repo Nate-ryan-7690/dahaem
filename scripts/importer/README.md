@@ -207,7 +207,7 @@ These are listed in the TSV but **not** written to the SQL:
 
 | TSV action | Why it is held |
 |------------|----------------|
-| `review-uncertain-match` | any change (update or insert) where the item match is only `like`/`multi`, e.g. "1 Packung Bratapfelgewürz" fuzzily matched to Apfel. The TSV shows old and new values, the page line and the match |
+| `review-uncertain-match` | any change (update or insert) where the item match is only `like`/`multi`, e.g. "1 Packung Bratapfel" fuzzily matched to Apfel. The TSV shows old and new values, the page line and the match |
 | `review-unit` | the unit differs and the old parser would have stored something else for this line (e.g. stored 1 Stück, but the old parser would have made "1 TL Honig" into 1 TL) |
 | `review-servings` | the page has no readable `recipeYield` and no title rule, or the title contradicts itself (4P + "2 Portionen"); the stored servings are kept |
 | `review-amount` | an amountless line with no safe amount: steps worded differently or in units that cannot be added, several candidates for a generic mention, an uncountable-or-unknown `Stück X`, no amount anywhere, or covered by a numbered line |

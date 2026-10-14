@@ -113,13 +113,31 @@ document the contract. Its open decisions are settled with Nate one at a time.
   Pastis), Schokoriegel, Tiefkühlpizza, Müsliriegel, Instantnudeln. Override for
   "(Oliven-)Öl*" → Olivenöl 1022 added with the rematch. Top unmatched recipe ingredients (Burger Sauce,
   Kaminkäse, vegane Produkte, …). Non-food recipe lines (Holzspieße, Schaschlikspieße) → `non_food.json`, no
-  item needed. **No item yet, from Nate's 2026-10-14 top list** (checked against the seed catalogue + overrides):
-  Süße Soße Asiatische Art (22 lines), Spekulatius-Kekse (21), Hartkäse ital. Art – DONT USE (8; a
-  HelloFresh placeholder name, probably the existing Hartkäse). **The top 60 with counts comes from the first
-  `rematch_unmatched.py` report** (`rematch_<stamp>_noitem.tsv` lists all of them) — paste it here after the run.
-  Meat lines (shipped with the rematch PR, migration 0013): Hirschsteak 1822 (Wild) and Schweinsbraten-Aufschnitt
-  1823 (Schwein) are new; Rinderkeulenstreifen reuses 1660 Rindergeschnetzeltes (Rind), which the overrides
-  already mapped.
+  item needed. **First rematch run (2026-10-14): 351 names with no item, 1,070 lines.** The 60 most common, lines each (no item
+  after PR #80; the ones marked *done* are handled by migration 0014 or the overrides of the follow-up PR):
+  Süße Soße Asiatische Art 22 · Spekulatius-Kekse 21 · Gemüsemix Lauch, Champignons, Karotte 18 · Veganes Filet
+  nach Lachs-Art 18 *done* · Rescued Bruschetta Dip 16 · Planted veganes Pulled in BBQ-Marinade 14 *done* ·
+  Champignons und Lauch, geschnitten 13 · Bauerngarten Bio-Käse 13 · Burger Sauce 13 · Veganes Western Dressing 13 ·
+  Asian Stir Fry Sauce 12 · Polpa Chili 12 · Mini-Spekulatius 12 · Himbeer-Balsamico-Dressing 12 · Kaminkäse 12 ·
+  Frucht-Balsamico-Dressing 11 · Kräutermix „Grüne Soße“ 11 · Gelbe Beete 10 · vegane Knusperstäbchen nach Fisch Art
+  10 *done* · Cheesecake Rote Früchte 9 · nach Geschmack Salz 9 *done, parser* · Pikantes Zitrus-Dressing 8 ·
+  Porridge exotische Früchte 8 · Mini-Pancakes 8 · Mediterraner Mix 8 · Hartkäse ital. Art – DONT USE 8 *done,
+  override* · Sonntagsknödel 8 · Gratis Veltins Bier 7 (promo line, left for Nate) · Antipasti-Trio 7 · veganes
+  Schnitzel 7 *done* · Kebab Paste 7 · Bio-Müslikugeln DIY 7 · Bio-Mürbteig Backmischung 7 · Torchietti 7 ·
+  Grillbrot mit Sunny Rub 6 · Grillhaxe 6 *done, reuses 267* · Rahmjoghurt 6 · Pastrami mit Pfefferrand 6 *done* ·
+  Frühstücksherzen 6 · Lemon Cheesecake 6 · Hackfleischzubereitung aus Hähnchen 6 *done* · Schokoladiger Lava Cake 6
+  · Nuss-Frucht-Mix 6 · Weinblätter gefüllt mit Reis 6 · Krustenbraten 6 *done, reuses 263* · dunkle Weintrauben 6 ·
+  Crunchy Bites Smokey BBQ 5 · Schokolade 70% 5 · Geflügelwürste 5 *done* · Frühstücksherzen Mehrkorn 5 ·
+  Nuss-Fruchtmix Schokolade 5 · vegane Kräutercrème 5 · SalaRico® 5 · bunte Gemüsewürfel 5 · Braune Soße 5 ·
+  Krakauer 5 *done, possible animals* · Olivia-Aufstrich 5 · Weißer Reis, vorgekocht 5 · Boemboe Rendang 5 ·
+  veganes Gyros 5 *done*. The full list is `rematch_<stamp>_noitem.tsv` on the server.
+  Decided with the follow-up: `pflanzliche Margarine` (157 lines) → 377 margarine. Still open: the review TSV groups
+  that are wrong `like` matches (chocolate desserts, Karotten Buns, Schoko-Ostereier, Skipjack Thunfisch in
+  Sonnenblumenöl, Nduja Ravioli: they stay in review, never applied), `Balsamicoessig, hell` (→ 1053?), `Joghurt`
+  (several yogurts), `gehackter Knoblauch & Ingwer in Öl` and similar paste lines, `Honig-Senf-Dressing`,
+  `Ziegenfrischkäse-Crumble mit Honig`, `eingelegter grüner Pfeffer`.
+  Meat lines (migration 0013, in #80): Hirschsteak 1822 (Wild) and Schweinsbraten-Aufschnitt 1823 (Schwein) are
+  new; Rinderkeulenstreifen reuses 1660 Rindergeschnetzeltes (Rind).
 - **Brand list** — `later`. Brand recognition only knows single-word brands, so aggregator
   offers like "Johnnie Walker Black Label" get "Ohne Marke". Curated multi-word brand list;
   clean up invented brand rows ("Fischstäbchen", "Deutsche", "BIO", fragments) and spelling

@@ -127,6 +127,7 @@ class AnimalClassifierTest {
         ambiguous("lyoner", "meat", "Geflügel", "Rind", "Schwein");
         ambiguous("leberwurst", "meat", "Geflügel", "Rind", "Schwein");
         ambiguous("chorizo", "meat", "Geflügel", "Rind", "Schwein");
+        ambiguous("krakauer", "meat", "Geflügel", "Rind", "Schwein");
         ambiguous("wiener würstchen", "meat", "Geflügel", "Rind", "Schwein");
         ambiguous("Bifi Original", "snacks", "Geflügel", "Rind", "Schwein");
         ambiguous("merguez", "meat", "Rind", "Lamm");

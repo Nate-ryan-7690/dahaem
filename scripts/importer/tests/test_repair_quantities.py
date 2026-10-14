@@ -139,7 +139,7 @@ class RepairToolTest(unittest.TestCase):
         self.assertTrue([s for s in sql if "recipe_ingredient_item_id = 1061" in s and "'Prise'" in s])
         # confident, but the old parser would have stored "1 TL Honig" as 1 TL, not 1 Stück -> held
         self.assertFalse([s for s in sql if "recipe_ingredient_recipe_id = 2 AND recipe_ingredient_item_id = 1070" in s])
-        # uncertain: "1 Packung Bratapfelgewürz" fuzzily matched to Apfel -> held
+        # uncertain: "1 Packung Bratapfel" fuzzily matched to Apfel -> held
         self.assertFalse([s for s in sql if "recipe_ingredient_item_id = 143" in s])
         by_item = {(r["recipe_id"], r["item_id"]): r for r in self.tsv() if r["item_id"]}
         self.assertEqual("review-unit", by_item[("2", "1070")]["action"])

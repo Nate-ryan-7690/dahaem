@@ -121,6 +121,7 @@ _TO_TASTE = [
 ]
 
 
+_LEADING_TO_TASTE = re.compile(r"^nach\s+geschmack\s*:?\s+", re.I)
 _NACH_GESCHMACK = re.compile(r"nach\s+geschmack|^\s*etwas\s", re.I)   # "to taste" whatever the item
 
 
@@ -161,6 +162,7 @@ def parse_ingredient(raw):
         unit, name = DEFAULT_UNIT, rest
     if not name:
         name = rest
+    name = _LEADING_TO_TASTE.sub("", name).strip() or name      # "1 Prise nach Geschmack Salz": the item is Salz
     return Line(raw, qty, unit, name.strip(), False)
 
 

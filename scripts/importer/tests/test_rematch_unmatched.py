@@ -194,6 +194,42 @@ class RematchTest(unittest.TestCase):
             self.assertNotIn(call, code)
 
 
+class StoredFormTest(unittest.TestCase):
+    """The finder stores a page line trimmed; the page keeps its trailing blank / no-break space. The 2026-10-14 run
+    held back ~100 Öl, (Oliven-)Öl*, Zucker and Salz lines as 'no longer on the cached page' because of this."""
+
+    ITEMS = [(1022, "olive oil", "olivenöl"), (1061, "white sugar", "weißer zucker"), (1148, "table salt", "speisesalz")]
+    LINES = ["(Oliven-)Öl*\u00a0", " Öl ", "Zucker\u00a0\t", "1 Prise nach Geschmack Salz\u00a0"]
+
+    def run_rematch(self):
+        recipe = {"id": 1, "name": "Made-up Blanks", "source_url": "https://example.test/recipes/blanks-0001"}
+        page = {"name": "x", "recipeYield": "2", "recipeIngredient": self.LINES,
+                "recipeInstructions": [{"text": "Alles kochen."}]}
+        unmatched = [{"id": n, "recipe_id": 1, "line_no": n, "raw_text": tool.stored_form(raw), "reason": "unmatched"}
+                     for n, raw in enumerate(self.LINES, 1)]
+        state = tool.State({1: recipe}, {}, self.ITEMS, unmatched)
+        pages = {"https://example.test/recipes/blanks-0001": ("ok", page)}
+        return tool.run(state, pages)
+
+    def test_stored_form(self):
+        self.assertEqual("(Oliven-)Öl*", tool.stored_form("(Oliven-)Öl*\u00a0"))
+        self.assertEqual("Öl", tool.stored_form(" Öl "))
+        self.assertEqual("a b", tool.stored_form("a\x00b"))
+        self.assertEqual(500, len(tool.stored_form("x" * 600)))
+
+    def test_lines_with_blanks_are_found_on_the_page(self):
+        res = self.run_rematch()
+        cases = {r.raw: (r.case, r.item_id) for r in res.rows}
+        self.assertEqual(4, len(cases))
+        self.assertTrue(all(c == tool.INSERT for c, _i in cases.values()), cases)
+        self.assertEqual({1022, 1061, 1148}, {i for _c, i in cases.values()})
+
+    def test_the_inserted_rows(self):
+        res = self.run_rematch()
+        rows = {(i[1], i[2], str(i[3]), i[4]) for i in res.inserts}
+        self.assertEqual({(1022, "", "None", True), (1061, "", "None", True), (1148, "Prise", "1", False)}, rows)
+
+
 class FamilyCoverTest(unittest.TestCase):
     NAMES = {1: "olivenöl", 2: "sonnenblumenöl", 3: "essig", 4: "weißweinessig", 5: "speisesalz", 6: "honig",
              7: "natives olivenöl extra", 8: "kampot-pfeffer"}

@@ -201,6 +201,12 @@ def run(state, pages, catalog=None, non_food=None):
     return res
 
 
+def stored_form(text):
+    """A page line the way find_unmatched_ingredients.py stores it (control characters to spaces, trimmed, cut at 500
+    characters). The page itself still has the trailing blank or no-break space, so compare in this form."""
+    return re.sub(r"[\x00-\x1f]+", " ", text or "").strip()[:500]
+
+
 def _cached_page(state, pages, rid):
     url = normalize_url((state.recipes.get(rid) or {}).get("source_url"))
     status, page = pages.get(url, (None, None)) if url else (None, None)
@@ -221,7 +227,7 @@ def process_recipe(res, state, catalog, non_food, rid, rows, pages):
 
     def find_entry(row):
         for n, (kind, e) in enumerate(entries):
-            if n in claimed or e["raw"] != row.raw:
+            if n in claimed or stored_form(e["raw"]) != stored_form(row.raw):
                 continue
             if row.line_no is not None and e["line_no"] != row.line_no:
                 continue

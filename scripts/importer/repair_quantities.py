@@ -433,7 +433,7 @@ def plan_recipe(plan, state, recipe, url, parsed, include_other):
                 cls = FROM_STEPS    # the stored row is what the old parser made of this amountless line
             if line["conf"] not in CONFIDENT:
                 # an uncertain item match is no ground for "correcting" a stored row: it may be
-                # an earlier wrong match ("g Bratapfelgewürz" -> Apfel), whatever the class
+                # an earlier wrong match ("g Bratapfel" -> Apfel), whatever the class
                 plan.counts["held_unconfident"] += 1
                 plan.tsv_row(recipe, url, "review-uncertain-match", cls, iid, old, new, line["raw"], line["conf"],
                              f"uncertain item match: not in the SQL; {line['note']}", name)
