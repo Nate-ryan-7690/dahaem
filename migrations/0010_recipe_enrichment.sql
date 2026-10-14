@@ -17,7 +17,7 @@
 --
 -- Re-runnable: ADD ... IF NOT EXISTS skips what already exists.
 --
--- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply on llmbox from the PHP project folder:
+-- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply from the PHP project folder (the one with docker-compose.yml):
 --   docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' < ../dahaem/migrations/0010_recipe_enrichment.sql
 -- Not applied to the live database by the PR that adds it.
 

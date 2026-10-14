@@ -167,9 +167,10 @@ confident; an uncertain line is listed on its own (`review-uncertain-match`) and
 ### Overnight run
 
 ```bash
-# from the PHP project folder; credentials come from the containers' environment
-docker run --rm --network php-sandbox_default --user 1000:1000 --env-file <env file with DAHAEM_DB_*> \
-  -e HOME=/tmp -e PYTHONUSERBASE=/tmp/pyl -v /home/nate/dahaem/scripts/importer:/work -w /work python:3.12-slim \
+# from the PHP project folder; credentials come from the containers' environment.
+# <stack network> is the Docker network of the compose stack that holds the db service.
+docker run --rm --network <stack network> --user 1000:1000 --env-file <env file with DAHAEM_DB_*> \
+  -e HOME=/tmp -e PYTHONUSERBASE=/tmp/pyl -v "$PWD/../dahaem/scripts/importer:/work" -w /work python:3.12-slim \
   sh -c 'pip install -q --user -r requirements.txt && python repair_quantities.py --select suspect --delay 2'
 ```
 

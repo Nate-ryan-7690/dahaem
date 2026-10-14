@@ -669,7 +669,7 @@ def endpoint_section(model, ep):
 # ---------- use cases ----------
 ACTORS = [
     ("member", "Household member<br/>(PHP app or PWA)"),
-    ("admin", "Maintainer (Nate)<br/>on llmbox"),
+    ("admin", "Maintainer (Nate)<br/>on the server"),
     ("cron", "Scheduler"),
 ]
 
@@ -688,7 +688,7 @@ def use_cases_page(model):
     scheduled = [t for t in model.types if any(a[0] == "Scheduled" for m in t.members for a in m.annotations)]
     lines = [GENERATED, "", "# Use cases", "",
              "Who uses DAHÄM and for what, derived from the REST controllers (members, through the PHP frontend) and "
-             "the classes with a `main` method (the maintainer, on the llmbox server). Mermaid has no UML use-case "
+             "the classes with a `main` method (the maintainer, on the server). Mermaid has no UML use-case "
              "notation, so actors are rounded boxes and use cases are stadium shapes.", "",
              "## Household member", "",
              "```mermaid", "flowchart LR", '    member(("Household member<br/>PHP app / PWA"))']
@@ -722,7 +722,7 @@ def use_cases_page(model):
     lines += ["", "## Maintainer and scheduler: command-line tools", "",
               "These run on the server (`java -cp target/dahaem-1.0-SNAPSHOT.jar <class> ...`) or, for the recipe "
               "importer scripts, as Python from `scripts/importer`. None of them is part of the HTTP API.", "",
-              "```mermaid", "flowchart LR", '    admin(("Maintainer<br/>llmbox"))']
+              "```mermaid", "flowchart LR", '    admin(("Maintainer<br/>server"))']
     for i, t in enumerate(sorted(runners, key=lambda x: x.name)):
         lines.append(f'    admin --> r{i}(["{t.name}"])')
     for i, t in enumerate(scheduled):

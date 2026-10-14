@@ -85,7 +85,7 @@ document the contract. Its open decisions are settled with Nate one at a time.
   any row is "unklar" and never vegetarisch / vegan. Nate: map the top unmatched names (overrides or new
   catalogue items). **Rematch built** (`rematch_unmatched.py`, follow-up to #79): sorts every stored unmatched line
   into inserted / covered / non-food / no item yet / review (rules in `scripts/importer/README.md`); Nate runs it on
-  llmbox (run order in the PR), reads the REVIEW TSV, applies the SQL in one transaction, then `RecipeTagRunner`.
+  the server (run order in the PR), reads the REVIEW TSV, applies the SQL in one transaction, then `RecipeTagRunner`.
   202 recipes have no URL and 'unchecked' stays until someone checks them by hand. Names Nate's 2026-10-14 run
   will most likely land in the REVIEW TSV (the importer's fuzzy `like` match is unsure; each needs an override or
   a catalogue item): `pflanzliche Margarine` (157 lines; `like` → Margarine, but there is also pflanzliche Butter),
@@ -134,18 +134,18 @@ document the contract. Its open decisions are settled with Nate one at a time.
 ## Receipts and purchases
 
 - **Receipts → purchase history** — `in progress`. 22 Penny receipts (June–Oct 2026, PDFs) parse to
-  the cent (#64); read-only analysis: 541 lines, 300 distinct names, €1,324.68. Receipts get their OWN
+  the cent (#64); read-only analysis: every line parsed. Receipts get their OWN
   tables (`purchase_receipt`, `purchase_receipt_line`, `purchase_receipt_adjustment`, migration 0008) —
   NOT `purchase_history`, which doesn't fit (store_item / expiration date NOT NULL, INTEGER quantity, no
   receipt link). Every line is stored, matched or not; coupons are adjustments on the product before
   them. `ReceiptImportRunner` (dry run, `--commit` = one transaction, duplicates by store + date-time +
   receipt number) never calls `PurchaseService` and never changes stock: the household's stock is built
   from new purchases and check-ins, not reconstructed from old receipts. First dry run on Nate's 22 receipts
-  (2026-10-13): 22 NEW, all balancing, €1,324.68. Fixed before the real `--commit`: PENNY group coupons
+  (2026-10-13): all NEW and balancing. Fixed before the real `--commit`: PENNY group coupons
   ("App-Coupon 10% Waren", one per tax class, printed after an unrelated product or as a block at the end)
   are stored without a line instead of on the product before them; a discount that would make a paid total
   negative is stored without a line and reported. New items 1818–1821 (migration 0009) and override
-  changes per Nate's decisions. Next (llmbox, Nate): snapshot → apply 0009 → rebuild → dry run → `--commit`.
+  changes per Nate's decisions. Next (on the server, Nate): snapshot → apply 0009 → rebuild → dry run → `--commit`.
   Uses: real regular prices (Penny publishes mostly UVPs), confirmed product → item matches, price
   history and budget.
 - **Receipt review** — `next`. Names left unmatched on purpose for Nate to map (they are in the
@@ -221,7 +221,7 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
   bulk later (bought licence, own photos or AI-generated). The PHP shows a designed fallback when there is
-  none. Next (llmbox, Nate): snapshot → apply 0010 → rebuild `dahaem-api` → `enrich_recipes.py` → review →
+  none. Next (on the server, Nate): snapshot → apply 0010 → rebuild `dahaem-api` → `enrich_recipes.py` → review →
   apply the SQL in one transaction. Same PR adds description, cuisine (German, `config/cuisine_map.json`),
   rating and publish date.
 - **1,294 cached recipes never imported** — `later`. The page cache holds 12,162 pages; 10,868 tie to a DB

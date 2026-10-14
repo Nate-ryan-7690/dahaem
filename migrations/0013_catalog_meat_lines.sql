@@ -29,7 +29,7 @@
 -- The last statement checks everything: every line must say OK. "CHECK" means the id is used by another item on
 -- this database, an animal row is missing, or a correction did not apply -- then stop and ask before going on.
 --
--- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply on llmbox from the PHP project folder:
+-- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply from the PHP project folder (the one with docker-compose.yml):
 --   docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' < ../dahaem/migrations/0013_catalog_meat_lines.sql
 -- Not applied to the live database by the PR that adds it.
 

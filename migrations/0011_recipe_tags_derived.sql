@@ -19,7 +19,7 @@
 -- Re-runnable: CREATE TABLE IF NOT EXISTS / ADD ... IF NOT EXISTS skip what already exists.
 -- SET NAMES makes sure the umlauts in the CHECK list are read as UTF-8 whatever the client default is.
 --
--- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply on llmbox from the PHP project folder:
+-- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply from the PHP project folder (the one with docker-compose.yml):
 --   docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' < ../dahaem/migrations/0011_recipe_tags_derived.sql
 -- Not applied to the live database by the PR that adds it.
 

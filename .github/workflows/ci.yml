@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+# The jobs only read the repository; nothing here needs to write to it or to PRs.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

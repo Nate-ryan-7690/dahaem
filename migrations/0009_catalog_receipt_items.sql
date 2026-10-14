@@ -16,7 +16,7 @@
 -- The last statement lists the four ids: every row must say OK. "CHECK" means the id was already used by
 -- another item on this database -- then stop and ask before running the receipt import.
 --
--- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply on llmbox from the PHP project folder:
+-- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply from the PHP project folder (the one with docker-compose.yml):
 --   docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' < ../dahaem/migrations/0009_catalog_receipt_items.sql
 -- Not applied to the live database by the PR that adds it.
 

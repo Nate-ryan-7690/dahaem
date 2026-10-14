@@ -117,7 +117,7 @@ class EnrichSqlTest {
 
     // ---------- helpers ----------
 
-    /** Runs the expected file the way the llmbox session does: START TRANSACTION, the file, COMMIT. Returns rows changed. */
+    /** Runs the expected file the way the server session does: START TRANSACTION, the file, COMMIT. Returns rows changed. */
     private static int applyInOneTransaction() throws IOException, SQLException {
         List<String> statements = new ArrayList<>();
         for (String line : Files.readAllLines(ENRICH.resolve("expected_enrich.sql"), StandardCharsets.UTF_8)) {
