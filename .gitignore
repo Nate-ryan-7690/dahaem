@@ -50,3 +50,5 @@ scripts/importer/_enrich/
 # Unmatched-ingredient finder: generated SQL / TSV (real recipe lines)
 scripts/importer/_unmatched/
 scripts/importer/_rematch/
+# Downloaded recipe PDFs (third-party content), default input of scripts/importer/extract.py
+/recipe_scans/

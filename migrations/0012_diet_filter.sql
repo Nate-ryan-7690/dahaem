@@ -30,7 +30,7 @@
 -- redo what is already there. SET NAMES makes sure the umlauts in the CHECK list are read as UTF-8
 -- whatever the client default is. Needs migration 0011 first.
 --
--- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply on llmbox from the PHP project folder:
+-- SNAPSHOT FIRST (CLAUDE.md rule 3), then apply from the PHP project folder (the one with docker-compose.yml):
 --   docker compose exec -T db sh -c 'exec mariadb -u root -p"$MARIADB_ROOT_PASSWORD" "$MARIADB_DATABASE"' < ../dahaem/migrations/0012_diet_filter.sql
 -- Not applied to the live database by the PR that adds it.
 

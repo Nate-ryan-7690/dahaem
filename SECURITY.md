@@ -18,11 +18,13 @@ This project has not reached a `1.0` release. There is one line of development
 If you find a security issue in this repo (for example: SQL injection in a
 repository method, a store importer that could be tricked into fetching or
 executing something unintended, or credential/secret handling in
-`config/stores.properties` or the import scripts), please open a
-[GitHub issue](https://github.com/Nate-ryan-7690/dahaem/issues) or contact the
-maintainer directly rather than filing a public issue if the report includes
-exploit details. This is a personal/apprenticeship project without a formal SLA;
-expect an acknowledgement within a few days and a fix on a best-effort basis.
+`config/stores.properties` or the import scripts), please report it privately:
+use **Report a vulnerability** on the repository's
+[Security tab](https://github.com/Nate-ryan-7690/dahaem/security/advisories/new)
+(GitHub private vulnerability reporting). Please do not open a public issue
+with exploit details; an issue is fine for anything that is not sensitive. This
+is a personal/apprenticeship project without a formal SLA; expect an
+acknowledgement within a few days and a fix on a best-effort basis.
 
 ## Scope notes for reviewers
 

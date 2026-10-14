@@ -33,7 +33,7 @@ from recipe_parse import find_recipe as _find_recipe, num, sql_decimal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.abspath(os.path.join(HERE, "..", ".."))
-DEFAULT_IN = r"C:\Users\Schüler\Documents\Akademie Überlingen\IT umschulng Module 1\Projekte\Kitchen Organizer DB\Recipe Scans"
+DEFAULT_IN = os.environ.get("DAHAEM_RECIPE_SCANS", os.path.join(PROJECT, "recipe_scans"))   # folder of the downloaded PDFs
 DRAFTS = os.path.join(PROJECT, "scripts", "recipes", "_drafts")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 UNITS = recipe_parse.UNITS

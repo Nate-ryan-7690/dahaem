@@ -2,7 +2,7 @@
 
 # Use cases
 
-Who uses DAHÄM and for what, derived from the REST controllers (members, through the PHP frontend) and the classes with a `main` method (the maintainer, on the llmbox server). Mermaid has no UML use-case notation, so actors are rounded boxes and use cases are stadium shapes.
+Who uses DAHÄM and for what, derived from the REST controllers (members, through the PHP frontend) and the classes with a `main` method (the maintainer, on the server). Mermaid has no UML use-case notation, so actors are rounded boxes and use cases are stadium shapes.
 
 ## Household member
 
@@ -89,7 +89,7 @@ These run on the server (`java -cp target/dahaem-1.0-SNAPSHOT.jar <class> ...`) 
 
 ```mermaid
 flowchart LR
-    admin(("Maintainer<br/>llmbox"))
+    admin(("Maintainer<br/>server"))
     admin --> r0(["ItemAnimalRunner"])
     admin --> r1(["Main"])
     admin --> r2(["ReceiptImportRunner"])
