@@ -50,7 +50,9 @@ document the contract. Its open decisions are settled with Nate one at a time.
   Nährwerte and Küche from `inventory_item_animal`, the ingredients, the times and the nutrition, written
   by `RecipeTagRunner` as `recipe_tag_source = 'derived'`; manual tags are never touched. Thresholds
   confirmed by Nate 2026-10-13: schnell ≤ 30 min (total time, prep + cook > 0), kalorienarm ≤ 600 kcal,
-  proteinreich ≥ 30 g protein, per serving (`config/recipe_tags.properties`).
+  proteinreich ≥ 30 g protein, per serving (`config/recipe_tags.properties`). **Changed 2026-10-14:** proteinreich
+  is now the EU "high protein" rule (Regulation (EC) No 1924/2006, Annex: ≥ 20 % of the energy from protein) AND
+  ≥ 20 g protein per serving (`high-protein.energy.share`, `high-protein.min.grams`).
 - **Diet filter: what a household does not eat** — `in progress`, this PR (migration 0012). New Tier values
   (Geflügel, Ente, Gans, Kaninchen, Pferd); POSSIBLE animals for generic items (Salami, Fleischwurst,
   Wiener, Lyoner, Leberwurst, Chorizo, Gelatine …: no Tier tag, but they block vegetarisch and make a
@@ -81,11 +83,18 @@ document the contract. Its open decisions are settled with Nate one at a time.
   stored in `recipe_unmatched_ingredient` (migration 0012): `find_unmatched_ingredients.py` for the recipes
   already imported (report: the 60 most common unmatched names), `load_recipes.py` for new ones. A recipe with
   any row is "unklar" and never vegetarisch / vegan. Nate: map the top unmatched names (overrides or new
-  catalogue items). **Follow-up tool, not built yet:** once a name is mapped, a rematch should read the
-  recipe's rows, insert the `recipe_ingredient` row (amount parsed as the repair tool does), delete the
-  `recipe_unmatched_ingredient` row and leave the recipe free to become vegetarisch again after the next
-  tagger run; until then the rows stay (`find_unmatched_ingredients.py` only ever adds). 202 recipes have no
-  URL and 'unchecked' stays until someone checks them by hand.
+  catalogue items). **Rematch built** (`rematch_unmatched.py`, follow-up to #79): sorts every stored unmatched line
+  into inserted / covered / non-food / no item yet / review (rules in `scripts/importer/README.md`); Nate runs it on
+  llmbox (run order in the PR), reads the REVIEW TSV, applies the SQL in one transaction, then `RecipeTagRunner`.
+  202 recipes have no URL and 'unchecked' stays until someone checks them by hand. Names Nate's 2026-10-14 run
+  will most likely land in the REVIEW TSV (the importer's fuzzy `like` match is unsure; each needs an override or
+  a catalogue item): `pflanzliche Margarine` (157 lines; `like` → Margarine, but there is also pflanzliche Butter),
+  `gehackter Knoblauch & Ingwer in Öl` (48), `Honig-Senf-Dressing` (37), `Ziegenfrischkäse-Crumble mit Honig` (44),
+  `eingelegter grüner Pfeffer` (21; `like` → grüner Pfeffer, a different product).
+- **Non-food lines in recipes** — `done` in the rematch (`scripts/importer/non_food.json`). Holzspieße (89 lines),
+  Backpapier, Alufolie, Zahnstocher ... are resolved as ignored: not an ingredient, never a diet blocker, never
+  unklar. `Schaschlikspieße` counts as the skewers only when a cooking step puts food on them; otherwise it goes to
+  review (it may be the prepared meat skewers). New names: add them to the list, the report shows what is left.
 - **"versch. Sorten" / multi-item offers** — `next`. One offer counts for every item it covers,
   but only the variants that exist in the ADVERTISED PACK SIZE (Coca-Cola 1,25 l ≠ cans). Named
   variants ("A / B", "oder", commas) are split directly. Otherwise look up brand + size once,
@@ -101,10 +110,16 @@ document the contract. Its open decisions are settled with Nate one at a time.
   gram-only Waffelschnitte packs). Also needed for buyable shopping-list amounts.
 - **Catalogue batch 2** — `next`. Items flagged as possibly too coarse under the "product minus
   brand" rule: Kräuterlikör / Bitter, Mixgetränk (alkoholisch), Anisspirituose (Ouzo vs
-  Pastis), Schokoriegel, Tiefkühlpizza, Müsliriegel, Instantnudeln. Overrides for
-  "(Oliven-)Öl*" (95 recipe lines). Top unmatched recipe ingredients (Burger Sauce, süße Soße
-  asiatische Art, Spekulatius-Kekse, vegane Produkte, Kaminkäse, …). Non-food recipe lines
-  (Holzspieße, Schaschlikspieße) → skip.
+  Pastis), Schokoriegel, Tiefkühlpizza, Müsliriegel, Instantnudeln. Override for
+  "(Oliven-)Öl*" → Olivenöl 1022 added with the rematch. Top unmatched recipe ingredients (Burger Sauce,
+  Kaminkäse, vegane Produkte, …). Non-food recipe lines (Holzspieße, Schaschlikspieße) → `non_food.json`, no
+  item needed. **No item yet, from Nate's 2026-10-14 top list** (checked against the seed catalogue + overrides):
+  Süße Soße Asiatische Art (22 lines), Spekulatius-Kekse (21), Hartkäse ital. Art – DONT USE (8; a
+  HelloFresh placeholder name, probably the existing Hartkäse). **The top 60 with counts comes from the first
+  `rematch_unmatched.py` report** (`rematch_<stamp>_noitem.tsv` lists all of them) — paste it here after the run.
+  Meat lines (shipped with the rematch PR, migration 0013): Hirschsteak 1822 (Wild) and Schweinsbraten-Aufschnitt
+  1823 (Schwein) are new; Rinderkeulenstreifen reuses 1660 Rindergeschnetzeltes (Rind), which the overrides
+  already mapped.
 - **Brand list** — `later`. Brand recognition only knows single-word brands, so aggregator
   offers like "Johnnie Walker Black Label" get "Ohne Marke". Curated multi-word brand list;
   clean up invented brand rows ("Fischstäbchen", "Deutsche", "BIO", fragments) and spelling
@@ -299,6 +314,10 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   redefining them; every PR names its tests and verification.
 
 ## Done
+
+- Rematch of the unmatched recipe lines, catalogue items 1822 / 1823, the canned-dish corrections (877 chili sin
+  carne → canned legumes, 887 gemüsetopf → canned vegetables), the currywurst-sauce tagger fix and the EU
+  proteinreich rule: migration 0013, `rematch_unmatched.py` (follow-up to #79; PR number added when merged).
 
 - #59 Override full-name lookup, 0 = excluded, overrides skip the price check; parser: capital I
   litre, WL, multipacks, ranges use the lower number, broth yields; ALDI sizes; 0 € offers to

@@ -104,17 +104,58 @@ class RecipeTaggerTest {
         assertEquals(Set.of("kalorienarm", "unklar"), names(light));
         assertTrue(light.tags().contains(new DerivedTag("kalorienarm", "Nährwerte")));
 
-        assertEquals(Set.of("proteinreich", "unklar"), names(TAGGER.derive(recipe(0, 0, 601, 30, null))));
+        assertEquals(Set.of("proteinreich", "unklar"), names(TAGGER.derive(recipe(0, 0, 601, 31, null))));
         assertEquals(Set.of("unklar"), names(TAGGER.derive(recipe(0, 0, null, null, null))));
         assertEquals(Set.of("unklar"), names(TAGGER.derive(recipe(0, 0, 0, 0, null))), "0 kcal is a missing value");
     }
 
     @Test
     void thresholdsComeFromTheSettings() {
-        RecipeTagger strict = new RecipeTagger(new TagSettings(15, 400, 40));
+        RecipeTagger strict = new RecipeTagger(new TagSettings(15, 400, 0.30, 40));
         assertEquals(Set.of("unklar"), names(strict.derive(recipe(10, 10, 500, 35, null))));
+        assertEquals(Set.of("proteinreich", "unklar"), names(strict.derive(recipe(10, 10, 500, 40, null))), "32 % >= 30 %");
+        assertEquals(Set.of("unklar"), names(strict.derive(recipe(10, 10, 600, 40, null))), "26.7 % < 30 %");
         assertEquals(Set.of("schnell", "kalorienarm", "proteinreich", "unklar"),
                 names(strict.derive(recipe(5, 10, 400, 40, null))));
+    }
+
+    /** EU "high protein" (Regulation (EC) No 1924/2006): >= 20 % of the energy from protein (4 kcal/g), plus >= 20 g. */
+    @Test
+    void proteinreichNeedsTwentyPercentOfTheEnergyAndTwentyGrams() {
+        assertTrue(proteinreich(400, 20), "exactly 20 g and exactly 20 % of 400 kcal");
+        assertFalse(proteinreich(401, 20), "19.95 % of the energy");
+        assertTrue(proteinreich(399, 20));
+        assertFalse(proteinreich(300, 19), "25 % of the energy, but under 20 g");
+        assertTrue(proteinreich(300, 20), "26.7 %");
+        assertFalse(proteinreich(700, 34), "34 g, but 19.4 % of the energy");
+        assertTrue(proteinreich(700, 35), "35 g = exactly 20 % of 700 kcal");
+        assertTrue(proteinreich(1000, 50));
+        assertFalse(proteinreich(1000, 49));
+        assertFalse(proteinreich(null, 40), "no kcal: no tag");
+        assertFalse(proteinreich(0, 40), "0 kcal is a missing value");
+        assertFalse(TAGGER.derive(recipe(0, 0, 400, null, null)).tags().contains(
+                new DerivedTag("proteinreich", "Nährwerte")));
+    }
+
+    private static boolean proteinreich(Integer kcal, int protein) {
+        return TAGGER.derive(recipe(0, 0, kcal, protein, null)).tags()
+                .contains(new DerivedTag("proteinreich", "Nährwerte"));
+    }
+
+    @Test
+    void settingsReadTheEnergyShareAndGramsFromTheProperties() throws Exception {
+        java.nio.file.Path file = java.nio.file.Files.createTempFile("tags", ".properties");
+        file.toFile().deleteOnExit();
+        java.nio.file.Files.writeString(file, "high-protein.energy.share=0.25\nhigh-protein.min.grams=25\n");
+        TagSettings s = TagSettings.load(file);
+        assertEquals(0.25, s.highProteinEnergyShare());
+        assertEquals(25, s.highProteinMinGrams());
+        assertEquals(30, s.quickMaxMinutes(), "missing key: default");
+        assertEquals(0.20, TagSettings.defaults().highProteinEnergyShare());
+        assertEquals(20, TagSettings.defaults().highProteinMinGrams());
+
+        java.nio.file.Files.writeString(file, "high-protein.energy.share=20\n");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> TagSettings.load(file));
     }
 
     @Test

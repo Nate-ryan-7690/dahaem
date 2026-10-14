@@ -49,3 +49,4 @@ scripts/importer/_enrich/
 
 # Unmatched-ingredient finder: generated SQL / TSV (real recipe lines)
 scripts/importer/_unmatched/
+scripts/importer/_rematch/

@@ -134,7 +134,8 @@ public final class AnimalClassifier {
             return true;
         }
         String name = normalise(item.name());
-        if (item.category().equals("plant-based") || PLANT_BASED.matcher(name).find() || name.contains("gewürz")) {
+        if (item.category().equals("plant-based") || PLANT_BASED.matcher(name).find() || name.contains("gewürz")
+                || isMeatFreeSauce(name)) {
             return false;
         }
         for (Hint hint : HINTS) {
@@ -223,9 +224,20 @@ public final class AnimalClassifier {
         return Optional.empty();
     }
 
+    /** A sauce named after a sausage dish ("Currywurst Sauce", "Maggi Fix Currywurst Sauce"): no meat in it. */
+    private static final Pattern MEAT_FREE_SAUCE = p("currywurst ?(?:sauce|soße|sosse)");
+
+    /** True for a sauce that is only named after a meat dish; such an item names no animal. */
+    public static boolean isMeatFreeSauce(String name) {
+        return MEAT_FREE_SAUCE.matcher(normalise(name)).find();
+    }
+
     /** True if the name says or implies an animal (used to keep such items out of vegetarian recipes). */
     public static boolean mentionsAnimal(String name) {
         String n = normalise(name);
+        if (isMeatFreeSauce(n)) {
+            return false;
+        }
         if (!explicit(n).isEmpty()) {
             return true;
         }

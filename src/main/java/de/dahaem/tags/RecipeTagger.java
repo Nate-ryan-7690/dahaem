@@ -18,7 +18,8 @@ import java.util.Set;
  *       item with a land animal (certain or possible, not Fisch / Meeresfrüchte) together with a milk product.</li>
  *   <li><b>schnell</b>: prep + cook at most the configured minutes, only when the total is above 0
  *       (imported recipes store the total time as cook time, prep 0).</li>
- *   <li><b>kalorienarm / proteinreich</b>: per-serving nutrition against the configured thresholds.</li>
+ *   <li><b>kalorienarm</b>: at most the configured kcal per serving. <b>proteinreich</b>: at least 20 % of the energy
+ *       from protein (EU "high protein", Regulation (EC) No 1924/2006) and at least 20 g protein per serving.</li>
  *   <li><b>Küche</b>: the recipe's cuisine.</li>
  * </ul>
  */
@@ -76,13 +77,28 @@ public class RecipeTagger {
         if (recipe.calories() != null && recipe.calories() > 0 && recipe.calories() <= settings.lowCalorieMaxKcal()) {
             tags.add(new DerivedTag(DerivedTag.KALORIENARM, DerivedTag.NAEHRWERTE));
         }
-        if (recipe.protein() != null && recipe.protein() >= settings.highProteinMinGrams()) {
+        if (isHighProtein(recipe)) {
             tags.add(new DerivedTag(DerivedTag.PROTEINREICH, DerivedTag.NAEHRWERTE));
         }
         if (recipe.cuisine() != null && !recipe.cuisine().isBlank()) {
             tags.add(new DerivedTag(recipe.cuisine().trim(), DerivedTag.KUECHE));
         }
         return new Derivation(tags, dietKnown);
+    }
+
+    /**
+     * "Proteinreich": at least the configured share of the energy from protein (EU "high protein", Regulation (EC)
+     * No 1924/2006: 20 %, protein counted as 4 kcal per gram) AND at least the configured grams per serving.
+     * Needs both values; 0 kcal is a missing value.
+     */
+    boolean isHighProtein(RecipeFacts recipe) {
+        Integer protein = recipe.protein();
+        Integer kcal = recipe.calories();
+        if (protein == null || kcal == null || kcal <= 0 || protein < settings.highProteinMinGrams()) {
+            return false;
+        }
+        // protein * 4 / kcal >= share, compared in whole numbers x 1000 of the share so 20 g in 400 kcal is exactly 20 %
+        return Math.round(protein * 4.0 * 1000) >= Math.round(settings.highProteinEnergyShare() * 1000) * (long) kcal;
     }
 
     /** A land animal (certain or possible) in one item and a milk product in another. */
