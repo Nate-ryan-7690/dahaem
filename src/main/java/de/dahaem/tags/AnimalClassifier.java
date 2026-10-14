@@ -87,7 +87,7 @@ public final class AnimalClassifier {
             hint("ribeye|sirloin|striploin|entrec[oô]te|rumpsteak|tafelspitz|tomahawk|con carne", Animals.RIND),
             ambiguous("salami|pepperoni|mortadella|lyoner|fleischwurst|jagdwurst|gelbwurst|leberwurst|leberkäse"
                     + "|leberkase|mettwurst|teewurst|cervelat|landjäger|chorizo|bratwurst|currywurst|grillwurst"
-                    + "|knackwurst|blutwurst|rotwurst|bierwurst|käsekrainer|wiener(?! ?schnitzel)|frankfurter|bockwurst|bifi",
+                    + "|knackwurst|blutwurst|rotwurst|bierwurst|käsekrainer|wiener(?! ?schnitzel)|frankfurter|krakauer|bockwurst|bifi",
                     Animals.SCHWEIN, Animals.RIND, Animals.GEFLUEGEL),
             ambiguous("merguez", Animals.RIND, Animals.LAMM),
             ambiguous("sülze", Animals.SCHWEIN, Animals.RIND, Animals.GEFLUEGEL),
