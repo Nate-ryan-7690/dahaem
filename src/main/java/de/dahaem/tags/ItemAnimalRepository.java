@@ -14,49 +14,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-/** All SQL for inventory_item_animal, and the read-only catalogue queries the animal tool needs. */
+/** All SQL for inventory_item_animal and the alcohol flag, and the read-only catalogue queries the animal tool needs. */
 public class ItemAnimalRepository {
 
     static final String NAME_SQL = "COALESCE(NULLIF(inventory_item_name_deutsch, ''), inventory_item_name_english)";
 
-    // Where meat / fish live in the catalogue: whole categories, plus single subcategories of other categories.
-    private static final List<String> CANDIDATE_CATEGORIES = List.of("meat", "meat & poultry", "fish & seafood");
-    private static final List<String[]> CANDIDATE_SUBCATEGORIES = List.of(
-            new String[]{"canned & jarred goods", "canned meat"},
-            new String[]{"canned & jarred goods", "canned fish"},
-            new String[]{"snacks", "jerky & meat snacks"},
-            new String[]{"frozen", "fish"},
-            new String[]{"frozen", "poultry products"});
-
-    /** The meat / fish items of the catalogue (read-only), by id. */
-    public List<CatalogItem> findCandidates() {
-        StringBuilder sql = new StringBuilder("SELECT inventory_item_id, " + NAME_SQL
-                + " AS item_name, inventory_item_category, inventory_item_subcategory FROM inventory_item WHERE ");
-        sql.append("inventory_item_category IN (").append(placeholders(CANDIDATE_CATEGORIES.size())).append(")");
-        for (int i = 0; i < CANDIDATE_SUBCATEGORIES.size(); i++) {
-            sql.append(" OR (inventory_item_category = ? AND inventory_item_subcategory = ?)");
-        }
-        sql.append(" ORDER BY inventory_item_id");
-        try (Connection con = Database.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql.toString())) {
-            int n = 1;
-            for (String category : CANDIDATE_CATEGORIES) {
-                ps.setString(n++, category);
-            }
-            for (String[] pair : CANDIDATE_SUBCATEGORIES) {
-                ps.setString(n++, pair[0]);
-                ps.setString(n++, pair[1]);
-            }
-            return readItems(ps);
-        } catch (SQLException e) {
-            throw new RuntimeException("Could not load the meat / fish items", e);
-        }
-    }
-
-    /** Every catalogue item, by id (read-only); used to list what blocks vegetarian / vegan. */
+    /** Every catalogue item, by id (read-only); the animal tool and the diet filter work from this list. */
     public List<CatalogItem> findAllItems() {
         String sql = "SELECT inventory_item_id, " + NAME_SQL + " AS item_name, inventory_item_category, "
-                + "inventory_item_subcategory FROM inventory_item ORDER BY inventory_item_id";
+                + "inventory_item_subcategory, inventory_item_alcohol FROM inventory_item ORDER BY inventory_item_id";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             return readItems(ps);
@@ -65,18 +31,26 @@ public class ItemAnimalRepository {
         }
     }
 
-    /** item id → animals already stored. */
+    /** item id → animals already stored (certain and possible). */
     public Map<Integer, Set<String>> findAnimals() {
-        String sql = "SELECT inventory_item_animal_item_id, inventory_item_animal_animal FROM inventory_item_animal";
         Map<Integer, Set<String>> out = new LinkedHashMap<>();
+        findAnimalCertainty().forEach((id, byAnimal) -> out.put(id, new TreeSet<>(byAnimal.keySet())));
+        return out;
+    }
+
+    /** item id → (animal → 'certain' | 'possible') already stored. */
+    public Map<Integer, Map<String, String>> findAnimalCertainty() {
+        String sql = "SELECT inventory_item_animal_item_id, inventory_item_animal_animal, "
+                + "inventory_item_animal_certainty FROM inventory_item_animal";
+        Map<Integer, Map<String, String>> out = new LinkedHashMap<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                out.computeIfAbsent(rs.getInt(1), k -> new TreeSet<>()).add(rs.getString(2));
+                out.computeIfAbsent(rs.getInt(1), k -> new java.util.TreeMap<>()).put(rs.getString(2), rs.getString(3));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Could not load the item animals", e);
+            throw new RuntimeException("Could not load the item animals (is migration 0012 applied?)", e);
         }
         return out;
     }
@@ -107,21 +81,31 @@ public class ItemAnimalRepository {
     }
 
     /**
-     * Inserts (item id, animal) pairs in ONE transaction; a pair that is already stored is left alone.
+     * Stores the reviewed animals (item id → animal → certainty) and sets the alcohol flag of the given items,
+     * all in ONE transaction. A pair that is already stored keeps its row; only its certainty is brought in line
+     * with the reviewed one. Animals are never removed and the alcohol flag is only ever set, not cleared.
      * Any failure rolls the whole batch back.
      */
-    public void insertAnimals(Map<Integer, Set<String>> animalsByItem) {
-        String sql = "INSERT INTO inventory_item_animal (inventory_item_animal_item_id, inventory_item_animal_animal) "
-                + "VALUES (?, ?) ON DUPLICATE KEY UPDATE inventory_item_animal_item_id = inventory_item_animal_item_id";
+    public void store(Map<Integer, Map<String, String>> animalsByItem, Set<Integer> alcoholItems) {
+        String animalSql = "INSERT INTO inventory_item_animal (inventory_item_animal_item_id, inventory_item_animal_animal, "
+                + "inventory_item_animal_certainty) VALUES (?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE inventory_item_animal_certainty = VALUES(inventory_item_animal_certainty)";
+        String alcoholSql = "UPDATE inventory_item SET inventory_item_alcohol = TRUE WHERE inventory_item_id = ?";
         try (Connection con = Database.getConnection()) {
             con.setAutoCommit(false);
-            try (PreparedStatement ps = con.prepareStatement(sql)) {
-                for (Map.Entry<Integer, Set<String>> e : animalsByItem.entrySet()) {
-                    for (String animal : e.getValue()) {
-                        ps.setInt(1, e.getKey());
-                        ps.setString(2, animal);
-                        ps.executeUpdate();
+            try (PreparedStatement animals = con.prepareStatement(animalSql);
+                 PreparedStatement alcohol = con.prepareStatement(alcoholSql)) {
+                for (Map.Entry<Integer, Map<String, String>> e : animalsByItem.entrySet()) {
+                    for (Map.Entry<String, String> animal : e.getValue().entrySet()) {
+                        animals.setInt(1, e.getKey());
+                        animals.setString(2, animal.getKey());
+                        animals.setString(3, animal.getValue());
+                        animals.executeUpdate();
                     }
+                }
+                for (int id : alcoholItems) {
+                    alcohol.setInt(1, id);
+                    alcohol.executeUpdate();
                 }
                 con.commit();
             } catch (SQLException | RuntimeException ex) {
@@ -137,7 +121,8 @@ public class ItemAnimalRepository {
         List<CatalogItem> items = new ArrayList<>();
         try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                items.add(new CatalogItem(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4)));
+                items.add(new CatalogItem(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                        rs.getBoolean(5)));
             }
         }
         return items;

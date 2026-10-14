@@ -135,33 +135,68 @@ java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.receipts.ReceiptImportRunner -
 
 ### Recipe tags
 
-Recipe tags come from DAHÄM's own data, in five groups (`tag_category`): **Tier** (Hähnchen, Pute, Rind,
-Schwein, Lamm, Kalb, Wild, Fisch, Meeresfrüchte), **Ernährung** (vegetarisch, vegan), **Zeit** (schnell =
-prep + cook ≤ 30 min, total known), **Nährwerte** (kalorienarm ≤ 600 kcal, proteinreich ≥ 30 g, per serving; thresholds in
-`config/recipe_tags.properties`) and **Küche** (the recipe's `recipe_cuisine`, migration 0010). Nothing in
-the catalogue records which animal a meat item is, so that is its own table, `inventory_item_animal`
-(migration 0011), filled in two steps with `ItemAnimalRunner` — everything the name does not say is
-marked REVIEW and only stored after a person has looked at it:
+Recipe tags come from DAHÄM's own data, in six groups (`tag_category`): **Tier** (Hähnchen, Pute, Geflügel, Ente,
+Gans, Rind, Schwein, Lamm, Kalb, Wild, Kaninchen, Pferd, Fisch, Meeresfrüchte — only from CERTAIN animals),
+**Ernährung** (vegetarisch, vegan, unklar), **Inhalt** (Alkohol, Fleisch mit Milch), **Zeit** (schnell =
+prep + cook ≤ 30 min, total known), **Nährwerte** (kalorienarm ≤ 600 kcal, proteinreich ≥ 30 g, per serving;
+thresholds in `config/recipe_tags.properties`, confirmed by Nate on 2026-10-13) and **Küche** (the recipe's
+`recipe_cuisine`, migration 0010). Nothing in the catalogue records which animal a meat item is, so that is its own
+table, `inventory_item_animal` (migrations 0011 / 0012), with a `certainty` per animal: `certain` (the item IS from
+this animal) or `possible` (a generic item such as Salami, Fleischwurst, Wiener, Lyoner, Leberwurst, Chorizo or
+Gelatine, which exists from several animals while the recipe does not say which: Salami may be Schwein, Rind or
+Geflügel). A possible animal gives no Tier tag, but it blocks vegetarisch and makes a recipe "anpassbar" for a
+household that excludes it (below). The alcohol flag (`inventory_item.inventory_item_alcohol`) marks wine, beer,
+spirits, liqueur, cooking wine and the like. Both are filled in two steps with `ItemAnimalRunner` — everything the
+name does not say is marked REVIEW and only stored after a person has looked at it:
 
 ```bash
-# 1. propose animals for the meat / fish items (read-only) -> TSV: item id, name, category, subcategory, proposed animals, CONFIDENT / REVIEW
+# 1. propose animals + alcohol (read-only) -> TSV: item id, name, category, subcategory, certain animals, possible animals, alcohol (yes / no), CONFIDENT / REVIEW
+#    Items that already have an animal or the alcohol flag stay out of the proposal; --all proposes them again.
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.ItemAnimalRunner --out items.tsv
-# 2. edit items.tsv: fix the animals of a REVIEW row (e.g. Schwein+Rind) and set its status to REVIEWED
+# 2. edit items.tsv: fix the columns of a REVIEW row and set its status to REVIEWED
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.ItemAnimalRunner --apply items.tsv            # dry run
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.ItemAnimalRunner --apply items.tsv --commit   # CONFIDENT + REVIEWED rows, one transaction
 ```
 
 `RecipeTagRunner` then derives the tags and replaces only the `recipe_tag` rows whose `recipe_tag_source` is
 `derived`; tags added by hand (source `manual`, also anything added through the API) are never touched, and a
-re-run without changes changes nothing. A recipe with an ingredient that has no catalogue item gets neither
-vegetarisch nor vegan (unknown is not vegetarian). Dry run by default: it prints the count per tag and 10 example
-recipes per tag. `--animal-products` lists which catalogue items block vegetarisch / vegan, and why.
+re-run without changes changes nothing. A recipe with a row in `recipe_unmatched_ingredient` (an ingredient line the
+importer could not match to a catalogue item, or a recipe whose page could not be checked — see
+`scripts/importer/README.md`) is **unklar** and gets neither vegetarisch nor vegan (unknown is not vegetarian); a
+recipe without ingredients is unklar too. Dry run by default: it prints the count per tag, how many recipes are
+unklar and why (unmatched lines / page not checked / no ingredients), and 10 example recipes per tag.
+`--animal-products` lists which catalogue items block vegetarisch / vegan, and why.
 
 ```bash
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner                      # dry run
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner --commit             # one transaction
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner --animal-products
 ```
+
+### Diet filter (what a household does not eat)
+
+`GET /api/recipes` (and `GET /api/recipes/{id}`) take diet rules, applied on the server so the client never receives
+all ~11,000 recipes to filter itself. The PHP passes the rules; the questionnaire ("Was esse ich nicht?" / "Was
+esse ich lieber nicht?"), its storage and per person vs household are not part of the API.
+
+- **hard rules** (hide a recipe): `diet=<preset>` (repeatable), `excludeTags=a,b`, `excludeItems=<item ids>`;
+- **soft rules** (only mark): `avoidTags`, `avoidItems`: the recipe stays, is sorted after the others and lists what
+  matched in `diet.softHits`;
+- `includeUnclear=true|false` (default false).
+
+Each recipe is judged as `OK`; `ANPASSBAR` (excluded only through the POSSIBLE animals of generic items such as Salami
+or Gelatine, with `diet.hints` per item: item id, name, the animals it may still be — Salami → Rind, Geflügel;
+Gelatine → Rind); `HIDDEN` (excluded by a certain tag, animal or item, or by a required tag it lacks: not returned in
+the list; `GET /api/recipes/{id}` still returns it with this status); or `UNCLEAR` (a hard rule applies and the recipe
+is unklar, i.e. a line of it was not matched: left out unless `includeUnclear=true`, then returned flagged).
+`GET /api/recipes/{id}` with rules also lists the recipe's `diet.unmatchedIngredients`. An unknown preset is a 400.
+
+The presets are in `config/diet_presets.json` (no hardcoding): **halal** = exclude Schwein and Alkohol, **koscher** =
+exclude Schwein, Meeresfrüchte, Kaninchen, Pferd and Fleisch mit Milch, **vegetarisch** / **vegan** = require that
+tag. **The presets filter INGREDIENTS only. DAHÄM cannot certify halal or kosher** (slaughter, certification, what a
+product contains beyond its ingredient list; fish without fins and scales cannot be detected yet): meat certification
+stays the shopper's responsibility. A recipe is only called OK when nothing in it is excluded and nothing about it is
+unknown.
 
 Start the REST API (`de.dahaem.api.DahaemApplication`, the jar's `Main-Class`) with:
 
@@ -202,8 +237,8 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/inventory` | all items |
 | GET | `/api/inventory/expiring?days=7` | items expiring within N days |
 | GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
-| GET | `/api/recipes` | recipe list; each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range), and the page data `description`, `imageUrl`, `thumbnailUrl` (links: the browser loads the image from its source, nothing is copied), `imageSource` (`hellofresh` \| `own` \| `generated`, so images can be replaced in bulk; null without an image), `cuisine` (one German name), `ratingAvg` (0 – 5, 2 decimals), `ratingCount`, `publishedDate` (`YYYY-MM-DD`) — each null when missing (migration 0010, filled by `scripts/importer/enrich_recipes.py`) Also `tags`: the recipe's tag names, sorted by group then name (`[]` when untagged). |
-| GET | `/api/recipes/{id}[?people=N][&basis=servings\|max]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). |
+| GET | `/api/recipes[?diet=…][&excludeTags=…][&excludeItems=…][&avoidTags=…][&avoidItems=…][&includeUnclear=true]` | recipe list (with diet rules: filtered and sorted on the server, each recipe gets a `diet` object, see "Diet filter"; without rules unchanged); each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range), and the page data `description`, `imageUrl`, `thumbnailUrl` (links: the browser loads the image from its source, nothing is copied), `imageSource` (`hellofresh` \| `own` \| `generated`, so images can be replaced in bulk; null without an image), `cuisine` (one German name), `ratingAvg` (0 – 5, 2 decimals), `ratingCount`, `publishedDate` (`YYYY-MM-DD`) — each null when missing (migration 0010, filled by `scripts/importer/enrich_recipes.py`) Also `tags`: the recipe's tag names, sorted by group then name (`[]` when untagged). |
+| GET | `/api/recipes/{id}[?people=N][&basis=servings\|max][&diet=…]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). With the diet parameters of the list it also has `diet`: `status`, `hints` and `unmatchedIngredients` (`lineNo`, `rawText`, `reason`). |
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` (a hand-added tag is `manual`; adding one the tagger derived makes it `manual`) |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
 | POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |

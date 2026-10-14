@@ -6,7 +6,10 @@ raw files don't make:
   * recipe_name is not unique -> we skip a draft whose name is already in the DB
     (or an earlier file this run), instead of duplicating it.
   * recipe_ingredient.item_id has an FK -> lines with id 0 (no catalog match) are
-    dropped; their names still live in the draft comments for later cleanup.
+    not stored as ingredients. They are NOT forgotten: each goes into recipe_unmatched_ingredient
+    (migrations/0012_diet_filter.sql, 'unmatched', with the page line from the draft's
+    `-- UNMATCHED <no> <line>` comment, or the name from an older draft's REVIEW comment), so the
+    diet logic knows the recipe is incomplete ("unklar") and never calls it vegetarian.
   * recipe_ingredient PK is (item_id, recipe_id) -> a recipe can't list the same
     catalog id twice, so duplicates within a recipe are dropped, keeping the first
     (extract.py already merges same-unit duplicates; this is the safety net).
@@ -14,6 +17,9 @@ raw files don't make:
 Quantities are exact decimals (DECIMAL(10,3)); a to-taste line has quantity NULL and
 to_taste 1 (needs migrations/0005_recipe_quantities.sql). Drafts written before that
 change (integer quantity, no to_taste field) still load, as quantity rows.
+
+A recipe's ingredient rows and its unmatched lines load in the same transaction. Migration 0012 must be
+applied first (a --commit run stops otherwise).
 
 The database comes from DAHAEM_DB_URL / DAHAEM_DB_USER / DAHAEM_DB_PASSWORD (see db.py).
 Each recipe loads in its own transaction; a failure rolls that recipe back and is logged,
@@ -25,6 +31,13 @@ from decimal import Decimal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DRAFTS = os.path.normpath(os.path.join(HERE, "..", "recipes", "_drafts"))
+
+MAX_RAW = 500                                 # recipe_unmatched_ingredient_raw_text is VARCHAR(500)
+
+# `-- UNMATCHED <line no or -> <page line>` written by extract.py before the ingredient INSERT
+UNMATCHED = re.compile(r"^--\s*UNMATCHED\s+(\d+|-)\s+(.*?)\s*$")
+# the ingredient name in the REVIEW comment of a row: "-- REVIEW (conf): NAME | note"
+REVIEW_NAME = re.compile(r"--\s*REVIEW\s*\([^)]*\):\s*(.*?)\s*\|")
 
 # one ingredient row -> item_id, unit, qty (decimal or NULL), optional to_taste flag
 ING = re.compile(r",\s*(\d+),\s*'((?:[^']|'')*)',\s*(\d+(?:\.\d+)?|NULL)(?:,\s*([01]))?\)")
@@ -71,6 +84,14 @@ def parse_draft(text):
     ing_start = next((i for i, l in enumerate(lines) if l.startswith("INSERT INTO recipe_ingredient")), None)
     ins_start = next((i for i, l in enumerate(lines) if l.startswith("INSERT INTO recipe_instructions")), None)
 
+    # lines the draft says have no row (recipe["unmatched"]); an older draft only has its id-0 rows' REVIEW names
+    recipe["unmatched"] = []
+    recipe["id0_names"] = []
+    for l in lines:
+        m = UNMATCHED.match(l)
+        if m:
+            recipe["unmatched"].append((None if m.group(1) == "-" else int(m.group(1)), m.group(2)))
+
     ingredients = []
     if ing_start is not None:
         end = ins_start if ins_start is not None else len(lines)
@@ -79,6 +100,9 @@ def parse_draft(text):
             if m:
                 qty = None if m.group(3) == "NULL" else Decimal(m.group(3))
                 to_taste = m.group(4) == "1" or qty is None
+                if int(m.group(1)) == 0:
+                    rv = REVIEW_NAME.search(l)
+                    recipe["id0_names"].append(rv.group(1) if rv else "")
                 ingredients.append((int(m.group(1)), m.group(2).replace("''", "'"), qty, to_taste))
 
     steps = []
@@ -109,8 +133,19 @@ def clean_ingredients(ings):
     return kept, n_id0, n_dup
 
 
-def load(con, recipe, ings, steps):
-    """INSERT one recipe with its ingredients and steps on con (caller commits). Returns the id."""
+def unmatched_rows(recipe, n_id0):
+    """-> [(line_no, raw_text)] to store for a recipe: the draft's UNMATCHED comments; for an older draft without
+    them, one row per dropped id-0 line with the name from its REVIEW comment (no line number)."""
+    rows = list(recipe.get("unmatched") or [])
+    if not rows and n_id0:
+        names = list(recipe.get("id0_names") or [])
+        names += [""] * (n_id0 - len(names))
+        rows = [(None, n or "(Zeile ohne Namen im Entwurf)") for n in names]
+    return rows
+
+
+def load(con, recipe, ings, steps, unmatched=()):
+    """INSERT one recipe with its ingredients, steps and unmatched lines on con (caller commits). Returns the id."""
     with con.cursor() as cur:
         cur.execute(
             "INSERT INTO recipe (recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time, "
@@ -131,7 +166,23 @@ def load(con, recipe, ings, steps):
                 "recipe_instructions_instruction, recipe_instructions_notes, recipe_instructions_source) "
                 "VALUES (%s,%s,%s,%s,%s)",
                 [(rid, n, body, None, "HelloFresh") for n, body in steps])
+        if unmatched:
+            cur.executemany(
+                "INSERT INTO recipe_unmatched_ingredient (recipe_unmatched_ingredient_recipe_id, "
+                "recipe_unmatched_ingredient_line_no, recipe_unmatched_ingredient_raw_text, "
+                "recipe_unmatched_ingredient_reason) VALUES (%s,%s,%s,'unmatched')",
+                [(rid, no, " ".join((raw or "").split())[:MAX_RAW]) for no, raw in unmatched])
     return rid
+
+
+def require_unmatched_table(con):
+    """Stop before writing anything when migration 0012 is not applied (the lines could not be stored)."""
+    with con.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() "
+                    "AND TABLE_NAME = 'recipe_unmatched_ingredient'")
+        if cur.fetchone()[0] != 1:
+            raise SystemExit("apply migrations/0012_diet_filter.sql first (snapshot before): unmatched ingredient "
+                             "lines are stored in recipe_unmatched_ingredient")
 
 
 def existing_names(con):
@@ -143,7 +194,9 @@ def existing_names(con):
 def load_files(con, files, commit, require_reviewed=False):
     """Load the given draft files. Returns (stats, error samples)."""
     st = dict(files=len(files), loaded=0, skip_dup=0, skip_noname=0, skip_review=0, errors=0,
-              id0=0, dupitem=0, zero_ing=0)
+              id0=0, dupitem=0, zero_ing=0, unmatched=0)
+    if commit:
+        require_unmatched_table(con)
     seen_names = existing_names(con)
     err_samples = []
     for path in files:
@@ -164,12 +217,14 @@ def load_files(con, files, commit, require_reviewed=False):
             st["skip_dup"] += 1; continue
         kept, n0, nd = clean_ingredients(ings)
         st["id0"] += n0; st["dupitem"] += nd
+        unmatched = unmatched_rows(recipe, n0)
+        st["unmatched"] += len(unmatched)
         if not kept:
             st["zero_ing"] += 1
         seen_names.add(key)
         if commit:
             try:
-                load(con, recipe, kept, steps)
+                load(con, recipe, kept, steps, unmatched)
                 con.commit()
                 st["loaded"] += 1
             except Exception as e:
@@ -205,7 +260,9 @@ def main():
     print("loaded" if args.commit else "would load", ":", st["loaded"])
     print("skipped duplicate name:", st["skip_dup"])
     print("skipped (no name):", st["skip_noname"])
-    print("id-0 lines dropped:", st["id0"])
+    print("id-0 lines not stored as ingredients:", st["id0"],
+          "-> stored in recipe_unmatched_ingredient:" if args.commit else "-> would be stored in recipe_unmatched_ingredient:",
+          st["unmatched"])
     print("duplicate-item lines dropped:", st["dupitem"])
     print("recipes with 0 ingredients after cleanup:", st["zero_ing"])
     print("errors:", st["errors"])

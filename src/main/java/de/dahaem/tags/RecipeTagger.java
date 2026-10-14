@@ -7,11 +7,15 @@ import java.util.Set;
  * Works out the tags a recipe gets from DAHÄM's own data. Pure: no SQL, no I/O.
  *
  * <ul>
- *   <li><b>Tier</b>: every animal of every ingredient item.</li>
+ *   <li><b>Tier</b>: every CERTAIN animal of every ingredient item. A possible animal (Salami: Schwein, Rind,
+ *       Geflügel) gives no Tier tag.</li>
  *   <li><b>vegetarisch</b>: only when EVERY ingredient has a catalogue item and none of them is meat / fish
- *       or has an animal; <b>vegan</b>: vegetarisch and no dairy, egg, honey or other animal product
- *       ({@link AnimalProducts}). An ingredient with no item makes the diet unknown: neither tag, since
- *       unknown is not vegetarian. A recipe without any ingredient is unknown too.</li>
+ *       or has an animal, certain OR possible; <b>vegan</b>: vegetarisch and no dairy, egg, honey or other animal
+ *       product ({@link AnimalProducts}). A recipe with a row in recipe_unmatched_ingredient (a line the importer
+ *       could not match, or a recipe whose page was not checked) is <b>unklar</b> (Ernährung) and never
+ *       vegetarisch / vegan, since unknown is not vegetarian. A recipe without any ingredient is unklar too.</li>
+ *   <li><b>Alkohol</b> (Inhalt): an ingredient item with the alcohol flag. <b>Fleisch mit Milch</b> (Inhalt): an
+ *       item with a land animal (certain or possible, not Fisch / Meeresfrüchte) together with a milk product.</li>
  *   <li><b>schnell</b>: prep + cook at most the configured minutes, only when the total is above 0
  *       (imported recipes store the total time as cook time, prep 0).</li>
  *   <li><b>kalorienarm / proteinreich</b>: per-serving nutrition against the configured thresholds.</li>
@@ -20,7 +24,7 @@ import java.util.Set;
  */
 public class RecipeTagger {
 
-    /** The result for one recipe. {@code dietKnown} is false when vegetarisch / vegan could not be judged. */
+    /** The result for one recipe. {@code dietKnown} is false when vegetarisch / vegan could not be judged (the recipe is "unklar"). */
     public record Derivation(Set<DerivedTag> tags, boolean dietKnown) {
     }
 
@@ -41,11 +45,20 @@ public class RecipeTagger {
             tags.add(new DerivedTag(animal, DerivedTag.TIER));
         }
 
-        boolean dietKnown = !recipe.ingredients().isEmpty()
+        if (recipe.ingredients().stream().anyMatch(i -> i.item() != null && i.item().alcohol())) {
+            tags.add(new DerivedTag(DerivedTag.ALKOHOL, DerivedTag.INHALT));
+        }
+        if (meatWithMilk(recipe)) {
+            tags.add(new DerivedTag(DerivedTag.FLEISCH_MIT_MILCH, DerivedTag.INHALT));
+        }
+
+        boolean dietKnown = !recipe.ingredients().isEmpty() && recipe.unmatched().isEmpty()
                 && recipe.ingredients().stream().allMatch(i -> i.item() != null);
-        if (dietKnown) {
+        if (!dietKnown) {
+            tags.add(new DerivedTag(DerivedTag.UNKLAR, DerivedTag.ERNAEHRUNG));
+        } else {
             boolean vegetarian = recipe.ingredients().stream().noneMatch(i ->
-                    AnimalProducts.vegetarianBlocker(i.item(), !i.animals().isEmpty()).isPresent());
+                    AnimalProducts.vegetarianBlocker(i.item(), i.hasAnyAnimal()).isPresent());
             if (vegetarian) {
                 tags.add(new DerivedTag(DerivedTag.VEGETARISCH, DerivedTag.ERNAEHRUNG));
                 boolean vegan = recipe.ingredients().stream().noneMatch(i ->
@@ -70,5 +83,20 @@ public class RecipeTagger {
             tags.add(new DerivedTag(recipe.cuisine().trim(), DerivedTag.KUECHE));
         }
         return new Derivation(tags, dietKnown);
+    }
+
+    /** A land animal (certain or possible) in one item and a milk product in another. */
+    static boolean meatWithMilk(RecipeFacts recipe) {
+        boolean meat = false;
+        boolean milk = false;
+        for (RecipeFacts.Ingredient i : recipe.ingredients()) {
+            if (i.animals().stream().anyMatch(Animals::isLandAnimal)
+                    || i.possibleAnimals().stream().anyMatch(Animals::isLandAnimal)) {
+                meat = true;
+            } else if (i.item() != null && !i.hasAnyAnimal() && AnimalProducts.isMilkProduct(i.item())) {
+                milk = true;
+            }
+        }
+        return meat && milk;
     }
 }

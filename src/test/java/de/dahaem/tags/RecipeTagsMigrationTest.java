@@ -72,7 +72,7 @@ class RecipeTagsMigrationTest {
         int item = TagFixtures.item("gemischtes hackfleisch", "meat", "fresh meat");
         TagFixtures.animal(item, "Rind");
         TagFixtures.animal(item, "Schwein");
-        assertThrows(RuntimeException.class, () -> TagFixtures.animal(item, "Ente"));
+        assertThrows(RuntimeException.class, () -> TagFixtures.animal(item, "Einhorn"));
         assertThrows(RuntimeException.class, () -> TagFixtures.animal(item, "Rind"), "primary key: both columns");
         assertThrows(RuntimeException.class, () -> TagFixtures.animal(999_999, "Rind"), "foreign key to the item");
 

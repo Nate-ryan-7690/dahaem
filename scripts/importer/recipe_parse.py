@@ -437,6 +437,29 @@ def parse_recipe(rec, catalog, is_pantry=None):
             "servings_source": servings_source, "notes": notes, "lines": lines, "reviews": reviews}
 
 
+def unmatched_lines(rec, parsed, stored_item_ids):
+    """The ingredient lines of a page whose item is NOT among `stored_item_ids` (the items the recipe has in
+    recipe_ingredient): a line with no catalogue match at all, or one the importer never stored. `parsed` is the
+    result of parse_recipe(rec, ...). -> [(line_no, raw, name)] in page order; line_no is the 1-based position
+    in recipeIngredient. Water and other pantry-skipped lines are not in `parsed` and so never listed.
+
+    A recipe missing such a line looks complete, so the diet logic must not call it vegetarian (see
+    migrations/0012_diet_filter.sql, recipe_unmatched_ingredient)."""
+    stored = set(stored_item_ids)
+    raws = [r for r in (rec.get("recipeIngredient") or [])]
+    used, out = set(), []
+    for entry in list(parsed["lines"]) + list(parsed.get("reviews", [])):
+        if entry["item_id"] is not None and entry["item_id"] in stored:
+            continue
+        raw = entry["raw"]
+        line_no = next((i + 1 for i, r in enumerate(raws) if r == raw and i not in used), None)
+        if line_no is not None:
+            used.add(line_no - 1)
+        out.append((line_no, raw, entry.get("name") or ""))
+    out.sort(key=lambda t: (t[0] is None, t[0] or 0))
+    return out
+
+
 def find_recipe(o):
     """The JSON-LD object whose @type is (or includes) Recipe, searched recursively."""
     if isinstance(o, dict):

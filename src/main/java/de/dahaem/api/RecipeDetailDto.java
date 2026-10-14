@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import de.dahaem.mealplanner.Recipe;
 import de.dahaem.mealplanner.RecipeIngredient;
 import de.dahaem.mealplanner.RecipeInstruction;
@@ -24,13 +25,15 @@ import java.util.List;
  * {@code imageUrl}, {@code thumbnailUrl}, {@code imageSource}, {@code cuisine}, {@code ratingAvg},
  * {@code ratingCount}, {@code publishedDate}) are as in {@link RecipeSummaryDto}; null when missing. {@code tags} are the recipe's tags, sorted by group then name:
  * {@code source} is {@code "manual"} (added by a person) or {@code "derived"} (worked out from DAHÄM's data).
+ * {@code diet} is present only when diet rules were passed (see {@link DietDto}): the status, the hints and the
+ * recipe's unmatched ingredient lines.
  */
 public record RecipeDetailDto(int id, String name, int servings, Integer servingsMax, String basis, Integer people,
                               boolean scalable, int prepTime, int cookTime, Nutrition nutrition,
                               List<Ingredient> ingredients, List<Instruction> instructions,
                               String description, String imageUrl, String thumbnailUrl, String imageSource,
                               String cuisine, BigDecimal ratingAvg, Integer ratingCount, LocalDate publishedDate,
-                              List<Tag> tags) {
+                              List<Tag> tags, @JsonInclude(JsonInclude.Include.NON_NULL) DietDto diet) {
 
     /** {@code basis} value: scaled from {@code servings} (the default, a range's lower bound). */
     public static final String BASIS_SERVINGS = "servings";
@@ -99,6 +102,12 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
     static RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients,
                                 List<RecipeInstruction> instructions, List<TagRepository.RecipeTag> tags,
                                 Integer people, boolean useMax) {
+        return from(recipe, ingredients, instructions, tags, people, useMax, null);
+    }
+
+    static RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients,
+                                List<RecipeInstruction> instructions, List<TagRepository.RecipeTag> tags,
+                                Integer people, boolean useMax, DietDto diet) {
         Nutrition nutrition = new Nutrition(recipe.getCalories(), recipe.getProtein(), recipe.getCarbs(),
                 recipe.getFat(), recipe.getFiber(), recipe.getSugar());
         Integer servingsMax = recipe.getServingsMax();
@@ -112,6 +121,6 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
                         .toList(),
                 recipe.getDescription(), recipe.getImageUrl(), recipe.getThumbnailUrl(), recipe.getImageSource(),
                 recipe.getCuisine(), recipe.getRatingAvg(), recipe.getRatingCount(), recipe.getPublishedDate(),
-                tags.stream().map(Tag::from).toList());
+                tags.stream().map(Tag::from).toList(), diet);
     }
 }

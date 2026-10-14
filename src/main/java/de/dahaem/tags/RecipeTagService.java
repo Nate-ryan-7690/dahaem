@@ -23,6 +23,7 @@ public class RecipeTagService {
     public record Plan(Optional<String> cuisineColumn, int recipes, Map<String, Integer> recipesPerTag,
                        Map<String, String> categoryPerTag, Map<String, List<String>> examplesPerTag,
                        int recipesDietUnknown, int recipesWithoutIngredients, int recipesWithUnlinkedIngredient,
+                       int recipesUnmatched, int recipesUnchecked,
                        List<RecipeTagRepository.Change> changes, boolean committed) {
 
         public int added() {
@@ -40,9 +41,17 @@ public class RecipeTagService {
             sb.append("cuisine tag: ").append(cuisineColumn.map(c -> "from recipe." + c)
                     .orElse("OFF (the recipe table has no cuisine column yet; it activates once migration 0010 is in)"))
                     .append('\n');
-            sb.append("diet unknown (no vegetarisch / vegan tag): ").append(recipesDietUnknown)
-                    .append(" (no ingredients: ").append(recipesWithoutIngredients)
-                    .append(", an ingredient without item link: ").append(recipesWithUnlinkedIngredient).append(")\n");
+            sb.append("unklar (diet unknown, no vegetarisch / vegan tag, hidden under a hard diet rule): ")
+                    .append(recipesDietUnknown)
+                    .append("\n    unmatched ingredient lines (recipe_unmatched_ingredient 'unmatched'): ")
+                    .append(recipesUnmatched)
+                    .append("\n    page not checked (recipe_unmatched_ingredient 'unchecked'): ").append(recipesUnchecked)
+                    .append("\n    no ingredients at all: ").append(recipesWithoutIngredients)
+                    .append("\n    other (an ingredient without item link): ").append(recipesWithUnlinkedIngredient)
+                    .append('\n');
+            if (recipesDietUnknown > 0 && recipesUnmatched + recipesUnchecked == 0) {
+                sb.append("    note: recipe_unmatched_ingredient is empty, so lines the importer dropped are not seen yet (run scripts/importer/find_unmatched_ingredients.py first)\n");
+            }
             sb.append("changes: +").append(added()).append(" derived tags, -").append(removed())
                     .append(" derived tags\n\n");
             sb.append("tag (group): recipes carrying it, with examples\n");
@@ -77,12 +86,18 @@ public class RecipeTagService {
         int dietUnknown = 0;
         int noIngredients = 0;
         int unlinked = 0;
+        int unmatched = 0;
+        int unchecked = 0;
 
         for (RecipeFacts recipe : recipes) {
             RecipeTagger.Derivation derivation = tagger.derive(recipe);
             if (!derivation.dietKnown()) {
                 dietUnknown++;
-                if (recipe.ingredients().isEmpty()) {
+                if (recipe.unmatched().stream().anyMatch(u -> RecipeFacts.Unmatched.UNMATCHED.equals(u.reason()))) {
+                    unmatched++;
+                } else if (!recipe.unmatched().isEmpty()) {
+                    unchecked++;
+                } else if (recipe.ingredients().isEmpty()) {
                     noIngredients++;
                 } else {
                     unlinked++;
@@ -113,7 +128,7 @@ public class RecipeTagService {
             }
         }
         return new Plan(cuisineColumn, recipes.size(), perTag, categoryPerTag, examples, dietUnknown,
-                noIngredients, unlinked, changes, false);
+                noIngredients, unlinked, unmatched, unchecked, changes, false);
     }
 
     /** Writes the plan's changes in one transaction. */
@@ -121,7 +136,8 @@ public class RecipeTagService {
         repository.apply(plan.changes());
         return new Plan(plan.cuisineColumn(), plan.recipes(), plan.recipesPerTag(), plan.categoryPerTag(),
                 plan.examplesPerTag(), plan.recipesDietUnknown(), plan.recipesWithoutIngredients(),
-                plan.recipesWithUnlinkedIngredient(), plan.changes(), true);
+                plan.recipesWithUnlinkedIngredient(), plan.recipesUnmatched(), plan.recipesUnchecked(),
+                plan.changes(), true);
     }
 
     /**

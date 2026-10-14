@@ -56,11 +56,13 @@ public class RecipeTagRepository {
 
     /** Every recipe with its ingredients (and their items and stored animals), by recipe id. Read-only. */
     public List<RecipeFacts> loadRecipes(Optional<String> cuisineColumn) {
-        Map<Integer, Set<String>> animals = new ItemAnimalRepository().findAnimals();
+        requireMigration0012();
+        Map<Integer, Map<String, String>> animals = new ItemAnimalRepository().findAnimalCertainty();
         Map<Integer, List<RecipeFacts.Ingredient>> ingredients = new HashMap<>();
+        Map<Integer, List<RecipeFacts.Unmatched>> unmatched = loadUnmatched();
         String ingredientSql = "SELECT ri.recipe_ingredient_recipe_id, ii.inventory_item_id, "
                 + ItemAnimalRepository.NAME_SQL.replace("inventory_item_", "ii.inventory_item_")
-                + " AS item_name, ii.inventory_item_category, ii.inventory_item_subcategory "
+                + " AS item_name, ii.inventory_item_category, ii.inventory_item_subcategory, ii.inventory_item_alcohol "
                 + "FROM recipe_ingredient ri LEFT JOIN inventory_item ii "
                 + "ON ii.inventory_item_id = ri.recipe_ingredient_item_id";
         List<RecipeFacts> recipes = new ArrayList<>();
@@ -72,10 +74,9 @@ public class RecipeTagRepository {
                 while (rs.next()) {
                     int itemId = rs.getInt(2);
                     CatalogItem item = rs.wasNull() ? null
-                            : new CatalogItem(itemId, rs.getString(3), rs.getString(4), rs.getString(5));
+                            : new CatalogItem(itemId, rs.getString(3), rs.getString(4), rs.getString(5), rs.getBoolean(6));
                     ingredients.computeIfAbsent(rs.getInt(1), k -> new ArrayList<>())
-                            .add(new RecipeFacts.Ingredient(item, item == null ? Set.of()
-                                    : animals.getOrDefault(item.id(), Set.of())));
+                            .add(ingredient(item, item == null ? Map.of() : animals.getOrDefault(item.id(), Map.of())));
                 }
             }
             try (PreparedStatement ps = con.prepareStatement(recipeSql); ResultSet rs = ps.executeQuery()) {
@@ -83,13 +84,71 @@ public class RecipeTagRepository {
                     int id = rs.getInt(1);
                     recipes.add(new RecipeFacts(id, rs.getString(2), rs.getInt(3), rs.getInt(4),
                             (Integer) rs.getObject(5), (Integer) rs.getObject(6), rs.getString(7),
-                            ingredients.getOrDefault(id, List.of())));
+                            ingredients.getOrDefault(id, List.of()), unmatched.getOrDefault(id, List.of())));
                 }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not load the recipes", e);
         }
         return recipes;
+    }
+
+    /** An ingredient with its animals split by certainty. */
+    public static RecipeFacts.Ingredient ingredient(CatalogItem item, Map<String, String> animalCertainty) {
+        Set<String> certain = new java.util.TreeSet<>();
+        Set<String> possible = new java.util.TreeSet<>();
+        animalCertainty.forEach((animal, certainty) ->
+                (Animals.POSSIBLE.equals(certainty) ? possible : certain).add(animal));
+        return new RecipeFacts.Ingredient(item, certain, possible);
+    }
+
+    /** recipe id → its rows in recipe_unmatched_ingredient (lines the importer could not match). Read-only. */
+    public Map<Integer, List<RecipeFacts.Unmatched>> loadUnmatched() {
+        return loadUnmatched(null);
+    }
+
+    /** Same for one recipe ({@code onlyRecipe} not null), or all recipes (null). */
+    public Map<Integer, List<RecipeFacts.Unmatched>> loadUnmatched(Integer onlyRecipe) {
+        String sql = "SELECT recipe_unmatched_ingredient_recipe_id, recipe_unmatched_ingredient_line_no, "
+                + "recipe_unmatched_ingredient_raw_text, recipe_unmatched_ingredient_reason "
+                + "FROM recipe_unmatched_ingredient "
+                + (onlyRecipe == null ? "" : "WHERE recipe_unmatched_ingredient_recipe_id = ? ")
+                + "ORDER BY recipe_unmatched_ingredient_recipe_id, "
+                + "recipe_unmatched_ingredient_line_no, recipe_unmatched_ingredient_id";
+        Map<Integer, List<RecipeFacts.Unmatched>> out = new HashMap<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            if (onlyRecipe != null) {
+                ps.setInt(1, onlyRecipe);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.computeIfAbsent(rs.getInt(1), k -> new ArrayList<>())
+                            .add(new RecipeFacts.Unmatched((Integer) rs.getObject(2), rs.getString(3), rs.getString(4)));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load the unmatched recipe lines", e);
+        }
+        return out;
+    }
+
+    /** Stops with a clear message when migration 0012 is not applied yet (instead of an unknown-column error). */
+    public static void requireMigration0012() {
+        String sql = "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND "
+                + "((TABLE_NAME = 'inventory_item' AND COLUMN_NAME = 'inventory_item_alcohol') "
+                + "OR (TABLE_NAME = 'inventory_item_animal' AND COLUMN_NAME = 'inventory_item_animal_certainty') "
+                + "OR (TABLE_NAME = 'recipe_unmatched_ingredient' AND COLUMN_NAME = 'recipe_unmatched_ingredient_id'))";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            if (rs.getInt(1) != 3) {
+                throw new IllegalStateException("apply migrations/0012_diet_filter.sql first (snapshot before)");
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not check for migration 0012", e);
+        }
     }
 
     /** recipe id → the tags it has now (manual and derived). Read-only. */
