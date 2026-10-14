@@ -61,6 +61,16 @@ store sites --importers--> RAW              --match-->  VERIFIED        --> shop
 
 Each verified item links back to its source product, so duplicate or stale store listings are resolved by recency and availability, not by lowest price (a stale relisted item can be cheaper than the one actually on the shelf).
 
+## Documentation
+
+Generated from the code (`python3 scripts/docs/generate_docs.py`, `--check` tells whether the committed files are current), so it
+follows the Java sources. Diagrams are Mermaid and render on GitHub.
+
+- [docs/API.md](docs/API.md): the HTTP API: security, errors, every endpoint with parameters, request and answer examples, and the JSON schemas.
+- [docs/classes/README.md](docs/classes/README.md): the class reference: the package import graph and one page per package; every class, record, interface and enum has its own class diagram.
+- [docs/USE_CASES.md](docs/USE_CASES.md): who does what: the endpoints per goal and the command-line tools.
+- Written by hand: [ARCHITECTURE](docs/ARCHITECTURE.md), [DATABASE](docs/DATABASE.md), [VISION](docs/VISION.md), [BACKLOG](docs/BACKLOG.md).
+
 ## Repository layout
 
 ```
