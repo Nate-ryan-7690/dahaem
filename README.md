@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Nate-ryan-7690/dahaem/actions/workflows/ci.yml/badge.svg)](https://github.com/Nate-ryan-7690/dahaem/actions/workflows/ci.yml)
 
-A self-hosted household organizer that keeps inventory, meal plans, shopping lists, store prices and discounts, and purchases for a two-person household in one Java application on one SQLite database.
+A self-hosted household organizer that keeps inventory, meal plans, shopping lists, store prices and discounts, and purchases for a two-person household behind one REST API on a MariaDB database.
 
 DAHÄM is Kurpfälzisch (the Mannheim-area dialect) for *daheim*, "at home." The name says where the software belongs rather than what any single feature does.
 
@@ -90,8 +90,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the layering rule and the
 store data pipeline in detail, [`docs/DATABASE.md`](docs/DATABASE.md) for the
 schema (and its current gaps), [`docs/refresh.md`](docs/refresh.md) for the
 scheduled import jobs, [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and
-conventions, and [`docs/CODE_REVIEW.md`](docs/CODE_REVIEW.md) for a point-in-time
-review of the codebase's strengths and known issues.
+conventions, and the generated [class reference](docs/classes/README.md) and [API guide](docs/API.md).
 
 ## Getting started
 
@@ -110,7 +109,7 @@ give a fresh database something to run against. Load them into a **new, empty** 
 data. The store/brand/price/discount rows in `seed/demo_data.sql` are entirely fabricated for the demo —
 see the note at the top of that file — not real pulled store data.
 
-Run the console entry point from your IDE (`de.dahaem.Main`), or a store importer from the command line:
+Run a store importer from the command line:
 
 ```bash
 java --enable-native-access=ALL-UNNAMED -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.stores.StoreImportRunner offers all

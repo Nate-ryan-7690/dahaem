@@ -51,8 +51,8 @@ relationships, endpoints) next to the code. CI never commits anything itself.
   `shopping`, `finance`) follows `model` (plain records, no logic) /
   `repository` (all SQL for that feature, parameterized) / `service` (logic
   only, no SQL, no UI). See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for
-  the full rule and why the console runners (`Main`, `ShoppingListDemo`,
-  `StoreImportRunner`) are the deliberate exception.
+  the full rule and why the console runners (`StoreImportRunner`,
+  `ReceiptImportRunner`) are the deliberate exception.
 - **SQL.** Always `PreparedStatement` with `?` placeholders — never build a query
   by string-concatenating external input. Table/column names in DDL (which are
   fixed, not user input) are the one place raw string SQL is fine, as in

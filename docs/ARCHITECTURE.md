@@ -16,10 +16,9 @@ split:
 | `repository` | All SQL for that feature, parameterized      | Business logic               |
 | `service`    | Business logic only                          | SQL, UI/console code         |
 
-Console runners (`Main`, `ShoppingListDemo`, `StoreImportRunner`, `ReceiptImportRunner`) sit outside this
-split on purpose: they are temporary entry points that exercise the services until
-a web layer replaces them, and are expected to disappear without the service layer
-changing. New code should call into a `*Service`, not open a `Connection` or issue
+Console runners (`StoreImportRunner`, `ReceiptImportRunner`, `RecipeTagRunner`, `ItemAnimalRunner`,
+`UserAdminRunner`) sit outside this split on purpose: they are command-line entry points that call the services,
+not part of the HTTP API. New code should call into a `*Service`, not open a `Connection` or issue
 SQL directly, and should not put lookup/aggregation/matching rules inside a
 repository method.
 
@@ -57,16 +56,15 @@ src/main/java/de/dahaem/
   store products all reference by id.
 - **`mealplanner`** — recipes and their catalog-linked ingredients and
   step-by-step instructions.
-- **`stores`** — by far the largest package (~2,800 lines across 26 files). It
+- **`stores`** — by far the largest package. It
   owns the web importers, the raw/verified store data model, and the matching and
   promotion logic that links pulled store data back to the inventory catalog. See
   [Store data pipeline](#store-data-pipeline) below.
 - **`shopping`** — aggregates ingredient quantities across a set of recipes and
-  picks the cheapest current store option per ingredient. Marked "in progress" in
-  the README; `ShoppingListDemo` is its console proof-of-concept.
-- **`finance`** — `Purchase`, `PurchaseRepository`, `PurchaseService` are all
-  empty classes today. This package is a placeholder for the planned
-  purchase-history feature, not yet wired to anything.
+  lists the current store options per ingredient (prices, savings); the user picks one.
+- **`finance`** — `PurchaseService` records a purchase (of a known store item, or of a product that is not in the
+  catalogue yet) and applies it to the inventory in one transaction; `PurchaseRepository` holds the SQL and the
+  spending totals behind `GET /api/analytics/spending`.
 
 ## Store data pipeline
 
@@ -161,8 +159,8 @@ Not part of the Java application; run by hand, not on a schedule (see
 - `scripts/importer/*.py` — recipe import against MariaDB (`recipe_parse.py`,
   `extract.py`, `rematch.py`, `load_recipes.py`, `load.py`, configured by the same
   `DAHAEM_DB_*` variables as the API), the quantity repair tool
-  (`repair_quantities.py`), catalog maintenance (`add_ingredients.py`,
-  `dedup_catalog.py`, `scan_ingredients.py`), and recipe-page discovery
+  (`repair_quantities.py`), the unmatched-line tools
+  (`find_unmatched_ingredients.py`, `rematch_unmatched.py`), and recipe-page discovery
   (`discover.py`). See `scripts/importer/README.md`; tests run with
   `python3 -m unittest discover -s scripts/importer/tests`.
 - `scripts/recipes/samples/sample_recipes.sql` — the 15 original sample recipes

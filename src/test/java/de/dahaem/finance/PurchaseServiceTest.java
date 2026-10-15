@@ -23,11 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the finance slice against a real, temporary SQLite file built from the subset
+ * Exercises the finance slice against a real, throwaway MariaDB database built from the subset
  * of schema.sql it needs (inventory_item/store/brand/store_item/purchase_history), with a
  * store_item seeded and linked to an inventory_item, the way store_item.store_item_item_id
  * links to inventory_item in the real schema. The repository under test is never mocked:
- * only Database's target file is swapped out.
+ * only Database's target is swapped out.
  */
 class PurchaseServiceTest {
 

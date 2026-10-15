@@ -21,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the shopping-list slice against a real, temporary SQLite file built from the
+ * Exercises the shopping-list slice against a real, throwaway MariaDB database built from the
  * subset of the schema it needs (recipe/recipe_ingredient/inventory_item + the store tables).
- * The repository under test is never mocked: only Database's target file is swapped out.
+ * The repository under test is never mocked: only Database's target is swapped out.
  */
 class ShoppingListServiceTest {
 

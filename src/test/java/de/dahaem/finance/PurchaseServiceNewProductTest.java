@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Exercises PurchaseService.recordNewProductPurchase — the receipts-as-ground-truth path for
- * a purchase of a product that isn't in the catalog yet — against a real, temporary SQLite file
- * built from the subset of schema.sql it needs. No mocks: only Database's target file is swapped.
+ * a purchase of a product that isn't in the catalog yet — against a real, throwaway MariaDB database
+ * built from the subset of schema.sql it needs. No mocks: only Database's target is swapped.
  */
 class PurchaseServiceNewProductTest {
 

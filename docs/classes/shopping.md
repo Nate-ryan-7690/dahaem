@@ -4,7 +4,7 @@
 
 Shopping-list generation from recipes and the store options per line.
 
-12 types in 12 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
+11 types in 11 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -23,7 +23,6 @@ classDiagram
     class shopping_ShoppingList["ShoppingList"] {
         <<record>>
     }
-    class shopping_ShoppingListDemo["ShoppingListDemo"]
     class shopping_ShoppingListItem["ShoppingListItem"] {
         <<record>>
     }
@@ -62,7 +61,6 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`PersistedShoppingList`](#persistedshoppinglist) | record |  | A previously generated shopping_list row, reloaded together with its persisted items. |
 | [`PersistedShoppingListItem`](#persistedshoppinglistitem) | record |  | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed, every current store option for it (the same options a freshly |
 | [`ShoppingList`](#shoppinglist) | record |  | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
-| [`ShoppingListDemo`](#shoppinglistdemo) | class | command-line tool | Temporary console runner for the shopping-list slice, same idea as de.dahaem.Main: proves the aggregation + store-matching logic works before there is a UI for it. |
 | [`ShoppingListItem`](#shoppinglistitem) | record |  | One line of a shopping list: an inventory item, how much of it is needed in total across the recipes it came from, and every store's current option for it (ordered cheapest-till-price first, but not pre-chosen — DAHÄM surfaces the options a |
 | [`ShoppingListItemRow`](#shoppinglistitemrow) | record |  | Raw shopping_list_item row, joined to its inventory_item's names and unit. |
 | [`ShoppingListRepository`](#shoppinglistrepository) | class |  | All SQL for building a shopping list lives here: summing recipe_ingredient across recipes, finding store_item candidates (with brand/store and any current store_discount) for one inventory item, and persisting a generated list to shopping_l |
@@ -223,25 +221,6 @@ classDiagram
 | `items` | `List<ShoppingListItem>` |
 
 **Referenced by:** `ShoppingListDto`, `ShoppingListService`
-
-## ShoppingListDemo
-
-*class · command-line tool*
-
-Temporary console runner for the shopping-list slice, same idea as de.dahaem.Main:
-proves the aggregation + store-matching logic works before there is a UI for it.
-
-```mermaid
-classDiagram
-    direction LR
-    class shopping_ShoppingListDemo["ShoppingListDemo"] {
-        +main(String[] args) void$
-    }
-```
-
-| Member | Visibility | What it does |
-|---|---|---|
-| `void main(String[] args)` | public static |  |
 
 ## ShoppingListItem
 

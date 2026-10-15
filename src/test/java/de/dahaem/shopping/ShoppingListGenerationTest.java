@@ -25,11 +25,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises ShoppingListService.generateFromMealPlan against a real, temporary SQLite file built
+ * Exercises ShoppingListService.generateFromMealPlan against a real, throwaway MariaDB database built
  * from the subset of schema.sql it needs (meal_plan/meal_plan_recipe, recipe/recipe_ingredient,
  * inventory_item, and the store tables, plus shopping_list/shopping_list_item themselves, all with
  * the exact column definitions schema.sql declares). The repository under test is never mocked:
- * only Database's target file is swapped out.
+ * only Database's target is swapped out.
  */
 class ShoppingListGenerationTest {
 

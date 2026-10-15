@@ -91,22 +91,18 @@ These run on the server (`java -cp target/dahaem-1.0-SNAPSHOT.jar <class> ...`) 
 flowchart LR
     admin(("Maintainer<br/>server"))
     admin --> r0(["ItemAnimalRunner"])
-    admin --> r1(["Main"])
-    admin --> r2(["ReceiptImportRunner"])
-    admin --> r3(["RecipeTagRunner"])
-    admin --> r4(["ShoppingListDemo"])
-    admin --> r5(["StoreImportRunner"])
-    admin --> r6(["UserAdminRunner"])
+    admin --> r1(["ReceiptImportRunner"])
+    admin --> r2(["RecipeTagRunner"])
+    admin --> r3(["StoreImportRunner"])
+    admin --> r4(["UserAdminRunner"])
     cron(("Scheduler")) --> s0(["ScheduledRefresh"])
 ```
 
 | Tool | Package | What it does |
 |---|---|---|
 | `ItemAnimalRunner` | tags | Command-line tool for the item → animal table (inventory_item_animal). |
-| `Main` | root | Temporary console runner. |
 | `ReceiptImportRunner` | receipts | Command-line entry point for importing PENNY receipts as purchase history. |
 | `RecipeTagRunner` | tags | Command-line tool that derives recipe tags from DAHÄM's own data. |
-| `ShoppingListDemo` | shopping | Temporary console runner for the shopping-list slice, same idea as de.dahaem.Main: proves the aggregation + store-matching logic works before there is a UI for it. |
 | `StoreImportRunner` | stores | Command-line entry point for the store imports. |
 | `UserAdminRunner` | auth | Command-line entry point for managing logins. |
 | `ScheduledRefresh` (scheduled) | stores | Runs the weekly / monthly refresh on a cron schedule inside the long-running API process. |

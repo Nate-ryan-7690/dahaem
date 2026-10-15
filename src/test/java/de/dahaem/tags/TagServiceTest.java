@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the tags slice against a real, temporary SQLite file built from the project's
- * actual schema.sql. The repository under test is never mocked: only Database's target file
+ * Exercises the tags slice against a real, throwaway MariaDB database built from the project's
+ * actual schema.sql. The repository under test is never mocked: only Database's target
  * is swapped out.
  */
 class TagServiceTest {

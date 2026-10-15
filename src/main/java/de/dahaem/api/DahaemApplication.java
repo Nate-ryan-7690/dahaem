@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Import;
 /**
  * Entry point for the REST API. A thin web layer over the existing services: controllers
  * translate HTTP to service calls and service results to DTOs, nothing more.
- * The console runners (de.dahaem.Main, StoreImportRunner, ...) stay separate entry points.
+ * The console runners (StoreImportRunner, ReceiptImportRunner, ...) stay separate entry points.
  *
  * <p>The database is MariaDB, configured from the {@code DAHAEM_DB_URL}, {@code DAHAEM_DB_USER}
  * and {@code DAHAEM_DB_PASSWORD} environment variables (see {@code de.dahaem.shared.Database}).

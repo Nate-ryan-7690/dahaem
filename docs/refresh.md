@@ -123,8 +123,9 @@ python scripts/importer/load_recipes.py --reload --commit   # load reviewed draf
   *current* catalog/overrides (the catalog grows over time, so old drafts can pick
   up newer matches) without re-fetching from HelloFresh.
 - `load_recipes.py --reload --commit` loads the reviewed drafts into
-  `data/kitchen_organizer.db`, skipping duplicate recipe names and dropping
-  unmatched ingredient lines (logged in the draft comments for follow-up).
+  the MariaDB database (`DAHAEM_DB_*`), skipping duplicate recipe names. An ingredient line with no catalogue
+  item gets no `recipe_ingredient` row but is stored in `recipe_unmatched_ingredient`, which makes the recipe
+  "unklar" for the diet filter until it is resolved (`find_unmatched_ingredients.py`, `rematch_unmatched.py`).
 
 This isn't scheduled because each step expects a human to review the drafts
 in between (dry-run first, `--commit`/`--write` only once satisfied) — there's no
@@ -132,14 +133,10 @@ in between (dry-run first, `--commit`/`--write` only once satisfied) — there's
 
 ### Catalog additions (`inventory_item`)
 
-```
-python scripts/importer/add_ingredients.py --file ingredients_to_add.tsv --commit
-```
-
-Inserts curated `inventory_item` rows from a hand-curated TSV (english/deutsch/
-category/subcategory). This is only run when someone has actually curated a batch
-of missing ingredients (e.g. from `ingredients_missing.tsv`) — there's nothing to
-schedule.
+New items are added by hand through a numbered, add-only migration in `migrations/` (snapshot first, final
+`OK` / `CHECK` select) and the same rows in `seed/inventory_catalog.sql`; see 0009, 0013 and 0014 for the pattern.
+The names to add come from the `rematch_unmatched.py` report (`_noitem.tsv`). Only run when someone has curated a
+batch, so there is nothing to schedule.
 
 ## Sample systemd units (Ubuntu server)
 

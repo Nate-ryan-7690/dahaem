@@ -19,10 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises SuggestionService (and, through it, SuggestionRepository) against a real, temporary
- * SQLite file built from the subset of schema.sql it needs (recipe/recipe_ingredient/
+ * Exercises SuggestionService (and, through it, SuggestionRepository) against a real, throwaway
+ * MariaDB database built from the subset of schema.sql it needs (recipe/recipe_ingredient/
  * inventory_item/brand/store/store_item/store_discount). The repository under test is never
- * mocked: only Database's target file is swapped out, same approach as PurchaseServiceTest.
+ * mocked: only Database's target is swapped out, same approach as PurchaseServiceTest.
  */
 class SuggestionServiceTest {
 

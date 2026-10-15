@@ -23,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exercises the auth slice against a real, temporary SQLite file built from the project's actual
- * schema.sql. Nothing is mocked: only Database's target file is swapped out, and passwords go
+ * Exercises the auth slice against a real, throwaway MariaDB database built from the project's actual
+ * schema.sql. Nothing is mocked: only Database's target is swapped out, and passwords go
  * through the real BCrypt encoder the app uses.
  */
 class AccountServiceTest {
