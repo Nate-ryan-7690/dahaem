@@ -108,6 +108,24 @@ document the contract. Its open decisions are settled with Nate one at a time.
   (Fischstäbchen 15 Stück, Kiri 6 Stück, Mars 5 Stück, Auberginen 1-kg-Netz, Mayonnaise /
   Ketchup in ml, Buttermilch 500 g, Heidelbeeren 580 ml, Underberg 12 Stück, piece-only pizzas,
   gram-only Waffelschnitte packs). Also needed for buyable shopping-list amounts.
+  **Added 2026-10-22 (catalogue batch 2b):** the rematch converts spoons, ml and dl only for liquids (1 EL = 15 ml,
+  1 TL = 5 ml, 1 dl = 100 ml); **g against EL / TL / ml stays a REVIEW** — in the 2026-10-22 dry run that is ~40
+  oil lines ("15 g Öl" next to "1 EL Olivenöl") plus the sugar / butter cases, all waiting for this table. A recipe
+  line in ml / EL on an item stored in g (Honig-Senf-Dressing 50 ml, item unit g) needs it too.
+- **Variant split review** — `next`, Nate. Under the item rule of 2026-10-22 (one item per product on the shelf,
+  varieties and flavours included, brand abstracted) earlier work merged varieties: Tiefkühlpizza, Eiscreme,
+  Helles / Lager, Kräuterlikör / Bitter, Mixgetränk, Biermix, Fruchtjoghurt, Instantnudeln, Tafelschokolade, the
+  flavoured receipt lines (Blackberry Cider → Cider, Paprika-Lyoner → Lyoner, Bagels Mehrkorn → Bagel Vollkorn) and
+  20 Brötchen products on one item. `docs/variant_split_review.md` lists each place with the live rows affected and
+  a proposed split; **no data was changed**. Nate decides each row (and the open questions at its end: standard
+  Senf: decided 937, 1679 a probable duplicate; is "Bio" a variety, Radler vs Biermix for Paulaner Weißbier-Zitrone, 3b wrong links); accepted
+  rows become a migration (pattern 0015), override changes and a guarded re-match.
+- **Unmatched names under 5 lines** — `later`. Batch 2b gave every no-item name with ≥ 5 lines its own item. After
+  the 2026-10-22 dry run 546 lines in ~340 names with 1–4 lines each remain unmatched (largest: Landana Grünes Pesto,
+  Bali-Nudeln, Tom Kha Gai Suppe, Dalsuppe, pflanzliche Milchalternative, Birria-Paste, Gemüse-Maultaschen,
+  veganes Schmelztopping, Pizzafleischkäse, Stremellachs, „Gute Laune“-Käse — 4 lines each; list:
+  `rematch_<stamp>_noitem.tsv`). Add items as they come up in more lines, same rule, same pattern as 0015. Variety
+  lines of an existing batch-2b item (e.g. "Tomatiger Bruschetta-Dip") go to review as `like`, not to the plain item.
 - **Catalogue batch 2** — `next`. Items flagged as possibly too coarse under the "product minus
   brand" rule: Kräuterlikör / Bitter, Mixgetränk (alkoholisch), Anisspirituose (Ouzo vs
   Pastis), Schokoriegel, Tiefkühlpizza, Müsliriegel, Instantnudeln. Override for
@@ -330,6 +348,12 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   redefining them; every PR names its tests and verification.
 
 ## Done
+
+- Catalogue batch 2b: migration 0015 (67 new items, ids 1833–1899, every no-item name with ≥ 5 lines plus Nate's
+  varieties and products), the tightened item rule in CLAUDE.md / `docs/DATABASE.md`, the amount rules of the rematch
+  and the importer (kept amounts incl. salt, EL/TL/ml/dl for liquids, pinch dropped next to a spoon, alcohol to taste,
+  dl / mg), overrides, `non_food.json` (Ausstechformen, Gratis Veltins Bier), `docs/variant_split_review.md`
+  (report only). Nothing applied live; PR number added when merged.
 
 - Cleanup: the old SQLite catalogue tools (`add_ingredients.py`, `dedup_catalog.py`, `scan_ingredients.py`), the
   console runners `Main` / `ShoppingListDemo` and the SQLite-era `docs/CODE_REVIEW.md` are removed; stale SQLite

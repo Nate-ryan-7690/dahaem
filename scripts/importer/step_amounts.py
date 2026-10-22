@@ -25,7 +25,7 @@ _FR = {"½": Fraction(1, 2), "¼": Fraction(1, 4), "¾": Fraction(3, 4), "⅓": 
 _FRC = "".join(_FR)
 NUM = (rf"(?:\d+\s?[{_FRC}]|[{_FRC}]|\d+\s+\d/\d|\d{{2,}}/\d|\d/\d|\d+[.,]\s?\d+|\d+)")
 # measuring units (and countable pack words) a step may put behind an amount
-UNIT = (r"(?:EL|El|ETL|TL|Tl|kg|ml|g|l|L|Msp\.?|Prisen?|Bund|Zehen?|Stück|Dosen?|Packung|Tropfen|"
+UNIT = (r"(?:EL|El|ETL|TL|Tl|kg|ml|dl|g|l|L|Msp\.?|Prisen?|Bund|Zehen?|Stück|Dosen?|Packung|Tropfen|"
         r"Handvoll|Päckchen|Becher|Scheiben?|Zweige?|Blätter|Blatt)")
 _NOT_LETTER = r"(?![A-Za-zÄÖÜäöüß])"
 MENTION = re.compile(
@@ -57,6 +57,10 @@ FAMILIES = [  # (family, test on one lower-case word)
 # Oil, vinegar and mustard are one ingredient for the recipe's steps when the recipe has only one item
 # of that kind: a step's generic "Essig" belongs to the recipe's only vinegar.
 MERGE_FAMILIES = {"öl", "essig", "senf"}
+# Liquids: a spoon is a volume, so EL / TL / dl / ml can be added up (Nate, 2026-10-22): 1 EL = 15 ml, 1 TL = 5 ml,
+# 1 dl = 100 ml. Grams against spoons or millilitres is never converted (it needs the per-item conversion table).
+LIQUID_FAMILIES = {"öl", "essig", "milch", "buttermilch", "sahne"}
+_ML = {"ml": Decimal(1), "TL": Decimal(5), "EL": Decimal(15)}
 # no amount anywhere: these become "to taste" (rules of 2026-10-11)
 TO_TASTE_FAMILIES = {"salz", "pfeffer", "öl", "essig", "zucker", "butter", "brühe", "honig", "mehl", "senf", "milch"}
 # "Stück X" without an amount anywhere is 1 Stück only for countable things; anything else is reviewed
@@ -65,6 +69,19 @@ COUNTABLE = re.compile(r"\b(?:ei(?:er)?|eigelb|eiweiß|frühlingszwiebeln?|zwieb
                        r"orangen?|kumquats?|paprikas?|tomaten?|burgerbrötchen|brötchen)\b", re.I)
 # "Paprika" is the vegetable unless the line names the spice
 _PAPRIKA_SPICE = re.compile(r"edelsüß|rosenscharf|geräuchert|scharf|süß|pulver|gemahlen|flocken|gewürz", re.I)
+
+
+# Alcohol (wine, beer, spirits ...) without an amount anywhere is "to taste" too, so the alcohol flag of the item
+# still reaches the recipe (halal filter). Vinegars named after wine are no alcohol; "alkoholfrei" is none either.
+_ALCOHOL = re.compile(r"(?<![a-zäöüß])(?:(?:rot|weiß|weiss|rosé|rose|reis|schaum|süß|dessert|koch|port|glüh)?wein(?!essig)"
+                      r"|weinbrand|sekt|prosecco|champagner|bier|rum|wodka|vodka|whisky|whiskey|brandy|cognac|likör|"
+                      r"amaretto|grappa|calvados|sherry|marsala|schnaps|korn|gin|tequila|cidre)(?![a-zäöüß])", re.I)
+_ALCOHOL_FREE = re.compile(r"alkoholfrei|alkoholarm|ohne alkohol|0[,.]0\s?%", re.I)
+
+
+def is_alcohol(name):
+    """Does the ingredient name say wine, beer or a spirit (and not alcohol-free, not a vinegar)?"""
+    return bool(_ALCOHOL.search(name or "")) and not _ALCOHOL_FREE.search(name or "")
 
 
 def is_countable(name):
@@ -149,8 +166,10 @@ def mentions(step):
             amount = _dec(_value(m["o"]))
         except (ValueError, ZeroDivisionError):
             continue
-        out.append({"amount": amount, "unit": _UNIT_NAME.get(unit, unit), "noun": m["noun"].strip(),
-                    "raw": m.group(0).strip()})
+        unit = _UNIT_NAME.get(unit, unit)
+        if unit == "dl":                          # 1 dl = 100 ml (stored in ml)
+            amount, unit = amount * 100, "ml"
+        out.append({"amount": amount, "unit": unit, "noun": m["noun"].strip(), "raw": m.group(0).strip()})
     return out
 
 
@@ -196,18 +215,29 @@ def collect(name, steps):
     return exact, loose
 
 
-def total(found):
+def total(found, liquid=False):
     """Add up mentions of one ingredient -> (status, amount, unit, notes).
-    'found'  one unit, or EL and TL mixed (1 EL = 3 TL, exact, stored in EL with 3 decimals)
+    'found'  one unit; EL and TL mixed (1 EL = 3 TL, exact, stored in EL with 3 decimals); a pinch next to a spoon
+             is dropped (about 0.4 g, irrelevant for shopping; only "Prise" alone stays Prise); for a liquid
+             ml / TL / EL together are converted to ml (1 EL = 15 ml, 1 TL = 5 ml)
     'mixed'  g / ml / Prise ... together with another unit: never added up"""
-    units = {m["unit"] or "Stück" for m in found}
     shown = " + ".join(f"{m['amount']} {m['unit'] or 'Stück'}" for m in found)
+    extra = []
+    units = {m["unit"] or "Stück" for m in found}
+    if "Prise" in units and units & {"EL", "TL"}:
+        found = [m for m in found if m["unit"] != "Prise"]
+        units = {m["unit"] or "Stück" for m in found}
+        extra.append("the pinch is dropped")
     if len(units) == 1:
         return "found", _dec(Fraction(sum((m["amount"] for m in found), Decimal(0)))), units.pop(), \
-            ["from the steps: " + shown]
+            ["from the steps: " + shown] + extra
     if units == {"EL", "TL"}:
         eel = sum((Fraction(m["amount"]) / (3 if m["unit"] == "TL" else 1) for m in found), Fraction(0))
-        return "found", _dec(eel), "EL", ["from the steps: " + shown + " (1 EL = 3 TL)"]
+        return "found", _dec(eel), "EL", ["from the steps: " + shown + " (1 EL = 3 TL)"] + extra
+    if liquid and "ml" in units and units <= set(_ML):
+        ml = sum((m["amount"] * _ML[m["unit"]] for m in found), Decimal(0))
+        return "found", _dec(Fraction(ml)), "ml", \
+            ["from the steps: " + shown + " (liquid: 1 EL = 15 ml, 1 TL = 5 ml)"] + extra
     return "mixed", None, None, ["; ".join(m["raw"] for m in found)]
 
 
@@ -222,7 +252,7 @@ def step_amount(name, steps, merge_family=False):
     exact, loose = collect(name, steps)
     found = exact + loose if merge_family else exact
     if found:
-        return total(found)
+        return total(found, liquid=ingredient_key(name)[1] in LIQUID_FAMILIES)
     if loose:
         return "uncertain", None, None, ["; ".join(m["raw"] for m in loose)]
     return "none", None, None, []

@@ -18,7 +18,8 @@ repair tool that fixes the amounts of recipes imported before the parser fixes b
 | `db.py` | the MariaDB connection, from environment variables | |
 
 New catalogue items are added through a numbered migration in `migrations/` plus the same rows in
-`seed/inventory_catalog.sql` (see 0009, 0013, 0014), not through a script.
+`seed/inventory_catalog.sql` (see 0009, 0013, 0014, 0015), not through a script. One item per product on the shelf,
+varieties and flavours included, brand abstracted away (CLAUDE.md "Item rule").
 
 ## Setup
 
@@ -48,10 +49,23 @@ ingredient the recipe needs without an amount (`migrations/0005_recipe_quantitie
 | `3 Esslöffel Olivenöl` / `3 EL Olivenöl` | 3 | EL | 0 |
 | `2 Teelöffel Zucker` | 2 | TL | 0 |
 | `2 Prisen Zucker` | 2 | Prise | 0 |
-| `nach Geschmack Salz`, `Salz nach Geschmack`, `etwas Salz`, `Salz` | NULL | (empty) | 1 |
+| `nach Geschmack Salz`, `Salz nach Geschmack`, `etwas Salz`, `Salz` — when neither the line nor the steps give an amount | NULL | (empty) | 1 |
+| the same lines, with `1 TL Salz` in the cooking steps | 1 | TL | 0 |
 
 - Amounts are never rounded and never forced to at least 1.
-- Spoons stay spoons; nothing is converted to ml.
+- Spoons stay spoons in the ingredient list. A step amount is converted only where it is safe (rules of
+  Nate, 2026-10-22, in `step_amounts.py`): 1 EL = 3 TL; for **liquids** (oil, vinegar, milk, cream) 1 EL = 15 ml,
+  1 TL = 5 ml and `1 dl = 100 ml`, so `40 ml Olivenöl` + `1 TL Öl` is `45 ml`; **g against EL / TL / ml is never
+  converted** (it needs the per-item conversion table, `docs/BACKLOG.md`) and stays a REVIEW.
+- `dl` is read as 100 ml (`1 dl Olivenöl` = 100 ml). `mg` in front of a liquid (`12 mg Balsamicoessig`) is a unit
+  typo of the source for `ml`.
+- **An amount given in the ingredient line or the cooking steps is kept — salt included** (salt is measured in baking).
+  `nach Geschmack` / to taste is stored only when there is no amount anywhere; a step amount that cannot be settled
+  (several wordings, units that cannot be added) is a REVIEW, never a guess.
+- A pinch next to a spoon is dropped (`1 TL Zucker` + `1 Prise Zucker` = `1 TL`: a pinch is about 0.4 g and irrelevant
+  for shopping); `Prise` alone stays `Prise`.
+- Wine, beer and spirits (`Weißwein`) with no amount anywhere are to taste, so the item's alcohol flag still reaches the
+  recipe (halal filter). `Zucker` and `Mandeln` with an unclear amount stay REVIEW.
 - `kg` and `l` are kept as written; the importer never converted them.
 - A range such as `1-2 Stück` keeps the first value.
 - To-taste rows never add a quantity to a shopping list. Restocking salt and pepper is the
