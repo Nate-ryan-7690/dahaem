@@ -60,6 +60,12 @@ Only after the maintainer approves a change to live data/schema:
   the plain services; no JPA/Hibernate.
 - Product principle: **surface, don't decide** — the app presents options (prices, savings,
   store choices); the user chooses. Never auto-pick the cheapest store or a meal.
+- **Item rule** (Nate, 2026-10-22): if it is its own product on the store shelf, it is its own
+  `inventory_item` — varieties and flavours included (Lavendelhonig ≠ Waldhonig; Chipotle-Senf ≠
+  Kräutersenf ≠ Dijon). Only the **brand** is abstracted away (Barilla and any other spaghetti =
+  "Spaghetti"). A recipe line that names only the generic product ("Honig", "Senf", "Joghurt") maps
+  to the plain / standard item; categories / subcategories group the varieties. Applies to every
+  new catalogue item, override and match; this replaces the earlier "flavours stay one item".
 - Scope is **all household shopping**, not food-only. Pantry staples (oil, salt, pepper,
   sugar, flour) are real tracked ingredients.
 - Build (shaded runnable jar): `mvn -DskipTests package` → `target/dahaem-1.0-SNAPSHOT-shaded.jar`

@@ -72,11 +72,52 @@ class StepAmountTest(unittest.TestCase):
         self.assertEqual(("found", Decimal(2), "TL"), step_amounts.step_amount("Butter", ["1 TL Butter", "1 TL Butter"])[:3])
 
     def test_spoons_mixed_with_weights_are_never_added_up(self):
-        for steps in (["1 EL Butter erhitzen.", "10 g Butter zugeben."], ["1 TL Öl", "50 ml Öl"],
-                      ["1 Prise Zucker", "1 TL Zucker"]):
+        # g against EL / TL / ml stays a review: it needs the per-item conversion table (backlog)
+        for name, steps in (("Butter", ["1 EL Butter erhitzen.", "10 g Butter zugeben."]),
+                            ("Öl", ["15 g Öl zugeben", "1 EL Olivenöl beträufeln"]),
+                            ("Öl", ["10 g Öl zugeben", "40 ml Olivenöl"]),
+                            ("Zucker", ["1 TL Zucker", "10 g Zucker"]),
+                            ("Butter", ["1 EL Butter", "50 ml Butter"])):      # ml is only converted for liquids
             with self.subTest(steps=steps):
-                name = "Butter" if "Butter" in steps[0] else "Öl" if "Öl" in steps[0] else "Zucker"
                 self.assertEqual("mixed", step_amounts.step_amount(name, steps)[0])
+
+    def test_a_pinch_next_to_a_spoon_is_dropped(self):
+        for name, steps, want in (("Zucker", ["1 Prise Zucker", "1 TL Zucker"], (Decimal(1), "TL")),
+                                  ("Zucker", ["3 EL [6 EL] Zucker gleichmäßig", "1 Prise Zucker"], (Decimal(3), "EL")),
+                                  ("Salz", ["1 TL Salz in den Mixtopf", "1 Prise Salz und Pfeffer"], (Decimal(1), "TL")),
+                                  ("Zucker", ["2 TL Zucker zugeben", "1 Prise Zucker miteinander"], (Decimal(2), "TL"))):
+            with self.subTest(steps=steps):
+                status, amount, unit, notes = step_amounts.step_amount(name, steps)
+                self.assertEqual(("found",) + want, (status, amount, unit))
+                self.assertIn("the pinch is dropped", notes)
+
+    def test_a_pinch_alone_stays_a_pinch(self):
+        self.assertEqual(("found", Decimal(2), "Prise"),
+                         step_amounts.step_amount("Zucker", ["1 Prise Zucker", "1 Prise Zucker"])[:3])
+
+    def test_liquids_are_added_up_in_ml(self):
+        for name, steps, want in (("Öl", ["40 ml Olivenöl in das Rührgefäß", "1 TL Öl erhitzen"], Decimal(45)),
+                                  ("Öl", ["2 EL Öl sowie etwas Salz", "100 ml Öl erhitzen"], Decimal(130)),
+                                  ("Milch", ["200 ml Milch", "1 EL Milch"], Decimal(215)),
+                                  ("Öl", ["1 dl Öl", "1 EL Öl"], Decimal(115))):
+            with self.subTest(steps=steps):
+                status, amount, unit, notes = step_amounts.step_amount(name, steps)
+                self.assertEqual(("found", want, "ml"), (status, amount, unit))
+                self.assertIn("1 EL = 15 ml", notes[0])
+
+    def test_dl_is_100_ml(self):
+        self.assertEqual(("found", Decimal(250), "ml"), step_amounts.step_amount("Milch", ["2,5 dl Milch"])[:3])
+        self.assertEqual(("found", Decimal(100), "ml"), step_amounts.step_amount("Olivenöl", ["1 dl Olivenöl"])[:3])
+
+    def test_spoons_alone_stay_spoons_for_liquids(self):
+        self.assertEqual(("found", Decimal(3), "EL"), step_amounts.step_amount("Öl", ["2 EL Öl", "1 EL Öl"])[:3])
+        self.assertEqual(("found", Decimal("1.333"), "EL"), step_amounts.step_amount("Öl", ["1 EL Öl", "1 TL Öl"])[:3])
+
+    def test_alcohol_names(self):
+        for name in ("Weißwein", "Rotwein, trocken", "Bier", "Weinbrand", "Sherry", "Prosecco", "Kochwein"):
+            self.assertTrue(step_amounts.is_alcohol(name), name)
+        for name in ("Weißweinessig", "alkoholfreies Bier", "Weintrauben", "Rumpsteak", "Ginger Ale", "Birne"):
+            self.assertFalse(step_amounts.is_alcohol(name), name)
 
     def test_another_wording_is_only_a_hint(self):
         self.assertEqual("uncertain", step_amounts.step_amount("Weißweinessig", ["1 EL Essig zugeben."])[0])
@@ -118,11 +159,52 @@ class AmountlessLineRulesTest(unittest.TestCase):
     def reasons(self, p):
         return {r["item_id"]: r["reason"] for r in p["reviews"]}
 
-    # 1. nach Geschmack
-    def test_nach_geschmack_is_to_taste_whatever_the_steps_say(self):
-        p = self.parse(["nach Geschmack Zucker", "nach Geschmack Salz"], ["1 Prise Zucker zugeben.", "0,25 TL Salz zugeben."])
+    # 1. nach Geschmack (Nate, 2026-10-22: an amount in the steps is kept, salt included)
+    def test_nach_geschmack_is_to_taste_only_when_no_amount_is_anywhere(self):
+        p = self.parse(["nach Geschmack Zucker", "nach Geschmack Salz"], ["Alles verrühren."])
         self.assertEqual((None, "", True, None), lines_of(p)[1061])
         self.assertEqual((None, "", True, None), lines_of(p)[1148])
+
+    def test_nach_geschmack_keeps_the_amount_of_the_steps(self):
+        p = self.parse(["nach Geschmack Zucker", "Salz nach Geschmack"], ["1 Prise Zucker zugeben.", "0,25 TL Salz zugeben."])
+        self.assertEqual((Decimal(1), "Prise", False, "steps"), lines_of(p)[1061])
+        self.assertEqual((Decimal("0.25"), "TL", False, "steps"), lines_of(p)[1148])
+
+    def test_salt_in_a_baking_recipe_keeps_its_measure(self):
+        p = self.parse(["Stück Salz"], ["1 TL Salz in den Mixtopf geben.", "1 Prise Salz und Pfeffer zugeben."])
+        self.assertEqual((Decimal(1), "TL", False, "steps"), lines_of(p)[1148])
+
+    def test_nach_geschmack_with_an_unclear_step_amount_is_a_review(self):
+        p = self.parse(["nach Geschmack Zucker"], ["3 EL Zucker verrühren.", "10 g Zucker darüber streuen."])
+        self.assertEqual({}, lines_of(p))
+        self.assertIn("cannot be added", p["reviews"][0]["reason"])
+
+    def test_weisswein_without_an_amount_is_to_taste_so_the_alcohol_flag_applies(self):
+        p = self.parse(["Stück Weißwein"], ["Alles verrühren."])
+        self.assertEqual((None, "", True, None), lines_of(p)[None])
+        self.assertEqual([], p["reviews"])
+
+    def test_weisswein_with_an_amount_in_the_steps_keeps_it(self):
+        p = self.parse(["Stück Weißwein"], ["100 ml Weißwein angießen."])
+        self.assertEqual((Decimal(100), "ml", False, "steps"), lines_of(p)[None])
+
+    def test_mixed_tl_el_with_a_pinch_stores_the_spoon(self):
+        p = self.parse(["Stück Zucker"], ["2 TL Zucker zugeben und ca. 1 Prise Zucker verrühren."])
+        self.assertEqual((Decimal(2), "TL", False, "steps"), lines_of(p)[1061])
+
+    def test_oil_in_ml_and_spoons_is_added_in_ml(self):
+        p = self.parse(["Stück Öl"], ["40 ml Olivenöl in das Rührgefäß geben", "1 TL Öl erhitzen"])
+        self.assertEqual((Decimal(45), "ml", False, "steps"), lines_of(p)[1022])
+
+    def test_oil_in_grams_against_spoons_stays_a_review(self):
+        p = self.parse(["Stück Öl"], ["15 g Öl zugeben", "1 EL Olivenöl"])
+        self.assertEqual({}, lines_of(p))
+        self.assertIn("cannot be added", p["reviews"][0]["reason"])
+
+    def test_zucker_and_mandeln_with_an_unclear_amount_stay_a_review(self):
+        p = self.parse(["Stück Zucker", "g Mandeln"], ["3 EL Zucker", "10 g Zucker", "Mandeln rösten."])
+        self.assertEqual({}, lines_of(p))
+        self.assertEqual(2, len(p["reviews"]))
 
     # 2. amount from the steps
     def test_amount_from_the_steps_for_stueck_and_bare_lines(self):
@@ -210,7 +292,7 @@ class AmountlessLineRulesTest(unittest.TestCase):
         self.assertEqual({"Knoblauchpulver", "Paprika edelsüß"}, {r["name"] for r in p["reviews"]})
 
     def test_anything_else_without_an_amount_goes_to_review(self):
-        p = self.parse(["Stück Petersilie", "g Rinderhackfleischzubereitung", " Basmatireis", "Stück Weißwein"],
+        p = self.parse(["Stück Petersilie", "g Rinderhackfleischzubereitung", " Basmatireis", "g Mandeln"],
                        ["Alles verrühren."])
         self.assertEqual({}, lines_of(p))
         self.assertEqual(4, len(p["reviews"]))

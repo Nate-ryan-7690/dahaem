@@ -42,7 +42,7 @@ class OverrideTargetsTest(unittest.TestCase):
         self.assertEqual(414, exact["hartkaese ital art dont use"])
         self.assertEqual(267, exact["grillhaxe"])
         self.assertEqual(263, exact["krustenbraten"])
-        for key, item in (("pastrami mit pfefferrand", 1829), ("krakauer", 1830), ("gefluegelwuerste", 1831),
+        for key, item in (("pastrami mit pfefferrand", 1838), ("krakauer", 1830), ("gefluegelwuerste", 1831),
                           ("hackfleischzubereitung aus haehnchen", 1832), ("veganes filet nach lachs art", 1824),
                           ("planted veganes pulled in bbq marinade", 1825),
                           ("vegane knusperstaebchen nach fisch art", 1826), ("veganes schnitzel", 1827),

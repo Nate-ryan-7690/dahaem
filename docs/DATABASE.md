@@ -47,6 +47,15 @@ Read by `InventoryRepository`, joined by `RecipeRepository` and `StoreRepository
 | `inventory_item_subcategory` | nullable |
 | `inventory_item_earliest_exp_date` | `DATE`, nullable (bound/read as `LocalDate`) |
 
+**One row per product on the shelf (item rule, Nate, 2026-10-22).** If it is its own product in the store, it is its own
+`inventory_item`: varieties and flavours included (Lavendelhonig ≠ Waldhonig; Chipotle-Senf ≠ Kräutersenf ≠ Dijon-Senf;
+Erdbeer- ≠ Kirschjoghurt). Only the **brand** is abstracted away: Barilla spaghetti and any other spaghetti are one item,
+"Spaghetti". Even a product only one company makes is its own item. A recipe or receipt line that names only the generic
+product ("Honig", "Senf", "Joghurt") maps to the plain / standard item (1070 Honig, 1679 Senf, 386 Naturjoghurt);
+`inventory_item_category` / `inventory_item_subcategory` group the varieties. New items come in a numbered migration
+(`migrations/0009`, `0013`, `0014`, `0015`) with the same rows in `seed/inventory_catalog.sql`; the older generic items
+that merged varieties under the previous rule are listed in `docs/variant_split_review.md`.
+
 ### `recipe`, `recipe_ingredient`, `recipe_instructions`
 
 Read by `RecipeRepository`.

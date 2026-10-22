@@ -80,9 +80,11 @@ def parse_amount(s):
 
 # ---------- units ----------
 # Canonical units, looked up case-insensitively. Spoons stay spoons (no ml conversion); kg/l
-# are kept as written (the importer never converted them).
+# are kept as written (the importer never converted them); dl is converted to ml (1 dl = 100 ml).
 UNIT_ALIASES = {
-    "g": "g", "kg": "kg", "ml": "ml", "l": "l",
+    "g": "g", "kg": "kg", "ml": "ml", "l": "l", "dl": "dl",
+    # "mg Balsamicoessig" / "12 mg Balsamico": a unit typo in the HelloFresh source for ml (Nate, 2026-10-22)
+    "mg": "ml",
     "el": "EL", "esslöffel": "EL", "eßlöffel": "EL",
     "tl": "TL", "teelöffel": "TL",
     "prise": "Prise", "prisen": "Prise",
@@ -160,6 +162,8 @@ def parse_ingredient(raw):
     unit, name = split_unit(rest)
     if unit is None:
         unit, name = DEFAULT_UNIT, rest
+    if unit == "dl":                        # 1 dl = 100 ml (stored in ml)
+        qty, unit = _clean(qty * 100), "ml"
     if not name:
         name = rest
     name = _LEADING_TO_TASTE.sub("", name).strip() or name      # "1 Prise nach Geschmack Salz": the item is Salz
@@ -361,12 +365,15 @@ def instruction_steps(rec):
     return [s for s in (_strip_html(i.get("text") if isinstance(i, dict) else str(i)) for i in ins) if s]
 
 
-def _resolve_amountless(raw, line, fam, steps, merge_ok):
-    """Rules of 2026-10-11 for a line without a number that is not 'nach Geschmack', in this order:
-    amount from the steps (several mentions added up; EL + TL converted; a same-kind mention with other
-    wording only for oil / vinegar / mustard when the recipe has exactly one such item, merge_ok) >
-    salt / pepper / oil / vinegar / sugar / butter / stock / honey / flour / mustard / milk -> to taste >
-    'Stück X' of a countable thing -> 1 Stück > review.
+def _resolve_amountless(raw, line, fam, steps, merge_ok, explicit=False):
+    """Rules of 2026-10-11 and 2026-10-22 for a line without a number, in this order:
+    amount from the steps (several mentions added up; EL + TL converted, a pinch next to a spoon dropped, liquids
+    in ml; a same-kind mention with other wording only for oil / vinegar / mustard when the recipe has exactly one
+    such item, merge_ok) > salt / pepper / oil / vinegar / sugar / butter / stock / honey / flour / mustard / milk
+    / alcohol -> to taste > 'Stück X' of a countable thing -> 1 Stück > review.
+    An amount in the steps always wins, "nach Geschmack" included (explicit=True: the line says "nach Geschmack");
+    such a line is to taste ONLY when the steps name no amount either, and any step mention that cannot be settled
+    is a review, never a guess.
     Returns (line, origin, why): origin 'steps' / 'one' / None; a why starting 'REVIEW' means the line is
     NOT written."""
     status, amount, unit, notes = step_amounts.step_amount(line.name, steps, merge_family=merge_ok)
@@ -378,7 +385,7 @@ def _resolve_amountless(raw, line, fam, steps, merge_ok):
         return line, None, f"REVIEW: step amount unsure ({why}): {notes[0]}"
     if status == "mixed":
         return line, None, f"REVIEW: step amounts in units that cannot be added: {notes[0]}"
-    if fam in step_amounts.TO_TASTE_FAMILIES:
+    if explicit or fam in step_amounts.TO_TASTE_FAMILIES or step_amounts.is_alcohol(line.name):
         return line, None, None
     if re.match(r"\s*Stück\s", raw or "", re.I) and step_amounts.is_countable(line.name):
         return Line(raw, Decimal(1), DEFAULT_UNIT, line.name, False), "one", None
@@ -415,12 +422,13 @@ def parse_recipe(rec, catalog, is_pantry=None, merge=True):
     for e in entries:
         raw, line, iid, fam = e["raw"], e["line"], e["iid"], e["fam"]
         origin, why = None, None
-        if line.to_taste and not _NACH_GESCHMACK.search(raw or ""):
-            if iid is not None and iid in numbered_items:
+        if line.to_taste:
+            explicit = bool(_NACH_GESCHMACK.search(raw or ""))      # "nach Geschmack": to taste unless the steps give an amount
+            if iid is not None and iid in numbered_items and not explicit:
                 line, why = None, "no row of its own: a numbered line of the same ingredient exists"
             else:
                 merge_ok = fam in step_amounts.MERGE_FAMILIES and len(kind_items.get(fam, ())) == 1
-                line, origin, why = _resolve_amountless(raw, line, fam, steps, merge_ok)
+                line, origin, why = _resolve_amountless(raw, line, fam, steps, merge_ok, explicit)
                 if origin == "steps" and iid is not None:
                     if iid in from_steps:         # a second amountless line of the same item: its amount is already in
                         line, origin, why = None, None, "no row of its own: the steps amount was already taken"
