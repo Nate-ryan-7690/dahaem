@@ -148,11 +148,12 @@ Items 1-1675 are the original seed (generic category items with no flavour split
 ## 5. Decisions for Nate
 
 1. For each row of sections 1 and 3a: split yes / no, and which new items. Nothing changes until then.
-2. The standard mustard: **937 senf mittelscharf** (condiments, g) or **1679 Senf** (spices, Glas). Recipe override and store override disagree today (see 1679).
+2. ~~The standard mustard~~ **Decided by Nate (2026-10-22): 937 senf mittelscharf.** Plain "Senf" in recipes and the store key "mittelscharfer senf" both map to 937 now; 1679 "Senf" (spices, Glas) is a probable duplicate — decide whether to merge or keep it.
 3. Is **"Bio"** a variety (Bio-Bananen, Bio-Karotten, Bio-Butter, Bio-Vollmilch ...)? Batch 2b makes Bio-Sommerblütenhonig its own item because it is a honey variety, not because of the "Bio".
 4. **Paulaner Weißbier-Zitrone 0,0** (the product behind "Paulaner 2in1 alkoholfreies Bier"): 1744 Biermix alkoholfrei (what the rematch uses) or 1742 Radler alkoholfrei.
-5. **Brühe**: an unspecified "Naturgut Brühe" on a receipt now fits 1851 Brühe better than 783 gemüsebrühe pulver.
-6. The wrong links in 3b: relink or unlink (a separate guarded fix; needs a snapshot first).
+5. **1893 "SalaRico"** carries a brand / trade name, against the item rule. A web search (2026-10-22) found no product of that name; check the recipes that use it (5 lines) and give the item its generic lettuce name.
+6. **Brühe**: an unspecified "Naturgut Brühe" on a receipt now fits 1851 Brühe better than 783 gemüsebrühe pulver.
+7. The wrong links in 3b: relink or unlink (a separate guarded fix; needs a snapshot first).
 
 How to apply an accepted row (not done here): add the new items in a numbered migration (pattern 0015), map the store / receipt keys in the override files, and re-run the matching with a dry run first; any change to live rows goes through a snapshot (CLAUDE.md rule 3).
 

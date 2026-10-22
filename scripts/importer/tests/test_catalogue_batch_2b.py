@@ -66,7 +66,7 @@ class MappingsTest(unittest.TestCase):
     def test_nates_decisions_for_the_review_lines(self):
         for raw, want in (("2 Esslöffel Joghurt", 386), ("100 g Honig", 1070), ("2 Esslöffel Tahini-Paste", 913),
                           ("2 Esslöffel Kapern", 929), ("1 g Piment, Nelken Pfeffer, gemahlen", 1190),
-                          ("Senf", 1679), ("1 Teelöffel Gemüsebrühe", 780),
+                          ("Senf", 937), ("1 Teelöffel Gemüsebrühe", 780),
                           ("8 Stück Vegane Knusperstäbchen nach Fisch-Art (Inhalt: 240 g, 8 Stk.)", 1826),
                           ("250 ml afri cola®", 1698), ("1 dl Olivenöl", 1022), ("12 mg Balsamicoessig", 1053),
                           ("300 g gemischtes Hackfleisch mit Salz und Pfeffer", 271),
@@ -80,7 +80,7 @@ class MappingsTest(unittest.TestCase):
         for iid, name in ((386, "naturjoghurt"), (913, "tahin"), (929, "kapern glas"), (1190, "piment"),
                           (780, "gemüsebrühe würfel"), (1698, "Cola"), (1022, "olivenöl"), (1053, "balsamico essig"),
                           (271, "gemischtes hackfleisch"), (849, "thunfisch in öl dose"),
-                          (992, "honigsenf dressing"), (1744, "Biermix alkoholfrei"), (1679, "Senf")):
+                          (992, "honigsenf dressing"), (1744, "Biermix alkoholfrei"), (937, "senf mittelscharf")):
             self.assertEqual(name, SEED_ITEMS.get(iid, (None, None))[1], iid)
 
     def test_a_variety_is_its_own_item_and_the_generic_line_maps_to_the_plain_one(self):

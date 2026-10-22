@@ -118,7 +118,7 @@ document the contract. Its open decisions are settled with Nate one at a time.
   flavoured receipt lines (Blackberry Cider → Cider, Paprika-Lyoner → Lyoner, Bagels Mehrkorn → Bagel Vollkorn) and
   20 Brötchen products on one item. `docs/variant_split_review.md` lists each place with the live rows affected and
   a proposed split; **no data was changed**. Nate decides each row (and the open questions at its end: standard
-  Senf 937 or 1679, is "Bio" a variety, Radler vs Biermix for Paulaner Weißbier-Zitrone, 3b wrong links); accepted
+  Senf: decided 937, 1679 a probable duplicate; is "Bio" a variety, Radler vs Biermix for Paulaner Weißbier-Zitrone, 3b wrong links); accepted
   rows become a migration (pattern 0015), override changes and a guarded re-match.
 - **Unmatched names under 5 lines** — `later`. Batch 2b gave every no-item name with ≥ 5 lines its own item. After
   the 2026-10-22 dry run 546 lines in ~340 names with 1–4 lines each remain unmatched (largest: Landana Grünes Pesto,

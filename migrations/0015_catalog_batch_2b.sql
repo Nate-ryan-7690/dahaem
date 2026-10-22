@@ -81,7 +81,7 @@
 -- NOT new (the catalogue already has the product; mapped in scripts/importer/overrides.json instead):
 --   "Honig-Senf-Dressing"            -> 992 honigsenf dressing      (an item of the same product exists)
 --   "Paulaner 2in1 alkoholfreies Bier" -> 1744 Biermix alkoholfrei   (alcohol-free wheat beer + lemonade; 1742 Radler alkoholfrei is the near alternative)
---   the review-TSV mappings of Nate (Joghurt 386, Tahini-Paste 913, Kapern 929, Piment 1190, Senf 1679, Gemüsebrühe 780,
+--   the review-TSV mappings of Nate (Joghurt 386, Tahini-Paste 913, Kapern 929, Piment 1190, Senf 937 mittelscharf, Gemüsebrühe 780,
 --   vegane Knusperstäbchen 1826, afri cola 1698, dl Olivenöl 1022, mg Balsamicoessig 1053, gemischtes Hackfleisch mit Salz
 --   und Pfeffer 271, Skipjack Thunfisch in Sonnenblumenöl 849 thunfisch in öl dose). "Pastrami mit Pfefferrand" no longer
 --   maps to 1829 Pastrami: it is its own item now.
