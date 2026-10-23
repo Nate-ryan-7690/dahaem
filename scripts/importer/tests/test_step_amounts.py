@@ -239,6 +239,39 @@ class AmountlessLineRulesTest(unittest.TestCase):
         p = self.parse(["Stück mittelscharfer Senf"], ["1 TL Senf verrühren."])
         self.assertEqual((Decimal(1), "TL", False, "steps"), lines_of(p)[937])
 
+    def test_a_generic_stock_belongs_to_the_only_stock_of_the_recipe(self):
+        for line in ("Stück Gemüsebrühe", "Stück Rinderbrühe", "Stück Geflügelbrühe"):
+            with self.subTest(line=line):
+                p = self.parse([line], ["100 ml Brühe zubereiten."])
+                self.assertEqual(1, len(lines_of(p)))
+                self.assertEqual((Decimal(100), "ml", False, "steps"), list(lines_of(p).values())[0])
+                p = self.parse([line], ["100 ml Gemüsebrühe zubereiten."])
+                self.assertEqual((Decimal(100), "ml", False, "steps"), list(lines_of(p).values())[0])
+
+    def test_a_generic_stock_with_several_stocks_in_the_recipe_goes_to_review(self):
+        p = self.parse(["Stück Gemüsebrühe", "Stück Rinderbrühe"], ["100 ml Brühe zubereiten."])
+        self.assertEqual({}, lines_of(p))
+        self.assertEqual(2, len(p["reviews"]))
+        self.assertTrue(all("several items of this kind" in r["reason"] for r in p["reviews"]))
+
+    def test_a_step_naming_another_stock_does_not_merge(self):
+        status = step_amounts.step_amount("Gemüsebrühe", ["100 ml Rinderbrühe zubereiten."], merge_family=True)[0]
+        self.assertNotEqual("found", status)
+        self.assertNotEqual("found", step_amounts.step_amount(
+            "Rinderbrühe", ["100 ml Geflügelbrühe zubereiten."], merge_family=True)[0])
+        self.assertEqual("found", step_amounts.step_amount(
+            "Rinderbrühe", ["100 ml Rinderbrühe zubereiten."], merge_family=True)[0])
+        p = self.parse(["Stück Gemüsebrühe"], ["100 ml Rinderbrühe zubereiten."])
+        self.assertTrue(all(v[3] != "steps" for v in lines_of(p).values()))
+
+    def test_oil_vinegar_mustard_merge_rules_are_unchanged(self):
+        self.assertEqual("found", step_amounts.step_amount("Olivenöl", ["1 EL Öl erhitzen."], merge_family=True)[0])
+        self.assertEqual("uncertain", step_amounts.step_amount("Weißweinessig", ["1 EL Essig zugeben."])[0])
+        self.assertEqual("none", step_amounts.step_amount("Olivenöl", ["1 EL Sonnenblumenöl erhitzen."], merge_family=True)[0])
+        self.assertEqual("found", step_amounts.step_amount("Weißweinessig", ["1 EL Essig zugeben."], merge_family=True)[0])
+        self.assertEqual("none", step_amounts.step_amount("Weißweinessig", ["1 EL Rotweinessig zugeben."], merge_family=True)[0])
+        self.assertEqual("found", step_amounts.step_amount("Dijon-Senf", ["1 TL Senf verrühren."], merge_family=True)[0])
+
     def test_lemon_juice_is_not_the_lemon(self):
         p = self.parse(["Stück Zitrone, gewachst"], ["1 EL Zitronensaft zugeben.", "Saft von 1 [2 | 2] Zitronenspalten."])
         self.assertEqual({}, lines_of(p))

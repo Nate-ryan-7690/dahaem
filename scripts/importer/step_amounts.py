@@ -54,9 +54,10 @@ FAMILIES = [  # (family, test on one lower-case word)
     ("brühe", lambda w: "brühe" in w or "bouillon" in w or w.startswith("fond") or w.endswith("fond")),
     ("wasser", lambda w: w == "wasser"),
 ]
-# Oil, vinegar and mustard are one ingredient for the recipe's steps when the recipe has only one item
-# of that kind: a step's generic "Essig" belongs to the recipe's only vinegar.
-MERGE_FAMILIES = {"öl", "essig", "senf"}
+# Oil, vinegar, mustard and stock are one ingredient for the recipe's steps when the recipe has only one item
+# of that kind: a step's generic "Essig" belongs to the recipe's only vinegar, a generic "Brühe" / "Gemüsebrühe"
+# to the recipe's only stock (also "Stück Rinderbrühe").
+MERGE_FAMILIES = {"öl", "essig", "senf", "brühe"}
 # Liquids: a spoon is a volume, so EL / TL / dl / ml can be added up (Nate, 2026-10-22): 1 EL = 15 ml, 1 TL = 5 ml,
 # 1 dl = 100 ml. Grams against spoons or millilitres is never converted (it needs the per-item conversion table).
 LIQUID_FAMILIES = {"öl", "essig", "milch", "buttermilch", "sahne"}
@@ -98,7 +99,9 @@ _FILLER = {"der", "die", "das", "dem", "den", "des", "etwas", "restliche", "rest
            "kalten", "kaltem", "flüssige", "flüssigen", "geschmolzene", "geschmolzenen", "gehackte",
            "gehackten", "ca", "gestrichenen", "gestrichenem", "gehäuften", "etwa", "weitere",
            "weiteren", "zusätzliche", "zusätzlichen", "gutes", "gute"}
-_GENERIC = (["essig"], ["öl"], ["senf"])        # the bare word: names no particular kind
+_GENERIC = (["essig"], ["öl"], ["senf"], ["brühe"])        # the bare word: names no particular kind
+_GENERIC_STOCK_STEP = ["gemüsebrühe"]            # in a step "Gemüsebrühe" is the default stock; a step naming
+                                                 # Rinder- / Geflügelbrühe stays specific
 _CUT = re.compile(r"\s+(?:und|oder|sowie|mit|in|auf|zu|dazu|dann|dabei|über|für|aus)\s+|\s+(?:und|oder)$")
 
 
@@ -186,7 +189,8 @@ def _match(words, fam, noun):
                 if fam == "öl" and len(phrase) == 1 and len(words) == 1 and \
                         {phrase[0], words[0]} <= {"öl", "olivenöl"}:
                     return "exact"           # "(Oliven-)Öl", "Öl" and "Olivenöl" are one bottle
-                if fam in MERGE_FAMILIES and phrase not in _GENERIC and words not in _GENERIC:
+                if fam in MERGE_FAMILIES and phrase not in _GENERIC and words not in _GENERIC and \
+                        not (fam == "brühe" and phrase == _GENERIC_STOCK_STEP):
                     return None              # two specific vinegars / oils / mustards: different ingredients
                 return "family"
         return None
