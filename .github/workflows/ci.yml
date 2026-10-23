@@ -5,8 +5,11 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Lets the docs-update job re-run these checks on a branch it pushed to (a push made with the
+  # workflow token does not start a run by itself).
+  workflow_dispatch:
 
-# The jobs only read the repository; nothing here needs to write to it or to PRs.
+# The jobs only read the repository, except docs-update below, which is gated by a human approval.
 permissions:
   contents: read
 
@@ -43,10 +46,13 @@ jobs:
   #   1. the generator itself fails           -> a bug in the generator or a source file it cannot read;
   #   2. a second run gives another result    -> the output is not deterministic (noisy diffs);
   #   3. the committed docs differ from a run -> the docs only need regenerating: the diff is in the run summary
-  #      and in the docs-diff artifact. The PR author runs the generator and commits; CI never pushes anything.
+  #      and in the docs-diff artifact. Only this case starts the docs-update job (outputs.stale), which waits
+  #      for an approval and then commits the regenerated docs to the PR branch; nothing is pushed before that.
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      stale: ${{ steps.fresh.outputs.stale }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,17 +69,21 @@ jobs:
             || { echo "::error::The generator gave a different result on a second run. Fix the ordering in scripts/docs/generate_docs.py."; exit 1; }
 
       - name: Committed documentation is up to date
+        id: fresh
         run: |
           git add -N docs        # new generated files count as changes too
           if git diff --quiet -- docs; then
             echo "Generated documentation matches the code."
             exit 0
           fi
+          echo "stale=true" >> "$GITHUB_OUTPUT"
           git diff -- docs > docs.patch
           {
             echo "## Generated documentation is out of date"
             echo
-            echo "The code in this PR changes the generated docs. Run \`python3 scripts/docs/generate_docs.py\`, review the diff and commit it."
+            echo "The code in this PR changes the generated docs. Review the diff below, then approve the pending"
+            echo "**docs-update** job (Review deployments → docs-approval → Approve) and CI commits it to the branch."
+            echo "Or run \`python3 scripts/docs/generate_docs.py\` yourself and commit the result."
             echo
             echo '```'
             git diff --stat -- docs
@@ -87,7 +97,7 @@ jobs:
             echo '```'
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::Generated docs are out of date. Run: python3 scripts/docs/generate_docs.py and commit the result (diff in the run summary)."
+          echo "::error::Generated docs are out of date (diff in the run summary). Approve the docs-update job, or run: python3 scripts/docs/generate_docs.py and commit the result."
           exit 1
 
       - name: Keep the diff
@@ -97,3 +107,53 @@ jobs:
           name: docs-diff
           path: docs.patch
           if-no-files-found: ignore
+
+  # The human gate. Runs only when the docs job found stale docs (not on a generator error or a
+  # non-deterministic result, where regenerating would not help) and only for a branch of this
+  # repository. The `docs-approval` environment has a required reviewer, so the job waits at
+  # "Review deployments" until you have read the diff in the docs job summary and approved it.
+  # Then it regenerates the docs, commits them to the PR branch as github-actions[bot] and starts
+  # CI again for that commit. It never pushes to main and never runs without an approval.
+  docs-update:
+    needs: docs
+    if: >-
+      ${{ !cancelled()
+      && needs.docs.outputs.stale == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.head.ref != 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: docs-approval
+    permissions:
+      contents: write     # push the regenerated docs to the PR branch
+      actions: write      # start CI again for that commit (workflow_dispatch)
+    concurrency:
+      group: docs-update-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: PYTHONHASHSEED=1 python scripts/docs/generate_docs.py
+
+      - name: Commit the regenerated docs to the PR branch and run CI again
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}   # via env, never inlined into the script
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -A docs
+          if git diff --cached --quiet; then
+            echo "Docs already match the code on this branch; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Regenerate generated docs (approved in CI)"
+          git push origin "HEAD:refs/heads/${BRANCH}"
+          gh workflow run ci.yml --ref "${BRANCH}"
