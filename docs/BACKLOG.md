@@ -31,7 +31,7 @@ document the contract. Its open decisions are settled with Nate one at a time.
 - **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
   2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
   and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
-- **"Brühe" family rule for the repair tool** — `in progress` (PR pending). A step's generic `Brühe` / `Gemüsebrühe`
+- **"Brühe" family rule for the repair tool** — `in progress` (PR #91). A step's generic `Brühe` / `Gemüsebrühe`
   should count for a line `Stück Gemüsebrühe` (or Geflügel-, Rinderbrühe) when the recipe has
   exactly ONE stock item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf`
   (`MERGE_FAMILIES` in `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to
