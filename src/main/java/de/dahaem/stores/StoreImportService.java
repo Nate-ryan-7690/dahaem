@@ -34,16 +34,14 @@ public class StoreImportService {
 
     private final StoreRepository repository;
     private final AldiNordClient aldi;
-    private final PennyClient penny;
-    private final AggregatorClient aggregator;
+    private final OfferSourceFactory sources;
     private final StoreConfig config;
 
     public StoreImportService(StoreRepository repository, AldiNordClient aldi, PennyClient penny,
                               AggregatorClient aggregator, StoreConfig config) {
         this.repository = repository;
         this.aldi = aldi;
-        this.penny = penny;
-        this.aggregator = aggregator;
+        this.sources = new OfferSourceFactory(aldi, penny, aggregator);
         this.config = config;
     }
 
@@ -132,14 +130,7 @@ public class StoreImportService {
     // ---------------------------------------------------------------- offers
 
     public ImportSummary importAldiOffers() {
-        int storeId = repository.findOrCreateStore(ALDI);
-        int runId = repository.startRun(storeId, "OFFERS");
-        try {
-            return saveOffers(ALDI, storeId, runId, aldi.fetchOffers(), SRC_STORE);
-        } catch (RuntimeException e) {
-            repository.finishRun(runId, "FAILED", 0, 0, e.toString());
-            throw e;
-        }
+        return importOffers(OfferSourceFactory.ALDI);
     }
 
     /**
@@ -148,32 +139,29 @@ public class StoreImportService {
      * AGGREGATOR so it never overwrites a direct pull and ranks below it.
      */
     public ImportSummary importAggregatorOffers(String storeKey) {
-        String store = aggregator.displayName(storeKey);
-        int storeId = repository.findOrCreateStore(store);
-        int runId = repository.startRun(storeId, "OFFERS");
-        try {
-            return saveOffers(store, storeId, runId, aggregator.fetchOffers(storeKey, config.aggregatorPlz()), SRC_AGGREGATOR);
-        } catch (IOException e) {
-            repository.finishRun(runId, "FAILED", 0, 0, e.toString());
-            throw new RuntimeException("Aggregator offer import failed for " + store + ": " + e.getMessage(), e);
-        } catch (RuntimeException e) {
-            repository.finishRun(runId, "FAILED", 0, 0, e.toString());
-            throw e;
-        }
+        return importOffers(OfferSourceFactory.aggregatorKey(storeKey));
     }
 
     public ImportSummary importPennyOffers() {
-        String marketId = config.pennyMarketId();
-        if (marketId.isEmpty()) {
-            throw new IllegalStateException("Set penny.market in config/stores.properties");
-        }
-        int storeId = repository.findOrCreateStore(PENNY);
+        return importOffers(OfferSourceFactory.PENNY);
+    }
+
+    /** Imports one source by its {@link OfferSourceFactory} key, for the region in config/stores.properties. */
+    public ImportSummary importOffers(String sourceKey) {
+        return importOffers(sources.create(sourceKey), new OfferScope(config.pennyMarketId(), config.aggregatorPlz()));
+    }
+
+    /** The shared offer flow: store row, run row, fetch, save, status. A failure closes the run as FAILED. */
+    public ImportSummary importOffers(OfferSource source, OfferScope scope) {
+        source.requireScope(scope);                         // before any row is written
+        String store = source.storeName();
+        int storeId = repository.findOrCreateStore(store);
         int runId = repository.startRun(storeId, "OFFERS");
         try {
-            return saveOffers(PENNY, storeId, runId, penny.fetchOffers(marketId), SRC_STORE);
+            return saveOffers(store, storeId, runId, source.fetchOffers(scope), source.sourceTag());
         } catch (IOException e) {
             repository.finishRun(runId, "FAILED", 0, 0, e.toString());
-            throw new RuntimeException("Penny offer import failed: " + e.getMessage(), e);
+            throw new RuntimeException(source.failureMessage(e), e);
         } catch (RuntimeException e) {
             repository.finishRun(runId, "FAILED", 0, 0, e.toString());
             throw e;

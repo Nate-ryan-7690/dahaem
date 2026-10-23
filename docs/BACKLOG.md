@@ -235,13 +235,14 @@ document the contract. Its open decisions are settled with Nate one at a time.
 Research from Nate's design-patterns session, 2026-10-23. Nothing here is built. Licence readings are
 not legal advice; verify before any public release.
 
-- **`OfferSource` interface + factory** — `next`. `StoreImportService` has one hard-wired client field and
-  one method per chain, and `RefreshService.refreshWeekly()` lists the chains by hand. Replace with one
-  `OfferSource` interface (`fetchOffers(scope)` returning `OfferPull`), one implementation per chain
-  (wrapping `AldiNordClient`, `PennyClient`, `AggregatorClient`) and a simple factory (or a Spring
-  `Map<String, OfferSource>`) so a new chain is one class. Pure refactor, no schema change;
-  `RefreshServiceTest` / `AggregatorClientTest` cover it. Simple Factory is enough; Abstract Factory would
-  be overkill.
+- **`OfferSource` interface + factory** — `in progress`, this PR. `OfferSource` (`fetchOffers(OfferScope)`),
+  `AldiNordSource` / `PennySource` / `AggregatorSource` and `OfferSourceFactory` (keys `aldi`, `penny`,
+  `aggregator:<chain>`) are in; `StoreImportService.importOffers(source, scope)` is the one shared flow and
+  the three old methods delegate to it, so behaviour and `RefreshServiceTest` are unchanged. Simple Factory
+  is enough; Abstract Factory would be overkill. Still to do: `RefreshService.refreshWeekly()` and
+  `StoreImportRunner` still list the chains by hand (`RefreshServiceTest` mocks the three old methods, so
+  switching them to `importOffers(key)` means rewriting those mocks); an unknown aggregator key now throws
+  `IllegalArgumentException` (was a NullPointerException). Not run locally: the Docker-based tests.
 - **Offers scoped by household location** — `idea`. Design agreed in the session: postal code + radius →
   store discovery → refresh → homepage prioritises favourite retailers → "all stores" view lists every
   supported retailer in the area. Favourites only sort, never filter ("surface, don't decide").
