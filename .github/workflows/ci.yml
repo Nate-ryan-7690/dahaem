@@ -5,8 +5,11 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Lets the docs-update job re-run these checks on a branch it pushed to (a push made with the
+  # workflow token does not start a run by itself).
+  workflow_dispatch:
 
-# The jobs only read the repository; nothing here needs to write to it or to PRs.
+# The jobs only read the repository, except docs-update below, which is gated by a human approval.
 permissions:
   contents: read
 
@@ -39,14 +42,17 @@ jobs:
       - run: mvn -B -DskipTests=false verify
 
   # The generated documentation (docs/API.md, docs/USE_CASES.md, docs/classes/) must match the Java code in the
-  # same PR. Three different failures, three different messages:
-  #   1. the generator itself fails           -> a bug in the generator or a source file it cannot read;
-  #   2. a second run gives another result    -> the output is not deterministic (noisy diffs);
-  #   3. the committed docs differ from a run -> the docs only need regenerating: the diff is in the run summary
-  #      and in the docs-diff artifact. The PR author runs the generator and commits; CI never pushes anything.
-  docs:
+  # same PR. Three jobs, in this order:
+  #   docs-diff   regenerates and compares. Fails only for a generator error or a non-deterministic result;
+  #               stale docs are NOT a failure here, they put the diff in the run summary and start docs-update.
+  #   docs-update the human gate: waits for an approval, then commits the regenerated docs to the PR branch.
+  #   docs        the verdict, after the gate: fails if the docs still differ from a run (approval declined, or
+  #               not available because the branch is a fork).
+  docs-diff:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      stale: ${{ steps.compare.outputs.stale }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,18 +68,22 @@ jobs:
           PYTHONHASHSEED=2 python scripts/docs/generate_docs.py --check \
             || { echo "::error::The generator gave a different result on a second run. Fix the ordering in scripts/docs/generate_docs.py."; exit 1; }
 
-      - name: Committed documentation is up to date
+      - name: Compare with the committed documentation
+        id: compare
         run: |
           git add -N docs        # new generated files count as changes too
           if git diff --quiet -- docs; then
             echo "Generated documentation matches the code."
             exit 0
           fi
+          echo "stale=true" >> "$GITHUB_OUTPUT"
           git diff -- docs > docs.patch
           {
             echo "## Generated documentation is out of date"
             echo
-            echo "The code in this PR changes the generated docs. Run \`python3 scripts/docs/generate_docs.py\`, review the diff and commit it."
+            echo "The code in this PR changes the generated docs. Review the diff below, then approve the pending"
+            echo "**docs-update** job (Review deployments → docs-approval → Approve) and CI commits it to the branch."
+            echo "Or run \`python3 scripts/docs/generate_docs.py\` yourself and commit the result."
             echo
             echo '```'
             git diff --stat -- docs
@@ -87,13 +97,115 @@ jobs:
             echo '```'
             echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::Generated docs are out of date. Run: python3 scripts/docs/generate_docs.py and commit the result (diff in the run summary)."
+          echo "::notice::Generated docs are out of date; the docs-update job waits for your approval (diff in the run summary)."
+
+      - name: Keep the diff
+        if: steps.compare.outputs.stale == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-diff
+          path: docs.patch
+          if-no-files-found: ignore
+
+  # The human gate. Runs only when docs-diff found stale docs and only for a branch of this repository.
+  # The `docs-approval` environment has a required reviewer, so the job waits at "Review deployments"
+  # until you have read the diff in the docs-diff job summary and approved it. Then it regenerates the
+  # docs, commits them to the PR branch as github-actions[bot] and starts CI again for that commit.
+  # It never pushes to main and never runs without an approval.
+  docs-update:
+    needs: docs-diff
+    if: >-
+      ${{ !cancelled()
+      && needs.docs-diff.outputs.stale == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.head.ref != 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: docs-approval
+    permissions:
+      contents: write     # push the regenerated docs to the PR branch
+      actions: write      # start CI again for that commit (workflow_dispatch)
+    concurrency:
+      group: docs-update-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: PYTHONHASHSEED=1 python scripts/docs/generate_docs.py
+
+      - name: Commit the regenerated docs to the PR branch and run CI again
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}   # via env, never inlined into the script
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -A docs
+          if git diff --cached --quiet; then
+            echo "Docs already match the code on this branch; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Regenerate generated docs (approved in CI)"
+          git push origin "HEAD:refs/heads/${BRANCH}"
+          gh workflow run ci.yml --ref "${BRANCH}"
+
+  # The verdict, after the gate. If docs-update ran, the branch tip is checked (it holds the bot's commit);
+  # otherwise the usual checkout. Fails if the docs still differ from a run, e.g. the approval was declined
+  # or this is a fork branch, where nothing can be pushed.
+  docs:
+    needs: [docs-diff, docs-update]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: The generator ran cleanly in docs-diff
+        if: needs.docs-diff.result != 'success'
+        run: |
+          echo "::error::docs-diff failed (generator error or non-deterministic output); see that job."
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.docs-update.result == 'success' && github.event.pull_request.head.ref || '' }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: PYTHONHASHSEED=1 python scripts/docs/generate_docs.py
+
+      - name: Committed documentation is up to date
+        run: |
+          git add -N docs
+          if git diff --quiet -- docs; then
+            echo "Generated documentation matches the code."
+            exit 0
+          fi
+          git diff -- docs > docs.patch
+          {
+            echo "## Generated documentation is still out of date"
+            echo
+            echo "docs-update did not commit the regenerated docs (approval declined, or not available for this branch)."
+            echo "Run \`python3 scripts/docs/generate_docs.py\`, review the diff and commit it."
+            echo
+            echo '```'
+            git diff --stat -- docs
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Generated docs are out of date. Approve the docs-update job, or run: python3 scripts/docs/generate_docs.py and commit the result."
           exit 1
 
       - name: Keep the diff
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: docs-diff
+          name: docs-diff-final
           path: docs.patch
           if-no-files-found: ignore
