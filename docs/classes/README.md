@@ -17,7 +17,7 @@ flowchart TD
     receipts["receipts (30)"]
     shared["shared (5)"]
     shopping["shopping (11)"]
-    stores["stores (41)"]
+    stores["stores (47)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
     api -->|7| auth
@@ -52,7 +52,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 5 | The database connection pool, units and portion arithmetic. |
 | [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
-| [`stores`](stores.md) | 41 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
+| [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 3 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
 
@@ -67,7 +67,9 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`AdjustmentType`](receipts.md#adjustmenttype) | receipts | enum | What kind of price change or deposit movement a receipt line is. |
 | [`AggregatedIngredient`](shopping.md#aggregatedingredient) | shopping | record | One inventory item's combined need across a set of recipes, before any store matching. |
 | [`AggregatorClient`](stores.md#aggregatorclient) | stores | class | Pulls weekly offers from the aggregator aktionspreis.de (SECONDARY source). |
+| [`AggregatorSource`](stores.md#aggregatorsource) | stores | class | One chain's offers from the aggregator (SECONDARY source). |
 | [`AldiNordClient`](stores.md#aldinordclient) | stores | class | Reads ALDI Nord's public website. |
+| [`AldiNordSource`](stores.md#aldinordsource) | stores | class | ALDI Nord's own weekly offers (national list, so the scope is ignored). |
 | [`AldiReceiptFormat`](receipts.md#aldireceiptformat) | receipts | class | ALDI layout. |
 | [`AnimalClassifier`](tags.md#animalclassifier) | tags | class | Proposes the animal(s) and the alcohol flag of a catalogue item from its name. |
 | [`AnimalClassifier.Confidence`](tags.md#animalclassifierconfidence) | tags | enum |  |
@@ -143,11 +145,15 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`NotFoundException`](api.md#notfoundexception) | api | class | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`OfferPull`](stores.md#offerpull) | stores | record | Offers pulled from one chain, plus the requests that failed (so a run can be marked PARTIAL). |
 | [`OfferRow`](stores.md#offerrow) | stores | record | One store_offer row loaded for discount promotion, with its store id. |
+| [`OfferScope`](stores.md#offerscope) | stores | record | Which region an offer pull is for. |
+| [`OfferSource`](stores.md#offersource) | stores | interface | One place weekly offers can be pulled from: a chain's own site or one chain on an aggregator. |
+| [`OfferSourceFactory`](stores.md#offersourcefactory) | stores | class | Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for every chain in AggregatorClient.STORES. |
 | [`ParsedReceipt`](receipts.md#parsedreceipt) | receipts | record | Structured result of parsing one receipt's text. |
 | [`PennyClient`](stores.md#pennyclient) | stores | class | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |
 | [`PennyClient.Market`](stores.md#pennyclientmarket) | stores | record | A Penny store and the price regions it belongs to this week and next week. |
 | [`PennyReceiptFormat`](receipts.md#pennyreceiptformat) | receipts | class | PENNY (REWE Group) layout. |
 | [`PennyReceiptFormat.Last`](receipts.md#pennyreceiptformatlast) | receipts | enum | What the last booked line was, so an "n Stk x p" sub-line lands on the right thing. |
+| [`PennySource`](stores.md#pennysource) | stores | class | Penny's own weekly offers; prices depend on the store's region, so the scope must name the store. |
 | [`PersistedShoppingList`](shopping.md#persistedshoppinglist) | shopping | record | A previously generated shopping_list row, reloaded together with its persisted items. |
 | [`PersistedShoppingListDto`](api.md#persistedshoppinglistdto) | api | record | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
 | [`PersistedShoppingListDto.Line`](api.md#persistedshoppinglistdtoline) | api | record |  |
