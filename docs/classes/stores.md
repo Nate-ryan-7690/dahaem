@@ -4,7 +4,7 @@
 
 Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh.
 
-41 types in 32 source files (`src/main/java/de/dahaem/stores`). Back to the [class index](README.md).
+47 types in 38 source files (`src/main/java/de/dahaem/stores`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -12,7 +12,9 @@ Store offers: clients, the raw and verified data model, matching, promotions, sc
 classDiagram
     direction LR
     class stores_AggregatorClient["AggregatorClient"]
+    class stores_AggregatorSource["AggregatorSource"]
     class stores_AldiNordClient["AldiNordClient"]
+    class stores_AldiNordSource["AldiNordSource"]
     class stores_CatalogChange["CatalogChange"] {
         <<record>>
     }
@@ -45,10 +47,18 @@ classDiagram
     class stores_OfferRow["OfferRow"] {
         <<record>>
     }
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+    }
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
+    class stores_OfferSourceFactory["OfferSourceFactory"]
     class stores_PennyClient["PennyClient"]
     class stores_PennyClient_Market["PennyClient.Market"] {
         <<record>>
     }
+    class stores_PennySource["PennySource"]
     class stores_ProductVariant["ProductVariant"] {
         <<record>>
     }
@@ -99,9 +109,17 @@ classDiagram
     stores_AggregatorClient --> stores_HttpFetcher
     stores_AggregatorClient ..> stores_OfferPull
     stores_AggregatorClient ..> stores_StoreOffer
+    stores_OfferSource <|.. stores_AggregatorSource
+    stores_AggregatorSource --> stores_AggregatorClient
+    stores_AggregatorSource ..> stores_OfferPull
+    stores_AggregatorSource ..> stores_OfferScope
     stores_AldiNordClient --> stores_HttpFetcher
     stores_AldiNordClient ..> stores_OfferPull
     stores_AldiNordClient ..> stores_CrawlResult
+    stores_OfferSource <|.. stores_AldiNordSource
+    stores_AldiNordSource --> stores_AldiNordClient
+    stores_AldiNordSource ..> stores_OfferPull
+    stores_AldiNordSource ..> stores_OfferScope
     stores_CatalogChange *-- stores_CatalogChange_Type
     stores_CrawlResult --> stores_StoreProduct
     stores_ImportSummary --> stores_CatalogChange
@@ -110,10 +128,20 @@ classDiagram
     stores_MatchGate ..> stores_StorePromotionService
     stores_MatchGate_References ..> stores_StorePromotionService
     stores_OfferPull --> stores_StoreOffer
+    stores_OfferSource ..> stores_OfferScope
+    stores_OfferSource ..> stores_OfferPull
+    stores_OfferSourceFactory --> stores_OfferSource
+    stores_OfferSourceFactory ..> stores_AldiNordClient
+    stores_OfferSourceFactory ..> stores_PennyClient
+    stores_OfferSourceFactory ..> stores_AggregatorClient
     stores_PennyClient *-- stores_PennyClient_Market
     stores_PennyClient --> stores_HttpFetcher
     stores_PennyClient ..> stores_OfferPull
     stores_PennyClient ..> stores_StoreOffer
+    stores_OfferSource <|.. stores_PennySource
+    stores_PennySource --> stores_PennyClient
+    stores_PennySource ..> stores_OfferScope
+    stores_PennySource ..> stores_OfferPull
     stores_RefreshConfig ..> stores_RefreshService
     stores_RefreshService *-- stores_RefreshService_Run
     stores_RefreshService --> stores_StoreImportService
@@ -132,10 +160,13 @@ classDiagram
     stores_StoreDiscountService ..> stores_ImportSummary
     stores_StoreImportService --> stores_StoreRepository
     stores_StoreImportService --> stores_AldiNordClient
-    stores_StoreImportService --> stores_PennyClient
-    stores_StoreImportService --> stores_AggregatorClient
+    stores_StoreImportService --> stores_OfferSourceFactory
     stores_StoreImportService --> stores_StoreConfig
+    stores_StoreImportService ..> stores_PennyClient
+    stores_StoreImportService ..> stores_AggregatorClient
     stores_StoreImportService ..> stores_ImportSummary
+    stores_StoreImportService ..> stores_OfferScope
+    stores_StoreImportService ..> stores_OfferSource
     stores_StoreMatchService *-- stores_StoreMatchService_Tier
     stores_StoreMatchService *-- stores_StoreMatchService_Lookup
     stores_StoreMatchService --> stores_StoreRepository
@@ -162,7 +193,9 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`AggregatorClient`](#aggregatorclient) | class |  | Pulls weekly offers from the aggregator aktionspreis.de (SECONDARY source). |
+| [`AggregatorSource`](#aggregatorsource) | class |  | One chain's offers from the aggregator (SECONDARY source). |
 | [`AldiNordClient`](#aldinordclient) | class |  | Reads ALDI Nord's public website. |
+| [`AldiNordSource`](#aldinordsource) | class |  | ALDI Nord's own weekly offers (national list, so the scope is ignored). |
 | [`CatalogChange`](#catalogchange) | record |  | One difference found by the range comparator between the last pull and this one. |
 | [`CatalogChange.Type`](#catalogchangetype) | enum |  |  |
 | [`CatalogItem`](#catalogitem) | record |  | One inventory_item catalog row, with its normalized names cached for matching. |
@@ -177,8 +210,12 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`Normalizer`](#normalizer) | class |  | Turns a German product or ingredient name into a comparable key: lowercase, umlauts to ae/oe/ue/ss, allergen markers and leading ALL-CAPS brand words removed, punctuation to spaces. |
 | [`OfferPull`](#offerpull) | record |  | Offers pulled from one chain, plus the requests that failed (so a run can be marked PARTIAL). |
 | [`OfferRow`](#offerrow) | record |  | One store_offer row loaded for discount promotion, with its store id. |
+| [`OfferScope`](#offerscope) | record |  | Which region an offer pull is for. |
+| [`OfferSource`](#offersource) | interface |  | One place weekly offers can be pulled from: a chain's own site or one chain on an aggregator. |
+| [`OfferSourceFactory`](#offersourcefactory) | class |  | Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for every chain in AggregatorClient.STORES. |
 | [`PennyClient`](#pennyclient) | class |  | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |
 | [`PennyClient.Market`](#pennyclientmarket) | record |  | A Penny store and the price regions it belongs to this week and next week. |
+| [`PennySource`](#pennysource) | class |  | Penny's own weekly offers; prices depend on the store's region, so the scope must name the store. |
 | [`ProductVariant`](#productvariant) | record |  | One flavour/size of a store product, e.g. |
 | [`PromotableProduct`](#promotableproduct) | record |  | A matched store_product considered for promotion into the verified store_item layer. |
 | [`RefreshConfig`](#refreshconfig) | class | configuration | Switches scheduling on, but only when dahaem.refresh.enabled=true: with the default (false) no scheduler infrastructure, RefreshService or ScheduledRefresh bean exists at all. |
@@ -258,6 +295,8 @@ classDiagram
         ~validity(String html, LocalDate fallbackMonday) LocalDate[]$
     }
     class stores_HttpFetcher["HttpFetcher"]
+    class stores_AggregatorSource["AggregatorSource"]
+    class stores_OfferSourceFactory["OfferSourceFactory"]
     class stores_StoreImportService["StoreImportService"]
     class stores_OfferPull["OfferPull"] {
         <<record>>
@@ -268,7 +307,9 @@ classDiagram
     stores_AggregatorClient --> stores_HttpFetcher
     stores_AggregatorClient ..> stores_OfferPull
     stores_AggregatorClient ..> stores_StoreOffer
-    stores_StoreImportService --> stores_AggregatorClient
+    stores_AggregatorSource --> stores_AggregatorClient
+    stores_OfferSourceFactory ..> stores_AggregatorClient
+    stores_StoreImportService ..> stores_AggregatorClient
 ```
 
 | Field | Type |
@@ -299,7 +340,56 @@ classDiagram
 | `List<StoreOffer> parse(String html, LocalDate fallbackMonday)` | package | Offers valid for the range in the page header ("Angebote vom 05.10. |
 | `LocalDate[] validity(String html, LocalDate fallbackMonday)` | package static | [from, until] from "Angebote vom 05.10. |
 
-**Referenced by:** `StoreImportService`
+**Referenced by:** `AggregatorSource`, `OfferSourceFactory`, `StoreImportService`
+
+## AggregatorSource
+
+*class · implements OfferSource*
+
+One chain's offers from the aggregator (SECONDARY source). storeKey is a key in
+AggregatorClient.STORES. Tagged AGGREGATOR so it never overwrites a direct pull and
+ranks below it.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_AggregatorSource["AggregatorSource"] {
+        -AggregatorClient client
+        -String storeKey
+        +AggregatorSource(AggregatorClient client, String storeKey)
+        +storeName() String
+        +sourceTag() String
+        +fetchOffers(OfferScope scope) OfferPull
+        +failureMessage(IOException e) String
+    }
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
+    class stores_AggregatorClient["AggregatorClient"]
+    class stores_OfferPull["OfferPull"] {
+        <<record>>
+    }
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+    }
+    stores_OfferSource <|.. stores_AggregatorSource
+    stores_AggregatorSource --> stores_AggregatorClient
+    stores_AggregatorSource ..> stores_OfferPull
+    stores_AggregatorSource ..> stores_OfferScope
+```
+
+| Field | Type |
+|---|---|
+| `client` | `AggregatorClient` |
+| `storeKey` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `AggregatorSource(AggregatorClient client, String storeKey)` | public |  |
+| `String storeName()` | public |  |
+| `String sourceTag()` | public |  |
+| `OfferPull fetchOffers(OfferScope scope)` | public |  |
+| `String failureMessage(IOException e)` | public |  |
 
 ## AldiNordClient
 
@@ -333,7 +423,9 @@ classDiagram
         +fetchRange() CrawlResult
     }
     class stores_HttpFetcher["HttpFetcher"]
+    class stores_AldiNordSource["AldiNordSource"]
     class stores_StoreImportService["StoreImportService"]
+    class stores_OfferSourceFactory["OfferSourceFactory"]
     class stores_OfferPull["OfferPull"] {
         <<record>>
     }
@@ -343,6 +435,8 @@ classDiagram
     stores_AldiNordClient --> stores_HttpFetcher
     stores_AldiNordClient ..> stores_OfferPull
     stores_AldiNordClient ..> stores_CrawlResult
+    stores_AldiNordSource --> stores_AldiNordClient
+    stores_OfferSourceFactory ..> stores_AldiNordClient
     stores_StoreImportService --> stores_AldiNordClient
 ```
 
@@ -363,7 +457,50 @@ classDiagram
 | `String deriveSalesUnit(String unit, Double sale, Double basePrice, String baseScale)` | package static | ALDI sometimes gives only a container word as the pack size ("Packung") but always the price per kg or l. |
 | `CrawlResult fetchRange()` | public | Walks the category tree from /sortiment.html downwards and collects every product, deduped by ALDI's product id. |
 
-**Referenced by:** `StoreImportService`
+**Referenced by:** `AldiNordSource`, `OfferSourceFactory`, `StoreImportService`
+
+## AldiNordSource
+
+*class · implements OfferSource*
+
+ALDI Nord's own weekly offers (national list, so the scope is ignored).
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_AldiNordSource["AldiNordSource"] {
+        -AldiNordClient client
+        +AldiNordSource(AldiNordClient client)
+        +storeName() String
+        +sourceTag() String
+        +fetchOffers(OfferScope scope) OfferPull
+    }
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
+    class stores_AldiNordClient["AldiNordClient"]
+    class stores_OfferPull["OfferPull"] {
+        <<record>>
+    }
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+    }
+    stores_OfferSource <|.. stores_AldiNordSource
+    stores_AldiNordSource --> stores_AldiNordClient
+    stores_AldiNordSource ..> stores_OfferPull
+    stores_AldiNordSource ..> stores_OfferScope
+```
+
+| Field | Type |
+|---|---|
+| `client` | `AldiNordClient` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `AldiNordSource(AldiNordClient client)` | public |  |
+| `String storeName()` | public |  |
+| `String sourceTag()` | public |  |
+| `OfferPull fetchOffers(OfferScope scope)` | public |  |
 
 ## CatalogChange
 
@@ -834,12 +971,22 @@ classDiagram
         <<record>>
     }
     class stores_AggregatorClient["AggregatorClient"]
+    class stores_AggregatorSource["AggregatorSource"]
     class stores_AldiNordClient["AldiNordClient"]
+    class stores_AldiNordSource["AldiNordSource"]
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
     class stores_PennyClient["PennyClient"]
+    class stores_PennySource["PennySource"]
     stores_OfferPull --> stores_StoreOffer
     stores_AggregatorClient ..> stores_OfferPull
+    stores_AggregatorSource ..> stores_OfferPull
     stores_AldiNordClient ..> stores_OfferPull
+    stores_AldiNordSource ..> stores_OfferPull
+    stores_OfferSource ..> stores_OfferPull
     stores_PennyClient ..> stores_OfferPull
+    stores_PennySource ..> stores_OfferPull
 ```
 
 | Component | Type |
@@ -847,7 +994,7 @@ classDiagram
 | `offers` | `List<StoreOffer>` |
 | `failedRequests` | `List<String>` |
 
-**Referenced by:** `AggregatorClient`, `AldiNordClient`, `PennyClient`
+**Referenced by:** `AggregatorClient`, `AggregatorSource`, `AldiNordClient`, `AldiNordSource`, `OfferSource`, `PennyClient`, `PennySource`
 
 ## OfferRow
 
@@ -907,6 +1054,144 @@ classDiagram
 
 **Referenced by:** `ReviewReports`, `StoreRepository`
 
+## OfferScope
+
+*record*
+
+Which region an offer pull is for. Today it comes from config/stores.properties; later it will be
+built per (chain, price region) from the households' locations.
+
+marketId is the Penny store ("wwIdent"), postalCode the PLZ that regional aggregator chains
+(famila, Edeka, Rewe) are gated behind. A source ignores the parts it does not need.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+        +String marketId
+        +String postalCode
+    }
+    class stores_AggregatorSource["AggregatorSource"]
+    class stores_AldiNordSource["AldiNordSource"]
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
+    class stores_PennySource["PennySource"]
+    class stores_StoreImportService["StoreImportService"]
+    stores_AggregatorSource ..> stores_OfferScope
+    stores_AldiNordSource ..> stores_OfferScope
+    stores_OfferSource ..> stores_OfferScope
+    stores_PennySource ..> stores_OfferScope
+    stores_StoreImportService ..> stores_OfferScope
+```
+
+| Component | Type |
+|---|---|
+| `marketId` | `String` |
+| `postalCode` | `String` |
+
+**Referenced by:** `AggregatorSource`, `AldiNordSource`, `OfferSource`, `PennySource`, `StoreImportService`
+
+## OfferSource
+
+*interface*
+
+One place weekly offers can be pulled from: a chain's own site or one chain on an aggregator.
+StoreImportService.importOffers(OfferSource, OfferScope) runs the shared flow (store row,
+run row, save, status); a source only knows how to fetch and what to call itself.
+New sources are registered in OfferSourceFactory.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+        +storeName() String
+        +sourceTag() String
+        +requireScope(OfferScope scope) void
+        +fetchOffers(OfferScope scope) OfferPull
+        +failureMessage(IOException e) String
+    }
+    class stores_AggregatorSource["AggregatorSource"]
+    class stores_AldiNordSource["AldiNordSource"]
+    class stores_PennySource["PennySource"]
+    class stores_OfferSourceFactory["OfferSourceFactory"]
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+    }
+    class stores_OfferPull["OfferPull"] {
+        <<record>>
+    }
+    class stores_StoreImportService["StoreImportService"]
+    stores_OfferSource ..> stores_OfferScope
+    stores_OfferSource ..> stores_OfferPull
+    stores_OfferSource <|.. stores_AggregatorSource
+    stores_OfferSource <|.. stores_AldiNordSource
+    stores_OfferSourceFactory --> stores_OfferSource
+    stores_OfferSource <|.. stores_PennySource
+    stores_StoreImportService ..> stores_OfferSource
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `String storeName()` | public | Name EXACTLY as the row in the `store` table, or a duplicate store is created. |
+| `String sourceTag()` | public | Provenance stored on store_offer.store_offer_source (StoreImportService.SRC_*). |
+| `void requireScope(OfferScope scope)` | public | Throws before any database row is written if the scope lacks what this source needs. |
+| `OfferPull fetchOffers(OfferScope scope)` | public |  |
+| `String failureMessage(IOException e)` | public | Message of the RuntimeException a failed fetch is reported as. |
+
+**Referenced by:** `AggregatorSource`, `AldiNordSource`, `OfferSourceFactory`, `PennySource`, `StoreImportService`
+
+## OfferSourceFactory
+
+*class*
+
+Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for
+every chain in AggregatorClient.STORES. Adding a chain is one OfferSource class plus one
+register() call here; the import flow in StoreImportService does not change.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_OfferSourceFactory["OfferSourceFactory"] {
+        +String ALDI$
+        +String PENNY$
+        -Map~String, OfferSource~ sources
+        +OfferSourceFactory(AldiNordClient aldi, PennyClient penny, AggregatorClient aggregator)
+        +aggregatorKey(String chain) String$
+        +create(String key) OfferSource
+        +keys() Set~String~
+    }
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
+    class stores_StoreImportService["StoreImportService"]
+    class stores_AldiNordClient["AldiNordClient"]
+    class stores_PennyClient["PennyClient"]
+    class stores_AggregatorClient["AggregatorClient"]
+    stores_OfferSourceFactory --> stores_OfferSource
+    stores_OfferSourceFactory ..> stores_AldiNordClient
+    stores_OfferSourceFactory ..> stores_PennyClient
+    stores_OfferSourceFactory ..> stores_AggregatorClient
+    stores_StoreImportService --> stores_OfferSourceFactory
+```
+
+| Field | Type |
+|---|---|
+| `ALDI` | `String` |
+| `PENNY` | `String` |
+| `sources` | `Map<String, OfferSource>` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `OfferSourceFactory(AldiNordClient aldi, PennyClient penny, AggregatorClient aggregator)` | public |  |
+| `String aggregatorKey(String chain)` | public static | Key of one aggregator chain; chain is a key in AggregatorClient.STORES. |
+| `OfferSource create(String key)` | public |  |
+| `Set<String> keys()` | public |  |
+
+**Referenced by:** `StoreImportService`
+
 ## PennyClient
 
 *class*
@@ -951,6 +1236,8 @@ classDiagram
         <<record>>
     }
     class stores_HttpFetcher["HttpFetcher"]
+    class stores_PennySource["PennySource"]
+    class stores_OfferSourceFactory["OfferSourceFactory"]
     class stores_StoreImportService["StoreImportService"]
     class stores_OfferPull["OfferPull"] {
         <<record>>
@@ -962,7 +1249,9 @@ classDiagram
     stores_PennyClient --> stores_HttpFetcher
     stores_PennyClient ..> stores_OfferPull
     stores_PennyClient ..> stores_StoreOffer
-    stores_StoreImportService --> stores_PennyClient
+    stores_OfferSourceFactory ..> stores_PennyClient
+    stores_PennySource --> stores_PennyClient
+    stores_StoreImportService ..> stores_PennyClient
 ```
 
 | Field | Type |
@@ -990,7 +1279,7 @@ classDiagram
 | `LocalDate weekStart(String weekKey)` | package static | Penny week keys look like "2026-39" (ISO year and week). |
 | `String weekKey(LocalDate day)` | package static |  |
 
-**Referenced by:** `StoreImportService`
+**Referenced by:** `OfferSourceFactory`, `PennySource`, `StoreImportService`
 
 ## PennyClient.Market
 
@@ -1020,6 +1309,51 @@ classDiagram
 | `nextWeekSellingRegion` | `String` |
 
 **Referenced by:** `PennyClient`
+
+## PennySource
+
+*class · implements OfferSource*
+
+Penny's own weekly offers; prices depend on the store's region, so the scope must name the store.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_PennySource["PennySource"] {
+        -PennyClient client
+        +PennySource(PennyClient client)
+        +storeName() String
+        +sourceTag() String
+        +requireScope(OfferScope scope) void
+        +fetchOffers(OfferScope scope) OfferPull
+    }
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
+    class stores_PennyClient["PennyClient"]
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+    }
+    class stores_OfferPull["OfferPull"] {
+        <<record>>
+    }
+    stores_OfferSource <|.. stores_PennySource
+    stores_PennySource --> stores_PennyClient
+    stores_PennySource ..> stores_OfferScope
+    stores_PennySource ..> stores_OfferPull
+```
+
+| Field | Type |
+|---|---|
+| `client` | `PennyClient` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PennySource(PennyClient client)` | public |  |
+| `String storeName()` | public |  |
+| `String sourceTag()` | public |  |
+| `void requireScope(OfferScope scope)` | public |  |
+| `OfferPull fetchOffers(OfferScope scope)` | public |  |
 
 ## ProductVariant
 
@@ -1540,30 +1874,41 @@ classDiagram
         +String SRC_AGGREGATOR$
         -StoreRepository repository
         -AldiNordClient aldi
-        -PennyClient penny
-        -AggregatorClient aggregator
+        -OfferSourceFactory sources
         -StoreConfig config
         +StoreImportService(StoreRepository repository, AldiNordClient aldi, PennyClient penny, AggregatorClient aggregator, StoreConfig config)
         +importAldiRange() ImportSummary
         +importAldiOffers() ImportSummary
         +importAggregatorOffers(String storeKey) ImportSummary
         +importPennyOffers() ImportSummary
+        +importOffers(String sourceKey) ImportSummary
+        +importOffers(OfferSource source, OfferScope scope) ImportSummary
     }
     class stores_StoreRepository["StoreRepository"]
     class stores_AldiNordClient["AldiNordClient"]
-    class stores_PennyClient["PennyClient"]
-    class stores_AggregatorClient["AggregatorClient"]
+    class stores_OfferSourceFactory["OfferSourceFactory"]
     class stores_StoreConfig["StoreConfig"]
     class stores_RefreshService["RefreshService"]
+    class stores_PennyClient["PennyClient"]
+    class stores_AggregatorClient["AggregatorClient"]
     class stores_ImportSummary["ImportSummary"] {
         <<record>>
     }
+    class stores_OfferScope["OfferScope"] {
+        <<record>>
+    }
+    class stores_OfferSource["OfferSource"] {
+        <<interface>>
+    }
     stores_StoreImportService --> stores_StoreRepository
     stores_StoreImportService --> stores_AldiNordClient
-    stores_StoreImportService --> stores_PennyClient
-    stores_StoreImportService --> stores_AggregatorClient
+    stores_StoreImportService --> stores_OfferSourceFactory
     stores_StoreImportService --> stores_StoreConfig
+    stores_StoreImportService ..> stores_PennyClient
+    stores_StoreImportService ..> stores_AggregatorClient
     stores_StoreImportService ..> stores_ImportSummary
+    stores_StoreImportService ..> stores_OfferScope
+    stores_StoreImportService ..> stores_OfferSource
     stores_RefreshService --> stores_StoreImportService
 ```
 
@@ -1577,8 +1922,7 @@ classDiagram
 | `SRC_AGGREGATOR` | `String` |
 | `repository` | `StoreRepository` |
 | `aldi` | `AldiNordClient` |
-| `penny` | `PennyClient` |
-| `aggregator` | `AggregatorClient` |
+| `sources` | `OfferSourceFactory` |
 | `config` | `StoreConfig` |
 
 | Member | Visibility | What it does |
@@ -1588,6 +1932,8 @@ classDiagram
 | `ImportSummary importAldiOffers()` | public |  |
 | `ImportSummary importAggregatorOffers(String storeKey)` | public | Aggregator offers for one chain (SECONDARY). |
 | `ImportSummary importPennyOffers()` | public |  |
+| `ImportSummary importOffers(String sourceKey)` | public | Imports one source by its OfferSourceFactory key, for the region in config/stores.properties. |
+| `ImportSummary importOffers(OfferSource source, OfferScope scope)` | public | The shared offer flow: store row, run row, fetch, save, status. |
 
 **Referenced by:** `RefreshService`
 
