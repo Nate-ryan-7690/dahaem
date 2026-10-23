@@ -230,6 +230,76 @@ document the contract. Its open decisions are settled with Nate one at a time.
 - **Coffee machine setting** — `idea`. A household owns one capsule / pad system; show only
   offers for that system.
 
+## Store offers: location, sources, flyer extraction
+
+Research from Nate's design-patterns session, 2026-10-23. Nothing here is built. Licence readings are
+not legal advice; verify before any public release.
+
+- **`OfferSource` interface + factory** — `next`. `StoreImportService` has one hard-wired client field and
+  one method per chain, and `RefreshService.refreshWeekly()` lists the chains by hand. Replace with one
+  `OfferSource` interface (`fetchOffers(scope)` returning `OfferPull`), one implementation per chain
+  (wrapping `AldiNordClient`, `PennyClient`, `AggregatorClient`) and a simple factory (or a Spring
+  `Map<String, OfferSource>`) so a new chain is one class. Pure refactor, no schema change;
+  `RefreshServiceTest` / `AggregatorClientTest` cover it. Simple Factory is enough; Abstract Factory would
+  be overkill.
+- **Offers scoped by household location** — `idea`. Design agreed in the session: postal code + radius →
+  store discovery → refresh → homepage prioritises favourite retailers → "all stores" view lists every
+  supported retailer in the area. Favourites only sort, never filter ("surface, don't decide").
+  Tables (same MariaDB, package `de.dahaem.locations`; a separate database is not worth it at this size,
+  revisit for data-residency rules, regional hosting or other consumers of the location data):
+  `store_branch`, `household_location`, `household_favorite_chain`, and a `scope_key` on `store_offer`.
+  Offers belong to a price region, not a branch (Penny market id, PLZ for famila / Edeka / Rewe, national
+  for Lidl), so refresh once per distinct `(chain, scope_key)` that at least one household's radius
+  includes, never per user. Build in from the start for Austria / Switzerland: `country_code` on branch,
+  location and scope, postal codes as strings keyed by `(country, postal_code)`, currency per offer, chains
+  per country. Open: Aldi Süd has no importer (the `Aldi` row is Nord only).
+- **Store locations: OpenStreetMap** — `idea`. Bulk-load branches into `store_branch` (Overpass per chain,
+  or a Geofabrik Germany extract), monthly refresh. ODbL allows storing and reuse; public use needs the
+  credit "© OpenStreetMap contributors" with a link to the licence; a public extraction counts as a
+  derivative database (keep it a plain OSM table, keep household data in separate tables). Do not use the
+  public Nominatim per user (1 request/s cap, no heavy use). Google Places forbids storing anything but
+  place ids; Gelbe Seiten has no API found. PLZ → coordinates: GeoNames postal codes (CC BY, attribution;
+  the two readmes name CC BY 3.0 and 4.0, check); OpenPLZ code is AGPL-3.0 but its data licence and upstream
+  sources are unverified; Austria's RTR PLZ directory (data.gv.at) licence unconfirmed. Probe of 10 km
+  around Rotenburg (Wümme) returned 72 shop rows, ~57 distinct entries: ~20 chains worth tracking (Aldi Nord,
+  Penny, Netto, Lidl, Edeka, Rewe, famila, Combi, Mix Markt, Hol'ab, Rossmann, TEDi, Jawoll, Woolworth, JYSK,
+  OBI, Das Futterhaus, plus fashion chains); the rest are independents with no flyer. Curate a "supported
+  chains" list; discovery lists all branches. Open: decide the manual "my store is missing" path.
+- **Offer sources: what is reachable** — `next`, Nate decides scope. Tested 2026-10-23, one request each:
+  Edeka `edeka.de/eh/service/eh/offers` → 403 Akamai; Rewe national offers page → 403 bot-challenge page
+  (both left alone, bot protection is not bypassed); Lidl leaflet JSON
+  `endpoints.leaflets.schwarz/v4/flyer?flyer_identifier=<slug>&region_id=0` works (slug from
+  `lidl.de/c/online-prospekte/s10005610`) but its 158 products are all non-food, grocery offers exist only as
+  page images. Netto sits behind Akamai (per a third-party comparison, untested). Aldi Nord and Penny stay the
+  direct sources. aktionspreis.de terms (AGB, 2015 copy) allow private use only and ban commercial reuse
+  ("strengstens untersagt", 3.6), so the aggregator is private-use only; a public product needs written
+  consent or another source. kaufDA / Bonial, marktguru and Shopfully list no public API or data licence;
+  Bonial's CEO says data flows from retailers to Bonial, not out. No price for a licence found. Apify
+  scrapers (about $2 per 1,000 offers) read the same public pages, say "not a paid data license" and add
+  no technical gain over our own clients; not worth using. Open: send a short inquiry to Bonial, marktguru
+  and Shopfully; decide private household tool vs public product (decides whether licensing blocks).
+- **Flyer images → structured offers with a vision model** — `idea`. Lidl's grocery offers exist only as flyer
+  page images (`pages[].image` in the leaflet JSON, 73 pages for 19–24.10.2026). Reading them with a model
+  works, no custom training needed (archive.org's old flyer scans have no labels and are the wrong era,
+  useful at most as an evaluation set). Full-flyer run, 3 chunks per model, Opus 5.5 as reference:
+  offers found Opus 423 / Sonnet 5.5 423 / Haiku 5.5 426; core price fields (price, old price, Lidl Plus
+  price, percentages, deposit) agree with Opus 99.6% (Sonnet) and 99.1% (Haiku), all fields 97.6% / 97.5%.
+  Tokens (agent totals, no input/output split, include tool overhead): Opus 339,369, Sonnet 307,605,
+  Haiku 460,930; estimated cost per flyer at 80% input / 20% output without caching about $2.40 / $1.10 /
+  $0.08 (Opus $4 / $20, Sonnet $2 / $10, Haiku $0.10 / $0.50 per MTok in / out; Batch API halves it).
+  Cost scales with chains and regions, not users, since a flyer is processed once. Opus is not ground
+  truth: it dropped multi-buy ("3 für 2": dealQuantity 3 + total price, Haiku was right) and left many
+  printed per-kg prices empty; Sonnet merged size variants into one offer (Haiku and Opus split them, which
+  fits the item rule). Most remaining differences are schema ambiguities, not misread digits. Before
+  building: define rules for Lidl Plus-only prices (is the crossed "Normalpreis" `price` or `normalPrice`),
+  per-kg lines covering several pack sizes, per-offer validity (Aktion vs Lidl Plus windows, banners like
+  "Ab So. 11.10."), and add `dealQuantity` / `dealPrice` / `loyaltyPrice` / `loyaltyBasePrice` to the
+  extraction schema; add a validation pass (sale price below old price, range per category) and keep the page
+  link per offer. Proposed pipeline: Haiku 5.5 first pass, re-run pages that fail validation on Sonnet.
+  Open: hand-label 30–50 offers for a measured accuracy (the labels here were model-made, 3 of 73 pages and
+  about 10 disagreements were checked by eye); copyright and text-and-data-mining rights for Lidl's flyer
+  images (German TDM exception applies only if the rightsholder has not reserved it machine-readably).
+
 ## API work for the frontend (from the UX spec)
 
 Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
