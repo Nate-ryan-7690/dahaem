@@ -2,11 +2,11 @@ package de.dahaem.api;
 
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietRules;
-import de.dahaem.diet.DietStatus;
-import de.dahaem.diet.DietVerdict;
-import de.dahaem.diet.RecipeDietFilter;
 import de.dahaem.mealplanner.Recipe;
+import de.dahaem.mealplanner.RecipeQuery;
+import de.dahaem.mealplanner.RecipeSearchService;
 import de.dahaem.mealplanner.RecipeService;
+import de.dahaem.shared.PageRequest;
 import de.dahaem.shared.Portions;
 import de.dahaem.tags.TagService;
 import org.springframework.http.HttpStatus;
@@ -19,10 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/recipes")
@@ -31,15 +28,32 @@ public class RecipeController {
     private final RecipeService recipeService;
     private final TagService tagService;
     private final DietFilterService dietFilter;
+    private final RecipeSearchService searchService;
 
-    public RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter) {
+    public RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter,
+                            RecipeSearchService searchService) {
+        this.searchService = searchService;
         this.recipeService = recipeService;
         this.tagService = tagService;
         this.dietFilter = dietFilter;
     }
 
     /**
-     * All recipes by name. Optional diet rules, applied on the server (the client never filters 11,000 recipes):
+     * Search the recipes: one page of cards plus the total. Everything is applied on the server (the client never
+     * filters 11,000 recipes). All filters are optional and combine with AND:
+     * <ul>
+     *   <li>search: {@code q=<words>} (every word is in the recipe name), {@code ingredient=a,b} (repeatable; the
+     *       recipe has an ingredient whose name contains each text);</li>
+     *   <li>filters: {@code tags=a,b} (repeatable; the recipe carries all of these tags), {@code minTime} /
+     *       {@code maxTime} (total time = prep + cook, minutes; recipes without a time are left out when either is
+     *       set), {@code servings=N} (recipes for N people; a "3 – 4 Personen" recipe matches 3 and 4);</li>
+     *   <li>order: {@code sort=name|time|rating|newest} (default name; ties always end by id, so the order is stable
+     *       and paging neither repeats nor skips a recipe);</li>
+     *   <li>paging: {@code page} (from 1, default 1) and {@code pageSize} (1 - 100, default 24). Without paging
+     *       parameters you get the first 24 recipes, not all of them; use {@code total} / {@code totalPages} to go
+     *       on. A page past the end is empty. Out-of-range values are a 400.</li>
+     * </ul>
+     * Optional diet rules, also applied on the server:
      * <ul>
      *   <li>hard rules ("Was esse ich nicht?"): {@code diet=<preset>} (repeatable; halal, koscher, vegetarisch,
      *       vegan, see config/diet_presets.json; an unknown preset is a 400), {@code excludeTags=a,b},
@@ -49,39 +63,37 @@ public class RecipeController {
      *   <li>{@code includeUnclear=true|false} (default false): recipes with a line that was not matched are
      *       UNCLEAR under a hard rule and left out unless this is true.</li>
      * </ul>
-     * With rules every recipe carries {@code diet} (status OK / ANPASSBAR / UNCLEAR, hints, softHits); HIDDEN
-     * recipes are not returned. The presets filter INGREDIENTS only; they are no halal or kosher certification:
-     * meat certification stays the shopper's responsibility. Without any rule the answer is unchanged.
+     * With rules every card carries {@code diet} (status OK / ANPASSBAR / UNCLEAR, hints, softHits); HIDDEN recipes
+     * are not returned and not counted in {@code total}. With rules the order is: no soft hit first, then OK before
+     * ANPASSBAR before UNCLEAR, then the requested sort. The rules judge from a snapshot of the recipe facts that is
+     * at most a minute old; {@code GET /api/recipes/{id}} always judges fresh. The presets filter INGREDIENTS only;
+     * they are no halal or kosher certification: meat certification stays the shopper's responsibility.
      */
     @GetMapping
-    public List<RecipeSummaryDto> all(@RequestParam(name = "diet", required = false) List<String> diet,
-                                      @RequestParam(name = "excludeTags", required = false) List<String> excludeTags,
-                                      @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
-                                      @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
-                                      @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
-                                      @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
+    public RecipePageDto search(@RequestParam(name = "q", required = false) String q,
+                                @RequestParam(name = "ingredient", required = false) List<String> ingredient,
+                                @RequestParam(name = "tags", required = false) List<String> tags,
+                                @RequestParam(name = "minTime", required = false) Integer minTime,
+                                @RequestParam(name = "maxTime", required = false) Integer maxTime,
+                                @RequestParam(name = "servings", required = false) Integer servings,
+                                @RequestParam(name = "sort", required = false) String sort,
+                                @RequestParam(name = "page", required = false) Integer page,
+                                @RequestParam(name = "pageSize", required = false) Integer pageSize,
+                                @RequestParam(name = "diet", required = false) List<String> diet,
+                                @RequestParam(name = "excludeTags", required = false) List<String> excludeTags,
+                                @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
+                                @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
+                                @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
+                                @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
+        RecipeQuery query = RecipeQuery.of(q, ingredient, tags, minTime, maxTime, servings, sort);
+        PageRequest request = PageRequest.of(page, pageSize);
         DietRules rules = dietFilter.rules(diet, excludeTags, excludeItems, avoidTags, avoidItems, includeUnclear);
-        Map<Integer, List<String>> tags = tagService.tagNamesByRecipe();
-        List<Recipe> recipes = recipeService.allRecipes();
-        if (!rules.hasRules()) {
-            return recipes.stream()
-                    .map(recipe -> RecipeSummaryDto.from(recipe, tags.getOrDefault(recipe.getId(), List.of())))
-                    .toList();
-        }
-        Map<Integer, DietVerdict> verdicts = dietFilter.judgeAll(rules, recipes.stream().map(Recipe::getId).toList());
-        List<Recipe> shown = new ArrayList<>();
-        for (Recipe recipe : recipes) {
-            DietStatus status = verdicts.get(recipe.getId()).status();
-            if (status == DietStatus.OK || status == DietStatus.ANPASSBAR
-                    || (status == DietStatus.UNCLEAR && rules.includeUnclear())) {
-                shown.add(recipe);
-            }
-        }
-        shown.sort(Comparator.comparing((Recipe r) -> verdicts.get(r.getId()), RecipeDietFilter.displayOrder()));   // stable: name order within a group
-        return shown.stream()
-                .map(recipe -> RecipeSummaryDto.from(recipe, tags.getOrDefault(recipe.getId(), List.of()),
-                        DietDto.from(verdicts.get(recipe.getId()), null)))
+        RecipeSearchService.Result result = searchService.search(query, rules, request);
+        List<RecipeCardDto> items = result.items().stream()
+                .map(e -> RecipeCardDto.from(e.recipe(), e.tags(),
+                        e.diet() == null ? null : DietDto.from(e.diet(), null)))
                 .toList();
+        return new RecipePageDto(items, result.total(), request.page(), request.pageSize(), result.totalPages());
     }
 
     /**
@@ -140,18 +152,17 @@ public class RecipeController {
         if (request.category() == null || request.category().isBlank()) {
             throw new BadRequestException("'category' is required");
         }
-        return TagDto.from(tagService.addTagToRecipe(id, request.name().trim(), request.category().trim()));
+        TagDto tag = TagDto.from(tagService.addTagToRecipe(id, request.name().trim(), request.category().trim()));
+        dietFilter.invalidate();   // the diet snapshot holds the tag names
+        return tag;
     }
 
-    // RecipeService has no lookup by id, so find the recipe in the full list (small table).
     private Recipe requireRecipe(int id) {
         return findRecipe(recipeService, id);
     }
 
     static Recipe findRecipe(RecipeService recipeService, int id) {
-        return recipeService.allRecipes().stream()
-                .filter(recipe -> recipe.getId() == id)
-                .findFirst()
+        return recipeService.findById(id)
                 .orElseThrow(() -> new NotFoundException("No recipe with id " + id));
     }
 }

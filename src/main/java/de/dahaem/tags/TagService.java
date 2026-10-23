@@ -26,6 +26,11 @@ public class TagService {
     // Tag names per recipe id, for every tagged recipe, in one query.
     public java.util.Map<Integer, List<String>> tagNamesByRecipe(){ return repository.tagNamesByRecipe(); }
 
+    // Tag names of just these recipes (one page of the list), recipe id -> names sorted by group then name.
+    public java.util.Map<Integer, List<String>> tagNamesForRecipes(java.util.Collection<Integer> recipeIds){
+        return repository.tagNamesForRecipes(recipeIds);
+    }
+
     // Finds the ids of every recipe carrying a tag with this name.
     public List<Integer> recipesWithTag(String name){
         return repository.findByName(name)

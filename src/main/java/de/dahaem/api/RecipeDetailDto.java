@@ -23,7 +23,7 @@ import java.util.List;
  * it was asked for and the recipe is a range. {@code scalable} is false when that servings count is
  * not positive, in which case nothing is scaled. The enrichment fields ({@code description},
  * {@code imageUrl}, {@code thumbnailUrl}, {@code imageSource}, {@code cuisine}, {@code ratingAvg},
- * {@code ratingCount}, {@code publishedDate}) are as in {@link RecipeSummaryDto}; null when missing. {@code tags} are the recipe's tags, sorted by group then name:
+ * {@code ratingCount}, {@code publishedDate}) are the recipe's page data (the list card shows only some of them); null when missing. {@code tags} are the recipe's tags, sorted by group then name:
  * {@code source} is {@code "manual"} (added by a person) or {@code "derived"} (worked out from DAHÄM's data).
  * {@code diet} is present only when diet rules were passed (see {@link DietDto}): the status, the hints and the
  * recipe's unmatched ingredient lines.
