@@ -570,7 +570,7 @@ each controller method is the source of the descriptions.
 - A missing or expired CSRF token answers **403**; fetch a new one and retry.
 - `POST /api/auth/login` answers 204 (a session starts) or 401; `POST /api/auth/logout` answers 204.
 - Requests and answers are UTF-8 JSON. Dates are `YYYY-MM-DD`, date-times ISO 8601. Money is a plain JSON number (euros).
-- Lists are returned as plain JSON arrays. There is no pagination yet; `GET /api/recipes` returns all recipes.
+- Lists are returned as plain JSON arrays, except `GET /api/recipes`: it is paged and answers `{items, total, page, pageSize, totalPages}` (24 per page unless `pageSize` says otherwise).
 - The service never decides for the user: it returns prices, savings and options, and the user chooses.
 
 ## Errors

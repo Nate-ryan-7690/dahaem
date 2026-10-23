@@ -183,6 +183,73 @@ java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner --commit 
 java -cp target/dahaem-1.0-SNAPSHOT.jar de.dahaem.tags.RecipeTagRunner --animal-products
 ```
 
+### Recipe search and paging
+
+`GET /api/recipes` searches, filters and pages on the server (the list has ~11,000 recipes). **The answer is an object, no longer a plain array**, and **without paging parameters it returns the first 24 recipes, not all of them**. The PHP reads `items` and pages with `total` / `totalPages`. Every parameter is optional; the filters combine with AND.
+
+| Parameter | Meaning | Default / limits |
+|---|---|---|
+| `q` | words of the recipe name; every word must be in the name, any order, case-insensitive (`q=gemüse suppe`) | none |
+| `ingredient` | ingredient name (German or English, part of the name); repeatable or comma-separated, the recipe must have all of them (`ingredient=zwiebel,gouda`) | none; at most 10 |
+| `tags` | tag names; repeatable or comma-separated, the recipe must carry all of them (`tags=vegetarisch,schnell`; names as in `GET /api/recipes/{id}/tags`) | none; at most 10; an unknown tag matches nothing |
+| `minTime`, `maxTime` | total time = prep + cook, in minutes, both inclusive. A recipe without a time (0) is left out as soon as one of them is set | none; 0 or more; `minTime` <= `maxTime` |
+| `servings` | recipes for N people; a "3 – 4 Personen" recipe matches 3 and 4 | none; 1 or more |
+| `sort` | `name` (A-Z), `time` (shortest first, unknown last), `rating` (best first, unrated last), `newest` (publish date, undated last). Ties end by recipe id: the order is total and stable, so paging never repeats or skips a recipe | `name` |
+| `page` | page number, **from 1** | `1`; a page past the end is `200` with empty `items` |
+| `pageSize` | cards per page | `24`; 1 – 100 |
+| `diet`, `excludeTags`, `excludeItems`, `avoidTags`, `avoidItems`, `includeUnclear` | the diet rules, unchanged: see "Diet filter" | |
+
+A bad value (`page=0`, `pageSize=101`, an unknown `sort` or `diet` preset, a negative time, `minTime` above `maxTime`) answers **400** with the usual error body. `total` counts the recipes of ALL pages that match (after search, filters and diet rules; recipes the diet rules hide are not counted). With diet rules every card also has `diet` (`status` OK / ANPASSBAR / UNCLEAR, `hints`, `softHits` as before) and the order is: no soft hit first, then OK before ANPASSBAR before UNCLEAR, then the requested `sort` inside each group. The planner's recipe picker uses the same endpoint (`q`, `maxTime`, `tags`, `page`).
+
+Card fields: `id`, `name`, `imageUrl` / `thumbnailUrl` (links; null without an image, show a fallback; use the thumbnail in lists), `prepTime`, `cookTime`, `totalTime` (minutes, `0` = unknown), `servings`, `servingsMax` (null unless a range), `cuisine` and `ratingAvg` (null when unknown), `tags` (names, sorted by group then name), `diet` (only with diet rules).
+
+```
+GET /api/recipes?q=suppe&tags=vegetarisch&maxTime=30&sort=time&page=1&pageSize=2
+```
+
+```json
+{
+  "items": [
+    {
+      "id": 4711,
+      "name": "Karottensuppe mit Ingwer",
+      "imageUrl": "https://img.example.test/karottensuppe.jpg",
+      "thumbnailUrl": "https://img.example.test/thumb/karottensuppe.jpg",
+      "prepTime": 10,
+      "cookTime": 15,
+      "totalTime": 25,
+      "servings": 2,
+      "servingsMax": null,
+      "cuisine": "Deutsch",
+      "ratingAvg": 4.35,
+      "tags": ["vegetarisch", "schnell"]
+    },
+    {
+      "id": 812,
+      "name": "Tomatensuppe",
+      "imageUrl": null,
+      "thumbnailUrl": null,
+      "prepTime": 5,
+      "cookTime": 25,
+      "totalTime": 30,
+      "servings": 3,
+      "servingsMax": 4,
+      "cuisine": null,
+      "ratingAvg": null,
+      "tags": ["vegetarisch", "schnell"]
+    }
+  ],
+  "total": 37,
+  "page": 1,
+  "pageSize": 2,
+  "totalPages": 19
+}
+```
+
+The example is made up. `GET /api/recipes/{id}` is unchanged (plus `?people=N`, `?basis=` and the diet parameters, contract in PR #61 / #62).
+
+**How the diet rules page.** The database applies search and filters and returns only the candidate ids; the diet verdicts come from a snapshot of the recipe facts (catalogue, ingredients, tags) that the server keeps for 60 seconds (`dahaem.diet.cache-seconds`, `0` turns it off; adding a tag through `POST /api/recipes/{id}/tags` drops it at once). So a page request no longer loads the facts of every recipe, and a listed verdict can be up to a minute old after a tagger run or an import; `GET /api/recipes/{id}` with rules always judges fresh. Without diet rules the database does the whole page (`COUNT`, `LIMIT` / `OFFSET`) and only the tags of that page are read.
+
 ### Diet filter (what a household does not eat)
 
 `GET /api/recipes` (and `GET /api/recipes/{id}`) take diet rules, applied on the server so the client never receives
@@ -247,7 +314,7 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/inventory` | all items |
 | GET | `/api/inventory/expiring?days=7` | items expiring within N days |
 | GET | `/api/inventory/low-stock?threshold=1` | items at or below N in stock |
-| GET | `/api/recipes[?diet=…][&excludeTags=…][&excludeItems=…][&avoidTags=…][&avoidItems=…][&includeUnclear=true]` | recipe list (with diet rules: filtered and sorted on the server, each recipe gets a `diet` object, see "Diet filter"; without rules unchanged); each has `servings` and `servingsMax` (upper bound of a "3 – 4 Personen" range, `servings` being the lower bound; null when not a range), and the page data `description`, `imageUrl`, `thumbnailUrl` (links: the browser loads the image from its source, nothing is copied), `imageSource` (`hellofresh` \| `own` \| `generated`, so images can be replaced in bulk; null without an image), `cuisine` (one German name), `ratingAvg` (0 – 5, 2 decimals), `ratingCount`, `publishedDate` (`YYYY-MM-DD`) — each null when missing (migration 0010, filled by `scripts/importer/enrich_recipes.py`) Also `tags`: the recipe's tag names, sorted by group then name (`[]` when untagged). |
+| GET | `/api/recipes[?q=…][&ingredient=…][&tags=…][&minTime=…][&maxTime=…][&servings=…][&sort=…][&page=…][&pageSize=…][&diet=…][&excludeTags=…][&excludeItems=…][&avoidTags=…][&avoidItems=…][&includeUnclear=true]` | **paged** recipe search: answers `{items, total, page, pageSize, totalPages}` (24 per page without paging parameters, max 100); each item is a small card (`id`, `name`, `imageUrl`, `thumbnailUrl`, `prepTime`, `cookTime`, `totalTime`, `servings`, `servingsMax`, `cuisine`, `ratingAvg`, `tags`, and `diet` when diet rules were passed); the rest (description, nutrition, image source, publish date) is in `GET /api/recipes/{id}`. Contract, defaults and an example: see "Recipe search and paging"; diet rules: see "Diet filter". |
 | GET | `/api/recipes/{id}[?people=N][&basis=servings\|max][&diet=…]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). With the diet parameters of the list it also has `diet`: `status`, `hints` and `unmatchedIngredients` (`lineNo`, `rawText`, `reason`). |
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` (a hand-added tag is `manual`; adding one the tagger derived makes it `manual`) |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |

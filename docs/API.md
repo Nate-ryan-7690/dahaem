@@ -19,7 +19,7 @@ each controller method is the source of the descriptions.
 - A missing or expired CSRF token answers **403**; fetch a new one and retry.
 - `POST /api/auth/login` answers 204 (a session starts) or 401; `POST /api/auth/logout` answers 204.
 - Requests and answers are UTF-8 JSON. Dates are `YYYY-MM-DD`, date-times ISO 8601. Money is a plain JSON number (euros).
-- Lists are returned as plain JSON arrays. There is no pagination yet; `GET /api/recipes` returns all recipes.
+- Lists are returned as plain JSON arrays, except `GET /api/recipes`: it is paged and answers `{items, total, page, pageSize, totalPages}` (24 per page unless `pageSize` says otherwise).
 - The service never decides for the user: it returns prices, savings and options, and the user chooses.
 
 ## Errors
@@ -58,7 +58,7 @@ Every error has the same shape:
 | POST | [`/api/meal-plans/{id}/shopping-list`](#post-apimeal-plansidshopping-list) | Builds and persists a shopping list from a plan's recipes (see ShoppingListService.generateFromMealPlan(int)): one line per item still missing after subtracting inventory, no store item pre-chosen. |
 | GET | [`/api/purchases`](#get-apipurchases) |  |
 | POST | [`/api/purchases`](#post-apipurchases) | Records a purchase of a known store_item and applies it to inventory (one transaction, in the service). |
-| GET | [`/api/recipes`](#get-apirecipes) | All recipes by name. |
+| GET | [`/api/recipes`](#get-apirecipes) | Search the recipes: one page of cards plus the total. |
 | GET | [`/api/recipes/{id}`](#get-apirecipesid) | The recipe with its ingredients and instructions. |
 | GET | [`/api/recipes/{id}/tags`](#get-apirecipesidtags) |  |
 | POST | [`/api/recipes/{id}/tags`](#post-apirecipesidtags) | Tags the recipe, creating the tag first if no tag with that name exists. |
@@ -414,7 +414,24 @@ before summing; omitted, the raw per-recipe quantities are summed.
 
 #### GET /api/recipes
 
-All recipes by name. Optional diet rules, applied on the server (the client never filters 11,000 recipes):
+Search the recipes: one page of cards plus the total. Everything is applied on the server (the client never
+filters 11,000 recipes). All filters are optional and combine with AND:
+
+- search: q= (every word is in the recipe name), ingredient=a,b (repeatable; the
+      recipe has an ingredient whose name contains each text);
+
+- filters: tags=a,b (repeatable; the recipe carries all of these tags), minTime /
+      maxTime (total time = prep + cook, minutes; recipes without a time are left out when either is
+      set), servings=N (recipes for N people; a "3 – 4 Personen" recipe matches 3 and 4);
+
+- order: sort=name|time|rating|newest (default name; ties always end by id, so the order is stable
+      and paging neither repeats nor skips a recipe);
+
+- paging: page (from 1, default 1) and pageSize (1 - 100, default 24). Without paging
+      parameters you get the first 24 recipes, not all of them; use total / totalPages to go
+      on. A page past the end is empty. Out-of-range values are a 400.
+
+Optional diet rules, also applied on the server:
 
 - hard rules ("Was esse ich nicht?"): diet= (repeatable; halal, koscher, vegetarisch,
       vegan, see config/diet_presets.json; an unknown preset is a 400), excludeTags=a,b,
@@ -426,14 +443,25 @@ All recipes by name. Optional diet rules, applied on the server (the client neve
 - includeUnclear=true|false (default false): recipes with a line that was not matched are
       UNCLEAR under a hard rule and left out unless this is true.
 
-With rules every recipe carries diet (status OK / ANPASSBAR / UNCLEAR, hints, softHits); HIDDEN
-recipes are not returned. The presets filter INGREDIENTS only; they are no halal or kosher certification:
-meat certification stays the shopper's responsibility. Without any rule the answer is unchanged.
+With rules every card carries diet (status OK / ANPASSBAR / UNCLEAR, hints, softHits); HIDDEN recipes
+are not returned and not counted in total. With rules the order is: no soft hit first, then OK before
+ANPASSBAR before UNCLEAR, then the requested sort. The rules judge from a snapshot of the recipe facts that is
+at most a minute old; GET /api/recipes/{id} always judges fresh. The presets filter INGREDIENTS only;
+they are no halal or kosher certification: meat certification stays the shopper's responsibility.
 
 **Query parameters**
 
 | Name | Type | Required | Default |
 |---|---|---|---|
+| `q` | `String` | no |  |
+| `ingredient` | `List<String>` | no |  |
+| `tags` | `List<String>` | no |  |
+| `minTime` | `Integer` | no |  |
+| `maxTime` | `Integer` | no |  |
+| `servings` | `Integer` | no |  |
+| `sort` | `String` | no |  |
+| `page` | `Integer` | no |  |
+| `pageSize` | `Integer` | no |  |
 | `diet` | `List<String>` | no |  |
 | `excludeTags` | `List<String>` | no |  |
 | `excludeItems` | `List<Integer>` | no |  |
@@ -443,39 +471,37 @@ meat certification stays the shopper's responsibility. Without any rule the answ
 
 A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`excludeTags=a,b`).
 
-**Answer** 200 `List<RecipeSummaryDto>`
+**Answer** 200 `RecipePageDto`
 
 ```json
-[
-  {
-    "id": 0,
-    "name": "…",
-    "servings": 0,
-    "servingsMax": 0,
-    "prepTime": 0,
-    "cookTime": 0,
-    "calories": 0,
-    "description": "…",
-    "imageUrl": "…",
-    "thumbnailUrl": "…",
-    "imageSource": "…",
-    "cuisine": "…",
-    "ratingAvg": 0.00,
-    "ratingCount": 0,
-    "publishedDate": "2026-10-14",
-    "tags": ["…"],
-    "diet": {
-      "status": "…",
-      "hints": [{ … }],
-      "softHits": {
-        "tags": ["…"],
-        "items": [{ … }],
-        "possibleItems": [{ … }]
-      },
-      "unmatchedIngredients": [{ … }]
+{
+  "items": [
+    {
+      "id": 0,
+      "name": "…",
+      "imageUrl": "…",
+      "thumbnailUrl": "…",
+      "prepTime": 0,
+      "cookTime": 0,
+      "totalTime": 0,
+      "servings": 0,
+      "servingsMax": 0,
+      "cuisine": "…",
+      "ratingAvg": 0.00,
+      "tags": ["…"],
+      "diet": {
+        "status": "…",
+        "hints": [{ … }],
+        "softHits": { … },
+        "unmatchedIngredients": [{ … }]
+      }
     }
-  }
-]
+  ],
+  "total": 0,
+  "page": 0,
+  "pageSize": 0,
+  "totalPages": 0
+}
 ```
 
 #### GET /api/recipes/{id}
@@ -1075,6 +1101,38 @@ one for the user.
 { … }
 ```
 
+### RecipeCardDto
+
+A recipe as a card in the list: what a card shows, nothing more (GET /api/recipes/{id} has the rest:
+description, nutrition, image source, publish date, ingredients, instructions). totalTime is
+prepTime + cookTime in minutes (0 when the recipe has no time). servings is the number of people;
+servingsMax is the upper bound of a "3 – 4 Personen" range (servings is then the lower bound),
+null otherwise. imageUrl / thumbnailUrl are links the browser loads from their source (null when
+the recipe has no image: show a fallback; use the thumbnail in lists). cuisine is one German name,
+ratingAvg is 0 - 5 with 2 decimals; both null when unknown. tags are the recipe's tag names (no
+group or source: the detail has those), sorted by group then name; empty when it has none.
+diet is present only when diet rules were passed to GET /api/recipes (see DietDto).
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+| `imageUrl` | `String` |
+| `thumbnailUrl` | `String` |
+| `prepTime` | `int` |
+| `cookTime` | `int` |
+| `totalTime` | `int` |
+| `servings` | `int` |
+| `servingsMax` | `Integer` |
+| `cuisine` | `String` |
+| `ratingAvg` | `BigDecimal` |
+| `tags` | `List<String>` |
+| `diet` | `DietDto` |
+
+```json
+{ … }
+```
+
 ### RecipeDetailDto
 
 One recipe with its nutrition, ingredients and ordered instructions, as returned by /api/recipes/{id}.
@@ -1087,7 +1145,7 @@ with the amounts for that count. basis is the one actually used: "max" only when
 it was asked for and the recipe is a range. scalable is false when that servings count is
 not positive, in which case nothing is scaled. The enrichment fields (description,
 imageUrl, thumbnailUrl, imageSource, cuisine, ratingAvg,
-ratingCount, publishedDate) are as in RecipeSummaryDto; null when missing. tags are the recipe's tags, sorted by group then name:
+ratingCount, publishedDate) are the recipe's page data (the list card shows only some of them); null when missing. tags are the recipe's tags, sorted by group then name:
 source is "manual" (added by a person) or "derived" (worked out from DAHÄM's data).
 diet is present only when diet rules were passed (see DietDto): the status, the hints and the
 recipe's unmatched ingredient lines.
@@ -1192,6 +1250,25 @@ A tag on the recipe: its name, its group (e.g. Tier, Ernährung, Zeit, Nährwert
 { … }
 ```
 
+### RecipePageDto
+
+One page of GET /api/recipes. items are the cards of this page, in the requested sort order;
+total is the number of recipes that match in ALL pages (after search, filters and diet rules);
+page (from 1) and pageSize echo the request with its defaults applied; totalPages is
+ceil(total / pageSize), 0 when nothing matches. A page past the end has empty items.
+
+| Property | Type |
+|---|---|
+| `items` | `List<RecipeCardDto>` |
+| `total` | `long` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
+
+```json
+{ … }
+```
+
 ### RecipeSuggestionDto
 
 A ranked recipe suggestion: which recipe, how strongly it matched the signal, and why.
@@ -1202,42 +1279,6 @@ A ranked recipe suggestion: which recipe, how strongly it matched the signal, an
 | `recipeName` | `String` |
 | `score` | `int` |
 | `matchingItemIds` | `List<Integer>` |
-
-```json
-{ … }
-```
-
-### RecipeSummaryDto
-
-A recipe in a list: identity and the numbers you'd scan a list by. servingsMax is the
-upper bound of a "3 – 4 Personen" range (servings is then the lower bound), null otherwise.
-The enrichment fields are null when the recipe has no such data: imageUrl / thumbnailUrl
-are links (the browser loads the image from its source), imageSource says where the image
-comes from (hellofresh, own or generated), cuisine is one German name,
-ratingAvg is 0 - 5 with 2 decimals.
-tags are the recipe's tag names (no group or source: GET /api/recipes/{id} has those),
-sorted by group then name; empty when it has none.
-diet is present only when diet rules were passed to GET /api/recipes (see DietDto).
-
-| Property | Type |
-|---|---|
-| `id` | `int` |
-| `name` | `String` |
-| `servings` | `int` |
-| `servingsMax` | `Integer` |
-| `prepTime` | `int` |
-| `cookTime` | `int` |
-| `calories` | `Integer` |
-| `description` | `String` |
-| `imageUrl` | `String` |
-| `thumbnailUrl` | `String` |
-| `imageSource` | `String` |
-| `cuisine` | `String` |
-| `ratingAvg` | `BigDecimal` |
-| `ratingCount` | `Integer` |
-| `publishedDate` | `LocalDate` |
-| `tags` | `List<String>` |
-| `diet` | `DietDto` |
 
 ```json
 { … }

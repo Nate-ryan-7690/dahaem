@@ -4,7 +4,7 @@
 
 Recipes, ingredients, instructions, scaling and meal plans.
 
-13 types in 10 source files (`src/main/java/de/dahaem/mealplanner`). Back to the [class index](README.md).
+18 types in 13 source files (`src/main/java/de/dahaem/mealplanner`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -18,8 +18,21 @@ classDiagram
     class mealplanner_Recipe["Recipe"]
     class mealplanner_RecipeIngredient["RecipeIngredient"]
     class mealplanner_RecipeInstruction["RecipeInstruction"]
+    class mealplanner_RecipeQuery["RecipeQuery"] {
+        <<record>>
+    }
     class mealplanner_RecipeRepository["RecipeRepository"]
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
+        <<record>>
+    }
+    class mealplanner_RecipeSearchService_Result["RecipeSearchService.Result"] {
+        <<record>>
+    }
     class mealplanner_RecipeService["RecipeService"]
+    class mealplanner_RecipeSort["RecipeSort"] {
+        <<enumeration>>
+    }
     class mealplanner_StepAmounts["StepAmounts"]
     class mealplanner_StepAmounts_Context["StepAmounts.Context"] {
         <<record>>
@@ -35,9 +48,17 @@ classDiagram
     mealplanner_MealPlanService --> mealplanner_MealPlanRepository
     mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_MealPlan
+    mealplanner_RecipeQuery --> mealplanner_RecipeSort
     mealplanner_RecipeRepository ..> mealplanner_Recipe
     mealplanner_RecipeRepository ..> mealplanner_RecipeIngredient
     mealplanner_RecipeRepository ..> mealplanner_RecipeInstruction
+    mealplanner_RecipeRepository ..> mealplanner_RecipeQuery
+    mealplanner_RecipeSearchService *-- mealplanner_RecipeSearchService_Entry
+    mealplanner_RecipeSearchService *-- mealplanner_RecipeSearchService_Result
+    mealplanner_RecipeSearchService --> mealplanner_RecipeRepository
+    mealplanner_RecipeSearchService ..> mealplanner_RecipeQuery
+    mealplanner_RecipeSearchService_Entry --> mealplanner_Recipe
+    mealplanner_RecipeSearchService_Result --> mealplanner_RecipeSearchService_Entry
     mealplanner_RecipeService --> mealplanner_RecipeRepository
     mealplanner_RecipeService ..> mealplanner_Recipe
     mealplanner_RecipeService ..> mealplanner_RecipeIngredient
@@ -58,8 +79,13 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`Recipe`](#recipe) | class |  | Plain data holder for one row of the Recipe table. |
 | [`RecipeIngredient`](#recipeingredient) | class |  |  |
 | [`RecipeInstruction`](#recipeinstruction) | class |  |  |
+| [`RecipeQuery`](#recipequery) | record |  | What to look for in the recipe list; plain data, built and checked by .of. |
 | [`RecipeRepository`](#reciperepository) | class |  | All SQL for the recipe, recipe_ingredient, recipe_instructions, recipe_tag tables lives here. |
+| [`RecipeSearchService`](#recipesearchservice) | class |  | Search, filters, diet rules and paging for the recipe list. |
+| [`RecipeSearchService.Entry`](#recipesearchserviceentry) | record |  | A recipe of a result page with its tag names and, when diet rules were given, its verdict (else null). |
+| [`RecipeSearchService.Result`](#recipesearchserviceresult) | record |  | One page, the number of recipes that match in all pages, and the request that produced it. |
 | [`RecipeService`](#recipeservice) | class |  | Business logic for recipes. |
+| [`RecipeSort`](#recipesort) | enum |  | The sort orders of the recipe list. |
 | [`StepAmounts`](#stepamounts) | class |  | Renders a cooking step's amounts for a number of people. |
 | [`StepAmounts.Context`](#stepamountscontext) | record |  |  |
 | [`StepAmounts.Replacement`](#stepamountsreplacement) | record |  | What replaces before[replaceFrom..] + bracket. |
@@ -306,6 +332,12 @@ classDiagram
         +getRatingCount() Integer
         +2 more ...
     }
+    class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
+        <<record>>
+    }
+    class api_RecipeCardDto["RecipeCardDto"] {
+        <<record>>
+    }
     class api_RecipeController["RecipeController"] {
         <<controller>>
     }
@@ -315,16 +347,14 @@ classDiagram
     class api_RecipeDetailDto_Instruction["RecipeDetailDto.Instruction"] {
         <<record>>
     }
-    class api_RecipeSummaryDto["RecipeSummaryDto"] {
-        <<record>>
-    }
     class mealplanner_RecipeRepository["RecipeRepository"]
     class mealplanner_RecipeService["RecipeService"]
+    api_RecipeCardDto ..> mealplanner_Recipe
     api_RecipeController ..> mealplanner_Recipe
     api_RecipeDetailDto ..> mealplanner_Recipe
     api_RecipeDetailDto_Instruction ..> mealplanner_Recipe
-    api_RecipeSummaryDto ..> mealplanner_Recipe
     mealplanner_RecipeRepository ..> mealplanner_Recipe
+    mealplanner_RecipeSearchService_Entry --> mealplanner_Recipe
     mealplanner_RecipeService ..> mealplanner_Recipe
 ```
 
@@ -376,7 +406,7 @@ classDiagram
 | `LocalDate getPublishedDate()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `RecipeController`, `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`, `RecipeSummaryDto`
+**Referenced by:** `RecipeCardDto`, `RecipeController`, `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`
 
 ## RecipeIngredient
 
@@ -500,6 +530,72 @@ classDiagram
 
 **Referenced by:** `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`
 
+## RecipeQuery
+
+*record*
+
+What to look for in the recipe list; plain data, built and checked by .of. Every filter that is set must
+hold (AND):
+
+- nameWords: each word is contained in the recipe name;
+
+- ingredients: for each text, the recipe has an ingredient whose German or English name contains it;
+
+- tags: the recipe carries all these tags (by name);
+
+- minTime / maxTime: total time (prep + cook) in minutes; a recipe without a time (0) is
+      left out as soon as either is set;
+
+- servings: the recipe is for this many people (a "3 - 4 Personen" recipe matches 3 and 4).
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_RecipeQuery["RecipeQuery"] {
+        <<record>>
+        +List~String~ nameWords
+        +List~String~ ingredients
+        +List~String~ tags
+        +Integer minTime
+        +Integer maxTime
+        +Integer servings
+        +RecipeSort sort
+        +int MAX_TERMS$
+        +none() RecipeQuery$
+        +of(String name, List~String~ ingredients, List~String~ tags, Integer minTime, Integer maxTime, Integer servings, String sort) RecipeQuery$
+        +isUnfiltered() boolean
+        +hasTimeFilter() boolean
+    }
+    class mealplanner_RecipeSort["RecipeSort"] {
+        <<enumeration>>
+    }
+    class mealplanner_RecipeRepository["RecipeRepository"]
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
+    mealplanner_RecipeQuery --> mealplanner_RecipeSort
+    mealplanner_RecipeRepository ..> mealplanner_RecipeQuery
+    mealplanner_RecipeSearchService ..> mealplanner_RecipeQuery
+```
+
+| Component | Type |
+|---|---|
+| `nameWords` | `List<String>` |
+| `ingredients` | `List<String>` |
+| `tags` | `List<String>` |
+| `minTime` | `Integer` |
+| `maxTime` | `Integer` |
+| `servings` | `Integer` |
+| `sort` | `RecipeSort` |
+| `MAX_TERMS` | `int` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `RecipeQuery none()` | public static |  |
+| `RecipeQuery of(String name, List<String> ingredients, List<String> tags, Integer minTime, Integer maxTime, Integer servings, String sort)` | public static | Cleans and checks raw request values; a bad value is an IllegalArgumentException (the API answers 400). |
+| `boolean isUnfiltered()` | public | True if no filter is set (the sort does not filter). |
+| `boolean hasTimeFilter()` | public | True if a time filter is set. |
+
+**Referenced by:** `RecipeRepository`, `RecipeSearchService`
+
 ## RecipeRepository
 
 *class*
@@ -515,21 +611,38 @@ classDiagram
         +findAll() List~Recipe~
         +findAllIngredients(int recipeId) List~RecipeIngredient~
         +findAllInstructions(int recipeId) List~RecipeInstruction~
+        -String COLUMNS$
+        -String TOTAL_TIME$
+        +countMatching(RecipeQuery q) long
+        +findPage(RecipeQuery q, int limit, long offset) List~Recipe~
+        +findMatchingIds(RecipeQuery q) List~Integer~
+        +findByIds(List~Integer~ ids) List~Recipe~
         +findById(int id) Optional~Recipe~
     }
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
     class mealplanner_RecipeService["RecipeService"]
     class mealplanner_Recipe["Recipe"]
     class mealplanner_RecipeIngredient["RecipeIngredient"]
     class mealplanner_RecipeInstruction["RecipeInstruction"]
+    class mealplanner_RecipeQuery["RecipeQuery"] {
+        <<record>>
+    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
     mealplanner_RecipeRepository ..> mealplanner_Recipe
     mealplanner_RecipeRepository ..> mealplanner_RecipeIngredient
     mealplanner_RecipeRepository ..> mealplanner_RecipeInstruction
+    mealplanner_RecipeRepository ..> mealplanner_RecipeQuery
     api_ServiceConfig ..> mealplanner_RecipeRepository
+    mealplanner_RecipeSearchService --> mealplanner_RecipeRepository
     mealplanner_RecipeService --> mealplanner_RecipeRepository
 ```
+
+| Field | Type |
+|---|---|
+| `COLUMNS` | `String` |
+| `TOTAL_TIME` | `String` |
 
 | Member | Visibility | What it does |
 |---|---|---|
@@ -537,9 +650,172 @@ classDiagram
 | `List<Recipe> findAll()` | public |  |
 | `List<RecipeIngredient> findAllIngredients(int recipeId)` | public |  |
 | `List<RecipeInstruction> findAllInstructions(int recipeId)` | public |  |
+| `long countMatching(RecipeQuery q)` | public | How many recipes match the query. |
+| `List<Recipe> findPage(RecipeQuery q, int limit, long offset)` | public | One page of the recipes matching the query, in the query's (total) sort order. |
+| `List<Integer> findMatchingIds(RecipeQuery q)` | public | The ids of every recipe matching the query, in the query's sort order (for paging after the diet filter). |
+| `List<Recipe> findByIds(List<Integer> ids)` | public | The recipes with these ids, in the order of ids; an id without a recipe is skipped. |
 | `Optional<Recipe> findById(int id)` | public |  |
 
-**Referenced by:** `RecipeService`, `ServiceConfig`
+**Referenced by:** `RecipeSearchService`, `RecipeService`, `ServiceConfig`
+
+## RecipeSearchService
+
+*class*
+
+Search, filters, diet rules and paging for the recipe list. No SQL here: the repository narrows and sorts with
+SQL; this class decides how the diet rules fit in.
+
+- Without diet rules the database does everything: COUNT for the total, LIMIT / OFFSET for the page, and the
+      tags are read for the rows of that page only.
+
+- With diet rules a verdict is needed for every candidate before a page can be cut (the rules decide what is
+      shown and in what order). The database still applies search and filters first and returns the candidate ids
+      (ints only); the verdicts come from DietFilterService's in-memory snapshot, so a page request does
+      not reload the facts of 11,000 recipes. Only the recipes of the requested page are then loaded.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_RecipeSearchService["RecipeSearchService"] {
+        -RecipeRepository recipes
+        -TagService tags
+        -DietFilterService diet
+        +RecipeSearchService(RecipeRepository recipes, TagService tags, DietFilterService diet)
+        +search(RecipeQuery query, DietRules rules, PageRequest page) Result
+        ~visibleInDisplayOrder(List~Integer~ candidates, Map~Integer, DietVerdict~ verdicts, DietRules rules) List~Integer~$
+        ~slice(List~Integer~ ids, PageRequest page) List~Integer~$
+    }
+    class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
+        <<record>>
+    }
+    class mealplanner_RecipeSearchService_Result["RecipeSearchService.Result"] {
+        <<record>>
+    }
+    class mealplanner_RecipeRepository["RecipeRepository"]
+    class tags_TagService["TagService"]
+    class diet_DietFilterService["DietFilterService"]
+    class api_RecipeController["RecipeController"] {
+        <<controller>>
+    }
+    class diet_DietRules["DietRules"] {
+        <<record>>
+    }
+    class shared_PageRequest["PageRequest"] {
+        <<record>>
+    }
+    class mealplanner_RecipeQuery["RecipeQuery"] {
+        <<record>>
+    }
+    class diet_DietVerdict["DietVerdict"] {
+        <<record>>
+    }
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    mealplanner_RecipeSearchService *-- mealplanner_RecipeSearchService_Entry
+    mealplanner_RecipeSearchService *-- mealplanner_RecipeSearchService_Result
+    mealplanner_RecipeSearchService --> mealplanner_RecipeRepository
+    mealplanner_RecipeSearchService --> tags_TagService
+    mealplanner_RecipeSearchService --> diet_DietFilterService
+    mealplanner_RecipeSearchService ..> diet_DietRules
+    mealplanner_RecipeSearchService ..> shared_PageRequest
+    mealplanner_RecipeSearchService ..> mealplanner_RecipeQuery
+    mealplanner_RecipeSearchService ..> diet_DietVerdict
+    api_RecipeController --> mealplanner_RecipeSearchService
+    api_ServiceConfig ..> mealplanner_RecipeSearchService
+```
+
+| Field | Type |
+|---|---|
+| `recipes` | `RecipeRepository` |
+| `tags` | `TagService` |
+| `diet` | `DietFilterService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `RecipeSearchService(RecipeRepository recipes, TagService tags, DietFilterService diet)` | public |  |
+| `Result search(RecipeQuery query, DietRules rules, PageRequest page)` | public |  |
+| `List<Integer> visibleInDisplayOrder(List<Integer> candidates, Map<Integer, DietVerdict> verdicts, DietRules rules)` | package static | The candidates that are shown under the rules, in display order: no soft hit before soft hits, then OK, ANPASSBAR, UNCLEAR; the candidates' own (sort) order is kept within a group. |
+| `List<Integer> slice(List<Integer> ids, PageRequest page)` | package static | The ids of the requested page; empty when the page is past the end. |
+
+**Referenced by:** `RecipeController`, `ServiceConfig`
+
+## RecipeSearchService.Entry
+
+*record*
+
+A recipe of a result page with its tag names and, when diet rules were given, its verdict (else null).
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
+        <<record>>
+        +Recipe recipe
+        +List~String~ tags
+        +DietVerdict diet
+    }
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class mealplanner_Recipe["Recipe"]
+    class diet_DietVerdict["DietVerdict"] {
+        <<record>>
+    }
+    class mealplanner_RecipeSearchService_Result["RecipeSearchService.Result"] {
+        <<record>>
+    }
+    mealplanner_RecipeSearchService_Entry --> mealplanner_Recipe
+    mealplanner_RecipeSearchService_Entry --> diet_DietVerdict
+    mealplanner_RecipeSearchService *-- mealplanner_RecipeSearchService_Entry
+    mealplanner_RecipeSearchService_Result --> mealplanner_RecipeSearchService_Entry
+```
+
+| Component | Type |
+|---|---|
+| `recipe` | `Recipe` |
+| `tags` | `List<String>` |
+| `diet` | `DietVerdict` |
+
+**Referenced by:** `RecipeSearchService`
+
+## RecipeSearchService.Result
+
+*record*
+
+One page, the number of recipes that match in all pages, and the request that produced it.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_RecipeSearchService_Result["RecipeSearchService.Result"] {
+        <<record>>
+        +List~Entry~ items
+        +long total
+        +PageRequest request
+        +totalPages() int
+    }
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
+        <<record>>
+    }
+    class shared_PageRequest["PageRequest"] {
+        <<record>>
+    }
+    mealplanner_RecipeSearchService_Result --> mealplanner_RecipeSearchService_Entry
+    mealplanner_RecipeSearchService_Result --> shared_PageRequest
+    mealplanner_RecipeSearchService *-- mealplanner_RecipeSearchService_Result
+```
+
+| Component | Type |
+|---|---|
+| `items` | `List<Entry>` |
+| `total` | `long` |
+| `request` | `PageRequest` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `int totalPages()` | public |  |
+
+**Referenced by:** `RecipeSearchService`
 
 ## RecipeService
 
@@ -557,6 +833,7 @@ classDiagram
         +RecipeService(RecipeRepository repository)
         +totalRecipeCount() long
         +allRecipes() List~Recipe~
+        +findById(int id) java.util.Optional~Recipe~
         +findAllIngredients(int recipeId) List~RecipeIngredient~
         +findAllInstructions(int recipeId) List~RecipeInstruction~
     }
@@ -595,10 +872,52 @@ classDiagram
 | `RecipeService(RecipeRepository repository)` | public |  |
 | `long totalRecipeCount()` | public |  |
 | `List<Recipe> allRecipes()` | public |  |
+| `java.util.Optional<Recipe> findById(int id)` | public | One recipe by id, or empty when there is none (a single-row query, not the whole table). |
 | `List<RecipeIngredient> findAllIngredients(int recipeId)` | public |  |
 | `List<RecipeInstruction> findAllInstructions(int recipeId)` | public |  |
 
 **Referenced by:** `MealPlanController`, `RecipeController`, `ServiceConfig`, `ShoppingListController`
+
+## RecipeSort
+
+*enum*
+
+The sort orders of the recipe list. Every order ends with the recipe id, so the order is total and paging never
+repeats or skips a recipe. .orderBy() is a fixed fragment (never user text); the repository appends it.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_RecipeSort["RecipeSort"] {
+        <<enumeration>>
+        NAME
+        TIME
+        RATING
+        NEWEST
+        -String orderBy
+        ~RecipeSort(String orderBy)
+        +orderBy() String
+        +parse(String value) RecipeSort$
+    }
+    class mealplanner_RecipeQuery["RecipeQuery"] {
+        <<record>>
+    }
+    mealplanner_RecipeQuery --> mealplanner_RecipeSort
+```
+
+**Values:** `NAME`, `TIME`, `RATING`, `NEWEST`
+
+| Field | Type |
+|---|---|
+| `orderBy` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `RecipeSort(String orderBy)` | package |  |
+| `String orderBy()` | public |  |
+| `RecipeSort parse(String value)` | public static | The sort for a request value (case-insensitive, null / blank = name); unknown is an IllegalArgumentException. |
+
+**Referenced by:** `RecipeQuery`
 
 ## StepAmounts
 

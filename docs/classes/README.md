@@ -8,23 +8,23 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (50)"]
+    api["api (51)"]
     auth["auth (8)"]
-    diet["diet (13)"]
+    diet["diet (14)"]
     finance["finance (3)"]
     inventory["inventory (3)"]
-    mealplanner["mealplanner (13)"]
+    mealplanner["mealplanner (18)"]
     receipts["receipts (30)"]
-    shared["shared (5)"]
+    shared["shared (7)"]
     shopping["shopping (11)"]
     stores["stores (47)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
     api -->|7| auth
-    api -->|9| diet
+    api -->|6| diet
     api -->|4| finance
     api -->|4| inventory
-    api -->|17| mealplanner
+    api -->|20| mealplanner
     api -->|11| shopping
     api -->|2| stores
     api -->|4| suggestions
@@ -32,6 +32,8 @@ flowchart TD
     diet -->|12| tags
     finance -->|1| inventory
     finance -->|1| stores
+    mealplanner -->|5| diet
+    mealplanner -->|1| tags
     receipts -->|8| stores
     shopping -->|2| inventory
     shopping -->|2| mealplanner
@@ -43,14 +45,14 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 50 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 51 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
-| [`diet`](diet.md) | 13 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
+| [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 3 | The item catalogue and the pantry. |
-| [`mealplanner`](mealplanner.md) | 13 | Recipes, ingredients, instructions, scaling and meal plans. |
+| [`mealplanner`](mealplanner.md) | 18 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
-| [`shared`](shared.md) | 5 | The database connection pool, units and portion arithmetic. |
+| [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
 | [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
 | [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 3 | Recipe suggestions by savings and by expiring stock. |
@@ -103,6 +105,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`DietFilterRepository`](diet.md#dietfilterrepository) | diet | class | All SQL for the diet filter. |
 | [`DietFilterService`](diet.md#dietfilterservice) | diet | class | Applies diet rules to recipes on the server, so the client never receives 11,000 recipes to filter itself. |
 | [`DietFilterService.Judged`](diet.md#dietfilterservicejudged) | diet | record | A verdict together with the facts it was made from. |
+| [`DietFilterService.Snapshot`](diet.md#dietfilterservicesnapshot) | diet | record |  |
 | [`DietPreset`](diet.md#dietpreset) | diet | record | One diet preset from config/diet_presets.json: tags a recipe must NOT have (excludeTags) and tags it MUST have (requireTags). |
 | [`DietPresets`](diet.md#dietpresets) | diet | class | The diet presets, read from config/diet_presets.json (no hardcoding: the lists are Nate's to change). |
 | [`DietRules`](diet.md#dietrules) | diet | record | What a household does not eat, as the PHP passes it (the questionnaire itself and its storage are not part of the API). |
@@ -131,6 +134,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ItemDto`](api.md#itemdto) | api | record | One inventory item as returned by /api/inventory. |
 | [`JsonUtil`](stores.md#jsonutil) | stores | class | Small null-safe helpers for reading store JSON. |
 | [`KnownProduct`](stores.md#knownproduct) | stores | record | What the database already knows about a store product. |
+| [`LikePattern`](shared.md#likepattern) | shared | class | Builds LIKE patterns from user text, so a typed % or _ is searched for literally. |
 | [`MatchGate`](stores.md#matchgate) | stores | class | Plausibility gate between "the name matched an inventory_item" and "create a store_item + discount". |
 | [`MatchGate.References`](stores.md#matchgatereferences) | stores | class | Reference prices per base unit, by inventory_item id and unit family. |
 | [`MatchGate.Verdict`](stores.md#matchgateverdict) | stores | record |  |
@@ -148,6 +152,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`OfferScope`](stores.md#offerscope) | stores | record | Which region an offer pull is for. |
 | [`OfferSource`](stores.md#offersource) | stores | interface | One place weekly offers can be pulled from: a chain's own site or one chain on an aggregator. |
 | [`OfferSourceFactory`](stores.md#offersourcefactory) | stores | class | Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for every chain in AggregatorClient.STORES. |
+| [`PageRequest`](shared.md#pagerequest) | shared | record | Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE. |
 | [`ParsedReceipt`](receipts.md#parsedreceipt) | receipts | record | Structured result of parsing one receipt's text. |
 | [`PennyClient`](stores.md#pennyclient) | stores | class | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |
 | [`PennyClient.Market`](stores.md#pennyclientmarket) | stores | record | A Penny store and the price regions it belongs to this week and next week. |
@@ -190,6 +195,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ReceiptText`](receipts.md#receipttext) | receipts | class | Shared text helpers for the store handlers: number parsing, privacy filter, tax-table rows. |
 | [`ReceiptTextSource`](receipts.md#receipttextsource) | receipts | interface | Seam for whatever turns a receipt into text (OCR of a photo, a pasted string, a test fixture). |
 | [`Recipe`](mealplanner.md#recipe) | mealplanner | class | Plain data holder for one row of the Recipe table. |
+| [`RecipeCardDto`](api.md#recipecarddto) | api | record | A recipe as a card in the list: what a card shows, nothing more (GET /api/recipes/{id} has the rest: description, nutrition, image source, publish date, ingredients, instructions). |
 | [`RecipeController`](api.md#recipecontroller) | api | class |  |
 | [`RecipeDetailDto`](api.md#recipedetaildto) | api | record | One recipe with its nutrition, ingredients and ordered instructions, as returned by /api/recipes/{id}. |
 | [`RecipeDetailDto.Ingredient`](api.md#recipedetaildtoingredient) | api | record | quantity is the stored amount for the recipe as written, as a decimal (0.5 Stück); scaledQuantity is that amount for people, rounded to 2 decimals (equal to quantity when unscaled). |
@@ -203,11 +209,16 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`RecipeFacts.Unmatched`](tags.md#recipefactsunmatched) | tags | record | A row of recipe_unmatched_ingredient: lineNo is null for an 'unchecked' recipe. |
 | [`RecipeIngredient`](mealplanner.md#recipeingredient) | mealplanner | class |  |
 | [`RecipeInstruction`](mealplanner.md#recipeinstruction) | mealplanner | class |  |
+| [`RecipePageDto`](api.md#recipepagedto) | api | record | One page of GET /api/recipes. |
+| [`RecipeQuery`](mealplanner.md#recipequery) | mealplanner | record | What to look for in the recipe list; plain data, built and checked by .of. |
 | [`RecipeRepository`](mealplanner.md#reciperepository) | mealplanner | class | All SQL for the recipe, recipe_ingredient, recipe_instructions, recipe_tag tables lives here. |
+| [`RecipeSearchService`](mealplanner.md#recipesearchservice) | mealplanner | class | Search, filters, diet rules and paging for the recipe list. |
+| [`RecipeSearchService.Entry`](mealplanner.md#recipesearchserviceentry) | mealplanner | record | A recipe of a result page with its tag names and, when diet rules were given, its verdict (else null). |
+| [`RecipeSearchService.Result`](mealplanner.md#recipesearchserviceresult) | mealplanner | record | One page, the number of recipes that match in all pages, and the request that produced it. |
 | [`RecipeService`](mealplanner.md#recipeservice) | mealplanner | class | Business logic for recipes. |
+| [`RecipeSort`](mealplanner.md#recipesort) | mealplanner | enum | The sort orders of the recipe list. |
 | [`RecipeSuggestion`](suggestions.md#recipesuggestion) | suggestions | class | Plain data holder for one ranked recipe suggestion: the recipe, how many of its ingredients matched the signal (expiring soon / on sale), and which inventory items matched. |
 | [`RecipeSuggestionDto`](api.md#recipesuggestiondto) | api | record | A ranked recipe suggestion: which recipe, how strongly it matched the signal, and why. |
-| [`RecipeSummaryDto`](api.md#recipesummarydto) | api | record | A recipe in a list: identity and the numbers you'd scan a list by. |
 | [`RecipeTagger`](tags.md#recipetagger) | tags | class | Works out the tags a recipe gets from DAHÄM's own data. |
 | [`RecipeTagger.Derivation`](tags.md#recipetaggerderivation) | tags | record | The result for one recipe. |
 | [`RecipeTagRepository`](tags.md#recipetagrepository) | tags | class | All SQL for the derived-tag run: reads the recipes and their tags, and writes derived recipe_tag rows. |

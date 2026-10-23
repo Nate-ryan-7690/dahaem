@@ -315,13 +315,21 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   an entry id, a date, an order within the day, servings per entry and an optional free label (no
   breakfast / lunch / dinner slots); endpoints for one week by date, add / edit / remove / move.
   Migration with a data move for existing plans → snapshot first, guarded.
-- **Recipe search and paging** — `next`. `GET /api/recipes` returns all ~11,000 recipes. Server-side
-  search (name, ingredient), filters on data that actually exists (time, tags, servings), paging, and a
-  small card DTO; the planner's recipe picker uses the same endpoint. Tags are ready to filter on:
-  each recipe in the list carries its tag names and `recipe_tag` has an index on the tag id. The diet
-  filter (`RecipeDietFilter` / `DietFilterService`, package `de.dahaem.diet`) takes rules and returns a
-  verdict per recipe id, so search and paging can reuse it; today it loads the facts of every recipe per
-  request (a few hundred ms) — cache or push the tag part into SQL when paging arrives.
+- **Recipe search and paging** — `in review`, PR #93. `GET /api/recipes` now searches (`q` name words,
+  `ingredient`), filters (`tags`, `minTime` / `maxTime`, `servings`), sorts (`name`, `time`, `rating`, `newest`;
+  ties by id) and pages (`page` from 1, `pageSize` default 24, max 100) on the server, and answers
+  `{items, total, page, pageSize, totalPages}` with small cards. **Breaking for the PHP:** an object instead of a
+  plain array, 24 recipes without paging parameters, and the card lost `description`, `calories`, `imageSource`,
+  `ratingCount`, `publishedDate` (still in the detail). Contract and example: README "Recipe search and paging".
+  The diet rules page too: SQL narrows to candidate ids, the verdicts come from a 60 s in-memory snapshot of the
+  facts in `DietFilterService` (`dahaem.diet.cache-seconds`), so a page request no longer loads all recipes.
+  Deferred from it: (a) accent- and typo-tolerant search (`gemuese` ≠ `gemüse` today; `LIKE` on 11,000 rows is
+  fast enough, a FULLTEXT index or a folded search column is the next step if the PHP needs it); (b) filters on
+  data that exists but that Nate has not asked for yet: `cuisine`, calories / protein, rating, `servingsMax`
+  basis — Nate decides which the page shows; (c) search by ingredient item id (`ingredientItems=`) for "use up
+  what I have" — needs the item picker first; (d) the snapshot is per process: the tagger / importer run
+  elsewhere, so a listed verdict can be up to 60 s old (the detail judges fresh) — a data-version check would
+  remove that; (e) the PHP recipe list and the planner's recipe picker have to move to the new response.
 - **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in

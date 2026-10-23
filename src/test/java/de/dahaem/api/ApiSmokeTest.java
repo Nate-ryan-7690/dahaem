@@ -107,10 +107,10 @@ class ApiSmokeTest {
     void recipeDetailHasIngredientsAndInstructionsAndUnknownIdIs404() throws Exception {
         int recipeId = recipeId("Klassische Rinder-Bolognese");
 
-        mvc.perform(get("/api/recipes"))
+        mvc.perform(get("/api/recipes").param("q", "Rinder-Bolognese"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()", greaterThan(0)))
-                .andExpect(jsonPath("$[*].id", hasItem(recipeId)));
+                .andExpect(jsonPath("$.total", greaterThan(0)))
+                .andExpect(jsonPath("$.items[*].id", hasItem(recipeId)));
 
         mvc.perform(get("/api/recipes/{id}", recipeId))
                 .andExpect(status().isOk())
@@ -206,9 +206,9 @@ class ApiSmokeTest {
         // Seeded with recipe_servings = 2 and no range: 400 g beef (270), 1 Stück onion (40).
         int recipeId = recipeId("Klassische Rinder-Bolognese");
 
-        mvc.perform(get("/api/recipes"))
+        mvc.perform(get("/api/recipes").param("q", "Rinder-Bolognese"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].servingsMax", contains(nullValue())));
+                .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].servingsMax", contains(nullValue())));
 
         mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "4"))
                 .andExpect(status().isOk())
@@ -252,18 +252,18 @@ class ApiSmokeTest {
                 ps.executeUpdate();
             }
 
-            mvc.perform(get("/api/recipes"))
+            // the card carries the image links, the cuisine and the rating; description, image source, rating count
+            // and publish date are detail-only
+            mvc.perform(get("/api/recipes").param("q", "Anreicherungs-Testrezept"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].description", contains("Ein erfundener Text.")))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].imageUrl", contains("https://img.example.test/a.jpg")))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].thumbnailUrl",
+                    .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].imageUrl", contains("https://img.example.test/a.jpg")))
+                    .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].thumbnailUrl",
                             contains("https://img.example.test/thumb/a.jpg")))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].imageSource", contains("hellofresh")))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].cuisine", contains("Schwedisch")))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].ratingAvg", contains(4.33)))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].ratingCount", contains(120)))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].publishedDate", contains("2024-03-05")))
-                    .andExpect(jsonPath("$[?(@.id == " + plainId + ")].imageUrl", contains(nullValue())));
+                    .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].cuisine", contains("Schwedisch")))
+                    .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].ratingAvg", contains(4.33)))
+                    .andExpect(jsonPath("$.items[0].description").doesNotExist());
+            mvc.perform(get("/api/recipes").param("q", "Rinder-Bolognese"))
+                    .andExpect(jsonPath("$.items[?(@.id == " + plainId + ")].imageUrl", contains(nullValue())));
 
             mvc.perform(get("/api/recipes/{id}", recipeId))
                     .andExpect(status().isOk())
@@ -287,10 +287,10 @@ class ApiSmokeTest {
             insertIngredient(recipeId, 270, "g", "300");
             insertIngredient(recipeId, 40, "Stück", "1");
 
-            mvc.perform(get("/api/recipes"))
+            mvc.perform(get("/api/recipes").param("q", "Spanne-Testrezept"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].servings", contains(3)))
-                    .andExpect(jsonPath("$[?(@.id == " + recipeId + ")].servingsMax", contains(4)));
+                    .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].servings", contains(3)))
+                    .andExpect(jsonPath("$.items[?(@.id == " + recipeId + ")].servingsMax", contains(4)));
 
             // default: people / servings = 2/3
             mvc.perform(get("/api/recipes/{id}", recipeId).param("people", "2"))
@@ -537,10 +537,11 @@ class ApiSmokeTest {
                     .andExpect(jsonPath("$.tags[?(@.name=='TagTest-Tier')].source").value(contains("derived")))
                     .andExpect(jsonPath("$.tags[?(@.name=='TagTest-Hand')].source").value(contains("manual")));
 
-            mvc.perform(get("/api/recipes"))
+            mvc.perform(get("/api/recipes").param("q", "Tag-Test"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[?(@.id==" + recipeId + ")].tags[*]", contains("TagTest-Hand", "TagTest-Tier")))
-                    .andExpect(jsonPath("$[?(@.name=='Klassische Rinder-Bolognese')].tags").isArray());
+                    .andExpect(jsonPath("$.items[?(@.id==" + recipeId + ")].tags[*]", contains("TagTest-Hand", "TagTest-Tier")));
+            mvc.perform(get("/api/recipes").param("q", "Rinder-Bolognese"))
+                    .andExpect(jsonPath("$.items[?(@.name=='Klassische Rinder-Bolognese')].tags").isArray());
         } finally {
             try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
                 st.executeUpdate("DELETE FROM recipe_tag WHERE recipe_tag_recipe_id = " + recipeId);

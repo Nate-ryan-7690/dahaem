@@ -96,12 +96,12 @@ class DietFilterApiTest {
     void withoutRulesTheListIsUnchangedAndHasNoDietField() throws Exception {
         mvc.perform(get("/api/recipes"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(7)))
-                .andExpect(jsonPath("$[0].diet").doesNotExist())
-                .andExpect(jsonPath("$[*].id", contains(a, b, c, d, e, f, g)));
+                .andExpect(jsonPath("$.items", hasSize(7)))
+                .andExpect(jsonPath("$.items[0].diet").doesNotExist())
+                .andExpect(jsonPath("$.items[*].id", contains(a, b, c, d, e, f, g)));
         mvc.perform(get("/api/recipes").param("includeUnclear", "true"))
-                .andExpect(jsonPath("$", hasSize(7)))
-                .andExpect(jsonPath("$[0].diet").doesNotExist());
+                .andExpect(jsonPath("$.items", hasSize(7)))
+                .andExpect(jsonPath("$.items[0].diet").doesNotExist());
         mvc.perform(get("/api/recipes/{id}", a))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.diet").doesNotExist());
@@ -111,66 +111,66 @@ class DietFilterApiTest {
     void halalHidesPorkAndAlcoholAndMarksTheSalamiPizzaAnpassbar() throws Exception {
         mvc.perform(get("/api/recipes").param("diet", "halal"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].id", contains(a, c, g, d)))   // OK first, then anpassbar; unclear is left out
-                .andExpect(jsonPath("$[0].diet.status").value("OK"))
-                .andExpect(jsonPath("$[0].diet.hints", hasSize(0)))
-                .andExpect(jsonPath("$[0].diet.softHits").doesNotExist())
-                .andExpect(jsonPath("$[0].diet.unmatchedIngredients").doesNotExist())
-                .andExpect(jsonPath("$[3].diet.status").value("ANPASSBAR"))
-                .andExpect(jsonPath("$[3].diet.hints", hasSize(1)))
-                .andExpect(jsonPath("$[3].diet.hints[0].itemId").value(salami))
-                .andExpect(jsonPath("$[3].diet.hints[0].name").value("salami"))
-                .andExpect(jsonPath("$[3].diet.hints[0].allowedAnimals", contains("Geflügel", "Rind")))
-                .andExpect(jsonPath("$[3].diet.hints[0].possibleAnimals", contains("Geflügel", "Rind", "Schwein")));
+                .andExpect(jsonPath("$.items[*].id", contains(a, c, g, d)))   // OK first, then anpassbar; unclear is left out
+                .andExpect(jsonPath("$.items[0].diet.status").value("OK"))
+                .andExpect(jsonPath("$.items[0].diet.hints", hasSize(0)))
+                .andExpect(jsonPath("$.items[0].diet.softHits").doesNotExist())
+                .andExpect(jsonPath("$.items[0].diet.unmatchedIngredients").doesNotExist())
+                .andExpect(jsonPath("$.items[3].diet.status").value("ANPASSBAR"))
+                .andExpect(jsonPath("$.items[3].diet.hints", hasSize(1)))
+                .andExpect(jsonPath("$.items[3].diet.hints[0].itemId").value(salami))
+                .andExpect(jsonPath("$.items[3].diet.hints[0].name").value("salami"))
+                .andExpect(jsonPath("$.items[3].diet.hints[0].allowedAnimals", contains("Geflügel", "Rind")))
+                .andExpect(jsonPath("$.items[3].diet.hints[0].possibleAnimals", contains("Geflügel", "Rind", "Schwein")));
     }
 
     @Test
     void includeUnclearAlsoReturnsTheFlaggedRecipe() throws Exception {
         mvc.perform(get("/api/recipes").param("diet", "halal").param("includeUnclear", "true"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].id", contains(a, c, g, d, e)))
-                .andExpect(jsonPath("$[4].diet.status").value("UNCLEAR"));
+                .andExpect(jsonPath("$.items[*].id", contains(a, c, g, d, e)))
+                .andExpect(jsonPath("$.items[4].diet.status").value("UNCLEAR"));
         mvc.perform(get("/api/recipes").param("diet", "halal").param("includeUnclear", "false"))
-                .andExpect(jsonPath("$[*].id", not(hasItem(e))));
+                .andExpect(jsonPath("$.items[*].id", not(hasItem(e))));
     }
 
     @Test
     void vegetarischReturnsOnlyTheTaggedKnownRecipes() throws Exception {
         mvc.perform(get("/api/recipes").param("diet", "vegetarisch"))
-                .andExpect(jsonPath("$[*].id", contains(a, g)));
+                .andExpect(jsonPath("$.items[*].id", contains(a, g)));
         mvc.perform(get("/api/recipes").param("diet", "vegan"))
-                .andExpect(jsonPath("$[*].id", contains(a)));
+                .andExpect(jsonPath("$.items[*].id", contains(a)));
         mvc.perform(get("/api/recipes").param("diet", "vegetarisch").param("includeUnclear", "true"))
-                .andExpect(jsonPath("$[*].id", contains(a, g, e)));
+                .andExpect(jsonPath("$.items[*].id", contains(a, g, e)));
     }
 
     @Test
     void dietIsRepeatableAndTagsAndItemsAreHardRules() throws Exception {
         mvc.perform(get("/api/recipes").param("diet", "halal", "vegetarisch"))
-                .andExpect(jsonPath("$[*].id", contains(a, g)));
+                .andExpect(jsonPath("$.items[*].id", contains(a, g)));
         mvc.perform(get("/api/recipes").param("excludeTags", "Schwein,Rind"))
-                .andExpect(jsonPath("$[*].id", containsInAnyOrder(a, g, d)))   // e is hidden unless includeUnclear
-                .andExpect(jsonPath("$[?(@.id==" + d + ")].diet.status").value("ANPASSBAR"));
+                .andExpect(jsonPath("$.items[*].id", containsInAnyOrder(a, g, d)))   // e is hidden unless includeUnclear
+                .andExpect(jsonPath("$.items[?(@.id==" + d + ")].diet.status").value("ANPASSBAR"));
         mvc.perform(get("/api/recipes").param("excludeTags", "Schwein").param("excludeTags", "Rind")
                         .param("includeUnclear", "true"))
-                .andExpect(jsonPath("$[*].id", containsInAnyOrder(a, g, d, e)));
+                .andExpect(jsonPath("$.items[*].id", containsInAnyOrder(a, g, d, e)));
         mvc.perform(get("/api/recipes").param("excludeItems", String.valueOf(champignon)))
-                .andExpect(jsonPath("$[*].id", not(hasItem(g))))
-                .andExpect(jsonPath("$[*].id", hasItem(a)));
+                .andExpect(jsonPath("$.items[*].id", not(hasItem(g))))
+                .andExpect(jsonPath("$.items[*].id", hasItem(a)));
         mvc.perform(get("/api/recipes").param("excludeItems", carrot + "," + champignon))
-                .andExpect(jsonPath("$[*].id", containsInAnyOrder(b, c, f)));
+                .andExpect(jsonPath("$.items[*].id", containsInAnyOrder(b, c, f)));
     }
 
     @Test
     void softRulesKeepTheRecipeAndSortItAfterTheOthers() throws Exception {
         mvc.perform(get("/api/recipes").param("avoidTags", "Rind").param("avoidItems", String.valueOf(champignon)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(7)))
-                .andExpect(jsonPath("$[*].id", contains(a, b, e, c, d, f, g)))   // soft hits last (c, f, g; d only through a possible Rind), name order inside each group
-                .andExpect(jsonPath("$[?(@.id==" + c + ")].diet.softHits.tags[0]").value("Rind"))
-                .andExpect(jsonPath("$[?(@.id==" + g + ")].diet.softHits.items[0].name").value("champignons"))
-                .andExpect(jsonPath("$[?(@.id==" + a + ")].diet.softHits").isEmpty())
-                .andExpect(jsonPath("$[?(@.id==" + a + ")].diet.status").value("OK"));
+                .andExpect(jsonPath("$.items", hasSize(7)))
+                .andExpect(jsonPath("$.items[*].id", contains(a, b, e, c, d, f, g)))   // soft hits last (c, f, g; d only through a possible Rind), name order inside each group
+                .andExpect(jsonPath("$.items[?(@.id==" + c + ")].diet.softHits.tags[0]").value("Rind"))
+                .andExpect(jsonPath("$.items[?(@.id==" + g + ")].diet.softHits.items[0].name").value("champignons"))
+                .andExpect(jsonPath("$.items[?(@.id==" + a + ")].diet.softHits").isEmpty())
+                .andExpect(jsonPath("$.items[?(@.id==" + a + ")].diet.status").value("OK"));
     }
 
     @Test

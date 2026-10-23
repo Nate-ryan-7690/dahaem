@@ -139,6 +139,35 @@ public class TagRepository {
         return byRecipe;
     }
 
+    // Tag names of the given recipes only (for one page of the recipe list), same order as tagNamesByRecipe.
+    public java.util.Map<Integer, List<String>> tagNamesForRecipes(java.util.Collection<Integer> recipeIds){
+        java.util.Map<Integer, List<String>> byRecipe = new java.util.HashMap<>();
+        if (recipeIds.isEmpty()) {
+            return byRecipe;
+        }
+        // Only the number of placeholders is built here; the ids are bound.
+        String sql = "SELECT rt.recipe_tag_recipe_id, t.tag_name " +
+                "FROM recipe_tag rt " +
+                "INNER JOIN tag t ON t.tag_id = rt.recipe_tag_id " +
+                "WHERE rt.recipe_tag_recipe_id IN (" + String.join(",", java.util.Collections.nCopies(recipeIds.size(), "?")) + ") " +
+                "ORDER BY rt.recipe_tag_recipe_id, t.tag_category, t.tag_name";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            int i = 1;
+            for (int id : recipeIds) {
+                ps.setInt(i++, id);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    byRecipe.computeIfAbsent(rs.getInt(1), k -> new ArrayList<>()).add(rs.getString(2));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load the recipe tags", e);
+        }
+        return byRecipe;
+    }
+
     // Finds the ids of every recipe carrying this tag
     public List<Integer> recipesForTag(int tagId){
         String sql = "SELECT recipe_tag_recipe_id FROM recipe_tag WHERE recipe_tag_id = ?";
