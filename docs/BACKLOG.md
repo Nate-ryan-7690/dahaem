@@ -315,7 +315,7 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   an entry id, a date, an order within the day, servings per entry and an optional free label (no
   breakfast / lunch / dinner slots); endpoints for one week by date, add / edit / remove / move.
   Migration with a data move for existing plans → snapshot first, guarded.
-- **Recipe search and paging** — `in review`, PR #PRNUM. `GET /api/recipes` now searches (`q` name words,
+- **Recipe search and paging** — `in review`, PR #93. `GET /api/recipes` now searches (`q` name words,
   `ingredient`), filters (`tags`, `minTime` / `maxTime`, `servings`), sorts (`name`, `time`, `rating`, `newest`;
   ties by id) and pages (`page` from 1, `pageSize` default 24, max 100) on the server, and answers
   `{items, total, page, pageSize, totalPages}` with small cards. **Breaking for the PHP:** an object instead of a
