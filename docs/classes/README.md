@@ -269,5 +269,3 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`Units.Parsed`](shared.md#unitsparsed) | shared | record | A parsed unit: its dimension, and the factor that converts a quantity in it to the dimension's base unit. |
 | [`UserAdminRunner`](auth.md#useradminrunner) | auth | class | Command-line entry point for managing logins. |
 | [`VariantParser`](stores.md#variantparser) | stores | class | Splits the "Sorten:" block of an ALDI product description into flavour/size variants. |
-
-STALE-DOCS-TEST: this line is not generated and must be removed by the docs-update job.
