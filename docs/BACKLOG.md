@@ -38,8 +38,10 @@ document the contract. Its open decisions are settled with Nate one at a time.
   zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the recipe it stays a review. Source: Nate, step 3 of
   the recipe repair. **Corrected 2026-11-03 (Nate, item rule):** Gemüsebrühe, Rinderbrühe and Geflügelbrühe are
   three different items, so a step naming one type belongs only to a line of that type; Fond is a different product
-  from Brühe (own family `fond`, never matched with Brühe). Open for Nate: does a bare `Brühe` step still fill the
-  recipe's only stock line (what the PR does), or only the plain item 1851 `Brühe`?
+  from Brühe (own family `fond`, never matched with Brühe). **Settled 2026-11-03 (Nate):** a step that names no type
+  (bare `Brühe`) fills the recipe's only stock line; a step that names a type (Hähnchen-, Rinder-, Gemüsebrühe …)
+  fills only a line of that type. Known gaps, not built: Hähnchenbrühe is not treated as Geflügelbrühe (no alias
+  rule), and a typed step that matches no line leaves the line "to taste" instead of a review.
 - **Stock and fond as catalogue items: one per type, quantity in litres** — `idea`, Nate 2026-11-03. Each type is its
   own generic item (Gemüsebrühe, Rinderbrühe, Geflügelbrühe, and each fond: Kalbsfond, Fischfond …; fond ≠ Brühe).
   The form is not a separate item: powder, cube (Würfel) and glass / paste of one type are the SAME item. Their
