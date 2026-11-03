@@ -330,12 +330,16 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   (`mealTime` is a required non-blank text on add; DELETE addresses the recipe, not an entry). Audit adds: each
   planned entry carries its recipe thumbnail and servings so Home and the planner need no call per meal.
   Migration with a data move for existing plans → snapshot first, guarded.
-- **Recipe search and paging** — `in review`, PR #93. `GET /api/recipes` now searches (`q` name words,
+- **Recipe search and paging** — `in review`, PR #93. The new `GET /api/recipes/search` searches (`q` name words,
   `ingredient`), filters (`tags`, `minTime` / `maxTime`, `servings`), sorts (`name`, `time`, `rating`, `newest`;
   ties by id) and pages (`page` from 1, `pageSize` default 24, max 100) on the server, and answers
-  `{items, total, page, pageSize, totalPages}` with small cards. **Breaking for the PHP:** an object instead of a
-  plain array, 24 recipes without paging parameters, and the card lost `description`, `calories`, `imageSource`,
-  `ratingCount`, `publishedDate` (still in the detail). Contract and example: README "Recipe search and paging".
+  `{items, total, page, pageSize, totalPages}` with small cards (no `description`, `calories`, `imageSource`,
+  `ratingCount`, `publishedDate`: they stay in the detail). **`GET /api/recipes` is unchanged** (the plain array of
+  every recipe), so the PHP keeps working until it moves to `/search` (Nate's decision 2026-11-03; the old endpoint
+  can go once the PHP list and the planner picker use the new one). Contract and example: README "Recipe search
+  and paging". Decided by Nate 2026-11-03: diet verdicts in the list may be 60 s old; page size 24; a bad paging
+  value is a 400; recipes without a time are hidden while a time filter is on (until the data is cleaned, see
+  "Recipes without a time"); with diet rules the list is grouped by diet fit and then sorted; the card stays as is.
   The diet rules page too: SQL narrows to candidate ids, the verdicts come from a 60 s in-memory snapshot of the
   facts in `DietFilterService` (`dahaem.diet.cache-seconds`), so a page request no longer loads all recipes.
   Deferred from it: (a) accent- and typo-tolerant search (`gemuese` ≠ `gemüse` today; `LIKE` on 11,000 rows is
@@ -344,10 +348,17 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   basis — Nate decides which the page shows; (c) search by ingredient item id (`ingredientItems=`) for "use up
   what I have" — needs the item picker first; (d) the snapshot is per process: the tagger / importer run
   elsewhere, so a listed verdict can be up to 60 s old (the detail judges fresh) — a data-version check would
-  remove that; (e) the PHP recipe list and the planner's recipe picker have to move to the new response.
-  (f) lists of tags, cuisines and diet presets so the filter controls can be built from data (asked for by the API
-  audit, `docs/api-audit-ui.md`; not in this PR). The audit's other ask, no `diet` block on cards unless rules
-  are sent, is already how the card works.
+  remove that; (e) the PHP recipe list and the planner's recipe picker have to move to `/api/recipes/search` (then
+  the plain list can be removed). (f) lists of tags, cuisines and diet presets so the filter controls can be built
+  from data (asked for by the API audit, `docs/api-audit-ui.md`; not in this PR). The audit's other ask, no `diet`
+  block on cards unless rules are sent, is already how the card works.
+- **Recipes without a time** — `next`, Nate 2026-11-03. Some recipes have no prep or cook time (stored as 0), so
+  the time filter and the `time` sort cannot place them. Nate: with a dataset this large there is no need to work
+  with incomplete data: give a time to every recipe that is otherwise complete, and for the rest either complete
+  them or remove them from the databank. First, read-only: how many recipes have prep + cook = 0 and which of them
+  are otherwise complete (the page cache may hold the times for some). Removing recipes is a live-data change:
+  snapshot first (keep at most 3), guarded SQL, Nate's approval; nothing is deleted before that. Until then the
+  search hides them while a time filter is on.
 - **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in

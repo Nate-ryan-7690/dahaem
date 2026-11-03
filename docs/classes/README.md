@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (51)"]
+    api["api (52)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (3)"]
@@ -21,10 +21,10 @@ flowchart TD
     suggestions["suggestions (3)"]
     tags["tags (29)"]
     api -->|7| auth
-    api -->|6| diet
+    api -->|9| diet
     api -->|4| finance
     api -->|4| inventory
-    api -->|20| mealplanner
+    api -->|21| mealplanner
     api -->|11| shopping
     api -->|2| stores
     api -->|4| suggestions
@@ -45,7 +45,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 51 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 52 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
@@ -219,6 +219,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`RecipeSort`](mealplanner.md#recipesort) | mealplanner | enum | The sort orders of the recipe list. |
 | [`RecipeSuggestion`](suggestions.md#recipesuggestion) | suggestions | class | Plain data holder for one ranked recipe suggestion: the recipe, how many of its ingredients matched the signal (expiring soon / on sale), and which inventory items matched. |
 | [`RecipeSuggestionDto`](api.md#recipesuggestiondto) | api | record | A ranked recipe suggestion: which recipe, how strongly it matched the signal, and why. |
+| [`RecipeSummaryDto`](api.md#recipesummarydto) | api | record | A recipe in a list: identity and the numbers you'd scan a list by. |
 | [`RecipeTagger`](tags.md#recipetagger) | tags | class | Works out the tags a recipe gets from DAHÄM's own data. |
 | [`RecipeTagger.Derivation`](tags.md#recipetaggerderivation) | tags | record | The result for one recipe. |
 | [`RecipeTagRepository`](tags.md#recipetagrepository) | tags | class | All SQL for the derived-tag run: reads the recipes and their tags, and writes derived recipe_tag rows. |

@@ -347,12 +347,16 @@ classDiagram
     class api_RecipeDetailDto_Instruction["RecipeDetailDto.Instruction"] {
         <<record>>
     }
+    class api_RecipeSummaryDto["RecipeSummaryDto"] {
+        <<record>>
+    }
     class mealplanner_RecipeRepository["RecipeRepository"]
     class mealplanner_RecipeService["RecipeService"]
     api_RecipeCardDto ..> mealplanner_Recipe
     api_RecipeController ..> mealplanner_Recipe
     api_RecipeDetailDto ..> mealplanner_Recipe
     api_RecipeDetailDto_Instruction ..> mealplanner_Recipe
+    api_RecipeSummaryDto ..> mealplanner_Recipe
     mealplanner_RecipeRepository ..> mealplanner_Recipe
     mealplanner_RecipeSearchService_Entry --> mealplanner_Recipe
     mealplanner_RecipeService ..> mealplanner_Recipe
@@ -406,7 +410,7 @@ classDiagram
 | `LocalDate getPublishedDate()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `RecipeCardDto`, `RecipeController`, `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`
+**Referenced by:** `RecipeCardDto`, `RecipeController`, `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`, `RecipeSummaryDto`
 
 ## RecipeIngredient
 

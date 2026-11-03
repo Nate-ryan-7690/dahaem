@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-51 types in 38 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+52 types in 39 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -117,6 +117,9 @@ classDiagram
     class api_RecipeSuggestionDto["RecipeSuggestionDto"] {
         <<record>>
     }
+    class api_RecipeSummaryDto["RecipeSummaryDto"] {
+        <<record>>
+    }
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
@@ -178,6 +181,7 @@ classDiagram
     api_PurchaseController ..> api_CreatePurchaseRequest
     api_PurchaseController ..> api_SpendingDto
     api_RecipeCardDto --> api_DietDto
+    api_RecipeController ..> api_RecipeSummaryDto
     api_RecipeController ..> api_RecipePageDto
     api_RecipeController ..> api_RecipeDetailDto
     api_RecipeController ..> api_TagDto
@@ -188,6 +192,7 @@ classDiagram
     api_RecipeDetailDto *-- api_RecipeDetailDto_Instruction
     api_RecipeDetailDto --> api_DietDto
     api_RecipePageDto --> api_RecipeCardDto
+    api_RecipeSummaryDto --> api_DietDto
     api_SecurityConfig ..> api_InternalTokenFilter
     api_ShoppingListController ..> api_ShoppingListDto
     api_ShoppingListDto *-- api_ShoppingListDto_Line
@@ -241,6 +246,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`RecipeDetailDto.Instruction`](#recipedetaildtoinstruction) | record |  | instruction is the step as stored (HelloFresh's 1 EL [1,5 EL \| 2 EL] Butter*); scaledInstruction is the same step with its amounts for people (see StepAmounts) — without people it is the stored text with each bracket resolved to the recipe' |
 | [`RecipePageDto`](#recipepagedto) | record |  | One page of GET /api/recipes. |
 | [`RecipeSuggestionDto`](#recipesuggestiondto) | record |  | A ranked recipe suggestion: which recipe, how strongly it matched the signal, and why. |
+| [`RecipeSummaryDto`](#recipesummarydto) | record |  | A recipe in a list: identity and the numbers you'd scan a list by. |
 | [`SecurityConfig`](#securityconfig) | class | configuration | Who may call the API. |
 | [`SelectStoreItemRequest`](#selectstoreitemrequest) | record |  | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](#serviceconfig) | class | configuration | Wires the existing plain-Java repositories and services as Spring beans. |
@@ -642,6 +648,9 @@ classDiagram
     class api_RecipeDetailDto["RecipeDetailDto"] {
         <<record>>
     }
+    class api_RecipeSummaryDto["RecipeSummaryDto"] {
+        <<record>>
+    }
     class diet_DietVerdict["DietVerdict"] {
         <<record>>
     }
@@ -656,6 +665,7 @@ classDiagram
     api_DietDto ..> tags_RecipeFacts
     api_RecipeCardDto --> api_DietDto
     api_RecipeDetailDto --> api_DietDto
+    api_RecipeSummaryDto --> api_DietDto
 ```
 
 | Component | Type |
@@ -669,7 +679,7 @@ classDiagram
 |---|---|---|
 | `DietDto from(DietVerdict verdict, List<RecipeFacts.Unmatched> unmatched)` | package static |  |
 
-**Referenced by:** `RecipeCardDto`, `RecipeDetailDto`
+**Referenced by:** `RecipeCardDto`, `RecipeDetailDto`, `RecipeSummaryDto`
 
 ## DietDto.Hint
 
@@ -1406,6 +1416,7 @@ classDiagram
         -DietFilterService dietFilter
         -RecipeSearchService searchService
         +RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService)
+        +all(List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) List~RecipeSummaryDto~
         +search(String q, List~String~ ingredient, List~String~ tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) RecipePageDto
         +byId(int id, Integer people, String basis, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) RecipeDetailDto
         +tags(int id) List~TagDto~
@@ -1416,6 +1427,9 @@ classDiagram
     class tags_TagService["TagService"]
     class diet_DietFilterService["DietFilterService"]
     class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class api_RecipeSummaryDto["RecipeSummaryDto"] {
+        <<record>>
+    }
     class api_RecipePageDto["RecipePageDto"] {
         <<record>>
     }
@@ -1433,6 +1447,7 @@ classDiagram
     api_RecipeController --> tags_TagService
     api_RecipeController --> diet_DietFilterService
     api_RecipeController --> mealplanner_RecipeSearchService
+    api_RecipeController ..> api_RecipeSummaryDto
     api_RecipeController ..> api_RecipePageDto
     api_RecipeController ..> api_RecipeDetailDto
     api_RecipeController ..> api_TagDto
@@ -1450,7 +1465,8 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService)` | public |  |
-| `RecipePageDto search(String q, List<String> ingredient, List<String> tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | Search the recipes: one page of cards plus the total. |
+| `List<RecipeSummaryDto> all(List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | All recipes by name. |
+| `RecipePageDto search(String q, List<String> ingredient, List<String> tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | GET /api/recipes/search: search the recipes, one page of cards plus the total. |
 | `RecipeDetailDto byId(int id, Integer people, String basis, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | The recipe with its ingredients and instructions. |
 | `List<TagDto> tags(int id)` | public |  |
 | `TagDto addTag(int id, AddTagRequest request)` | public | Tags the recipe, creating the tag first if no tag with that name exists. |
@@ -1470,7 +1486,7 @@ with the amounts for that count. basis is the one actually used: "max" only when
 it was asked for and the recipe is a range. scalable is false when that servings count is
 not positive, in which case nothing is scaled. The enrichment fields (description,
 imageUrl, thumbnailUrl, imageSource, cuisine, ratingAvg,
-ratingCount, publishedDate) are the recipe's page data (the list card shows only some of them); null when missing. tags are the recipe's tags, sorted by group then name:
+ratingCount, publishedDate) are as in RecipeSummaryDto; null when missing. tags are the recipe's tags, sorted by group then name:
 source is "manual" (added by a person) or "derived" (worked out from DAHÄM's data).
 diet is present only when diet rules were passed (see DietDto): the status, the hints and the
 recipe's unmatched ingredient lines.
@@ -1815,6 +1831,84 @@ classDiagram
 | `RecipeSuggestionDto from(RecipeSuggestion suggestion)` | package static |  |
 
 **Referenced by:** `SuggestionController`
+
+## RecipeSummaryDto
+
+*record*
+
+A recipe in a list: identity and the numbers you'd scan a list by. servingsMax is the
+upper bound of a "3 – 4 Personen" range (servings is then the lower bound), null otherwise.
+The enrichment fields are null when the recipe has no such data: imageUrl / thumbnailUrl
+are links (the browser loads the image from its source), imageSource says where the image
+comes from (hellofresh, own or generated), cuisine is one German name,
+ratingAvg is 0 - 5 with 2 decimals.
+tags are the recipe's tag names (no group or source: GET /api/recipes/{id} has those),
+sorted by group then name; empty when it has none.
+diet is present only when diet rules were passed to GET /api/recipes (see DietDto).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_RecipeSummaryDto["RecipeSummaryDto"] {
+        <<record>>
+        +int id
+        +String name
+        +int servings
+        +Integer servingsMax
+        +int prepTime
+        +int cookTime
+        +Integer calories
+        +String description
+        +String imageUrl
+        +String thumbnailUrl
+        +String imageSource
+        +String cuisine
+        +BigDecimal ratingAvg
+        +Integer ratingCount
+        +LocalDate publishedDate
+        +List~String~ tags
+        +DietDto diet
+        ~from(Recipe recipe, List~String~ tags) RecipeSummaryDto$
+        ~from(Recipe recipe, List~String~ tags, DietDto diet) RecipeSummaryDto$
+    }
+    class api_DietDto["DietDto"] {
+        <<record>>
+    }
+    class mealplanner_Recipe["Recipe"]
+    class api_RecipeController["RecipeController"] {
+        <<controller>>
+    }
+    api_RecipeSummaryDto --> api_DietDto
+    api_RecipeSummaryDto ..> mealplanner_Recipe
+    api_RecipeController ..> api_RecipeSummaryDto
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+| `servings` | `int` |
+| `servingsMax` | `Integer` |
+| `prepTime` | `int` |
+| `cookTime` | `int` |
+| `calories` | `Integer` |
+| `description` | `String` |
+| `imageUrl` | `String` |
+| `thumbnailUrl` | `String` |
+| `imageSource` | `String` |
+| `cuisine` | `String` |
+| `ratingAvg` | `BigDecimal` |
+| `ratingCount` | `Integer` |
+| `publishedDate` | `LocalDate` |
+| `tags` | `List<String>` |
+| `diet` | `DietDto` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `RecipeSummaryDto from(Recipe recipe, List<String> tags)` | package static |  |
+| `RecipeSummaryDto from(Recipe recipe, List<String> tags, DietDto diet)` | package static |  |
+
+**Referenced by:** `RecipeController`
 
 ## SecurityConfig
 

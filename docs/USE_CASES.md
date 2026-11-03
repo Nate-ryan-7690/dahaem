@@ -32,20 +32,21 @@ flowchart LR
     end
     subgraph g_Recipe["Recipe"]
         u14(["GET /api/recipes"])
-        u15(["GET /api/recipes/{id}"])
-        u16(["GET /api/recipes/{id}/tags"])
-        u17(["POST /api/recipes/{id}/tags"])
+        u15(["GET /api/recipes/search"])
+        u16(["GET /api/recipes/{id}"])
+        u17(["GET /api/recipes/{id}/tags"])
+        u18(["POST /api/recipes/{id}/tags"])
     end
     subgraph g_ShoppingList["ShoppingList"]
-        u18(["GET /api/shopping-list"])
+        u19(["GET /api/shopping-list"])
     end
     subgraph g_ShoppingListItem["ShoppingListItem"]
-        u19(["GET /api/shopping-lists/{listId}"])
-        u20(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
+        u20(["GET /api/shopping-lists/{listId}"])
+        u21(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
     end
     subgraph g_Suggestion["Suggestion"]
-        u21(["GET /api/suggestions/by-expiring"])
-        u22(["GET /api/suggestions/by-savings"])
+        u22(["GET /api/suggestions/by-expiring"])
+        u23(["GET /api/suggestions/by-savings"])
     end
     member --> u1
     member --> u2
@@ -69,6 +70,7 @@ flowchart LR
     member --> u20
     member --> u21
     member --> u22
+    member --> u23
 ```
 
 Each use case is one endpoint; the parameters, bodies and answers are in [API.md](API.md). What a member actually does with them:

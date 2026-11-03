@@ -13,14 +13,17 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * GET /api/recipes as a search: envelope, default page size, search, filters, paging and the diet rules together,
- * through the full Spring context on made-up recipes in a throwaway MariaDB (Testcontainers).
+ * GET /api/recipes/search: envelope, default page size, search, filters, paging and the diet rules together,
+ * through the full Spring context on made-up recipes in a throwaway MariaDB (Testcontainers). The plain
+ * GET /api/recipes stays what it was: an array of every recipe.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -65,7 +68,7 @@ class RecipeSearchApiTest {
 
     @Test
     void withoutParametersYouGetTheFirstDefaultPageNotEverything() throws Exception {
-        mvc.perform(get("/api/recipes"))
+        mvc.perform(get("/api/recipes/search"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(24)))
                 .andExpect(jsonPath("$.total").value(33))
@@ -74,13 +77,28 @@ class RecipeSearchApiTest {
                 .andExpect(jsonPath("$.totalPages").value(2))
                 .andExpect(jsonPath("$.items[0].id").value(a))
                 .andExpect(jsonPath("$.items[0].diet").doesNotExist());
-        mvc.perform(get("/api/recipes").param("page", "2"))
+        mvc.perform(get("/api/recipes/search").param("page", "2"))
                 .andExpect(jsonPath("$.items", hasSize(9)));
     }
 
     @Test
+    void theOldListStaysAPlainArrayOfEveryRecipe() throws Exception {
+        mvc.perform(get("/api/recipes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(33)))
+                .andExpect(jsonPath("$[0].id").value(a))
+                .andExpect(jsonPath("$[0].name").value("Aaa Gemüse"))
+                .andExpect(jsonPath("$.items").doesNotExist());
+        mvc.perform(get("/api/recipes").param("diet", "vegetarisch"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", hasItem(a)))
+                .andExpect(jsonPath("$[*].id", not(hasItem(b))))
+                .andExpect(jsonPath("$[0].diet.status").value("OK"));
+    }
+
+    @Test
     void theCardHasJustWhatAListNeedsAndTheDetailIsUnchanged() throws Exception {
-        mvc.perform(get("/api/recipes").param("q", "gemüse"))
+        mvc.perform(get("/api/recipes/search").param("q", "gemüse"))
                 .andExpect(jsonPath("$.items", hasSize(1)))
                 .andExpect(jsonPath("$.items[0].id").value(a))
                 .andExpect(jsonPath("$.items[0].name").value("Aaa Gemüse"))
@@ -103,27 +121,27 @@ class RecipeSearchApiTest {
 
     @Test
     void searchAndFiltersCombine() throws Exception {
-        mvc.perform(get("/api/recipes").param("ingredient", "karotten"))
+        mvc.perform(get("/api/recipes/search").param("ingredient", "karotten"))
                 .andExpect(jsonPath("$.items[*].id", contains(a, c)))
                 .andExpect(jsonPath("$.total").value(2));
-        mvc.perform(get("/api/recipes").param("ingredient", "karotten").param("tags", "schnell"))
+        mvc.perform(get("/api/recipes/search").param("ingredient", "karotten").param("tags", "schnell"))
                 .andExpect(jsonPath("$.items[*].id", contains(a)));
-        mvc.perform(get("/api/recipes").param("tags", "vegetarisch").param("maxTime", "20").param("sort", "name"))
+        mvc.perform(get("/api/recipes/search").param("tags", "vegetarisch").param("maxTime", "20").param("sort", "name"))
                 .andExpect(jsonPath("$.items[*].id", contains(a, c)));
-        mvc.perform(get("/api/recipes").param("minTime", "60"))
+        mvc.perform(get("/api/recipes/search").param("minTime", "60"))
                 .andExpect(jsonPath("$.items[*].id", contains(b)));
-        mvc.perform(get("/api/recipes").param("servings", "2").param("q", "suppe"))
+        mvc.perform(get("/api/recipes/search").param("servings", "2").param("q", "suppe"))
                 .andExpect(jsonPath("$.items[*].id", contains(c)));
     }
 
     @Test
     void pagingWalksTheResultOnceAndAPastTheEndPageIsEmpty() throws Exception {
-        mvc.perform(get("/api/recipes").param("pageSize", "2").param("page", "1"))
+        mvc.perform(get("/api/recipes/search").param("pageSize", "2").param("page", "1"))
                 .andExpect(jsonPath("$.items[*].id", contains(a, b)))
                 .andExpect(jsonPath("$.totalPages").value(17));
-        mvc.perform(get("/api/recipes").param("pageSize", "2").param("page", "2"))
+        mvc.perform(get("/api/recipes/search").param("pageSize", "2").param("page", "2"))
                 .andExpect(jsonPath("$.items[0].id").value(c));
-        mvc.perform(get("/api/recipes").param("pageSize", "2").param("page", "99"))
+        mvc.perform(get("/api/recipes/search").param("pageSize", "2").param("page", "99"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(0)))
                 .andExpect(jsonPath("$.total").value(33));
@@ -131,7 +149,7 @@ class RecipeSearchApiTest {
 
     @Test
     void dietRulesPageTooAndHiddenRecipesAreNotCounted() throws Exception {
-        mvc.perform(get("/api/recipes").param("excludeTags", "Schwein").param("includeUnclear", "true")
+        mvc.perform(get("/api/recipes/search").param("excludeTags", "Schwein").param("includeUnclear", "true")
                         .param("pageSize", "2"))
                 .andExpect(jsonPath("$.total").value(32))
                 .andExpect(jsonPath("$.totalPages").value(16))
@@ -140,15 +158,15 @@ class RecipeSearchApiTest {
 
     @Test
     void dietRulesKeepTheStatusPerCardAndCombineWithSearchAndPaging() throws Exception {
-        mvc.perform(get("/api/recipes").param("diet", "vegetarisch").param("q", "ccc"))
+        mvc.perform(get("/api/recipes/search").param("diet", "vegetarisch").param("q", "ccc"))
                 .andExpect(jsonPath("$.total").value(1))
                 .andExpect(jsonPath("$.items[0].id").value(c))
                 .andExpect(jsonPath("$.items[0].diet.status").value("OK"));
-        mvc.perform(get("/api/recipes").param("diet", "vegetarisch").param("pageSize", "1").param("page", "2"))
+        mvc.perform(get("/api/recipes/search").param("diet", "vegetarisch").param("pageSize", "1").param("page", "2"))
                 .andExpect(jsonPath("$.total").value(2))
                 .andExpect(jsonPath("$.items", hasSize(1)))
                 .andExpect(jsonPath("$.items[0].diet.status").value("OK"));
-        mvc.perform(get("/api/recipes").param("avoidTags", "Schwein").param("pageSize", "50"))
+        mvc.perform(get("/api/recipes/search").param("avoidTags", "Schwein").param("pageSize", "50"))
                 .andExpect(jsonPath("$.total").value(33))
                 .andExpect(jsonPath("$.items[32].id").value(b))   // soft hit sorts last
                 .andExpect(jsonPath("$.items[32].diet.softHits.tags[0]").value("Schwein"));
@@ -158,10 +176,10 @@ class RecipeSearchApiTest {
     void badParametersAre400() throws Exception {
         for (String[] bad : new String[][]{{"page", "0"}, {"pageSize", "0"}, {"pageSize", "101"}, {"page", "abc"},
                 {"sort", "random"}, {"minTime", "-1"}, {"servings", "0"}, {"diet", "paleo"}}) {
-            mvc.perform(get("/api/recipes").param(bad[0], bad[1]))
+            mvc.perform(get("/api/recipes/search").param(bad[0], bad[1]))
                     .andExpect(status().isBadRequest());
         }
-        mvc.perform(get("/api/recipes").param("minTime", "30").param("maxTime", "10"))
+        mvc.perform(get("/api/recipes/search").param("minTime", "30").param("maxTime", "10"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("minTime")));
     }
