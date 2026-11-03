@@ -318,9 +318,10 @@ not legal advice; verify before any public release.
 
 Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
 
-- **API audit for the UI** — `in progress`, done in this PR (2026-10-23): `docs/api-audit-ui.md` has a table per
-  page (10 pages, 87 needed calls: 14 covered, 21 partly, 52 missing) and 19 open questions for Nate. Every gap is
-  an item in this section. Correction to the earlier note: a recipe CAN be removed from a plan
+- **API audit for the UI** — `in progress`, audit merged in PR #92 (2026-10-23): `docs/api-audit-ui.md` has a table
+  per page (10 pages, 87 needed calls: 17 covered, 18 partly, 52 missing; recounted 2026-11-03 after PR #93 added
+  `GET /api/recipes/search`, which covers rows 3.8, 4.1 and 4.2, were 14 / 21 / 52) and 19 open questions for Nate.
+  Every gap is an item in this section. Correction to the earlier note: a recipe CAN be removed from a plan
   (`DELETE /api/meal-plans/{id}/recipes/{recipeId}`); what is missing is editing / moving an entry and reading
   one week. Move to Done when merged.
 - **Meal plan: any day, any number of meals** — `next`. `meal_plan_recipe` has no date, its key

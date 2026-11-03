@@ -1,6 +1,6 @@
 # API audit for the UI
 
-**Date:** 2026-10-23 · **Status:** read-only analysis, no code changed · **Backlog item:** "API audit for the UI"
+**Date:** 2026-10-23 (rows 3.8, 4.1, 4.2 and the counts updated 2026-11-03 after PR #93) · **Status:** read-only analysis, no code changed · **Backlog item:** "API audit for the UI"
 (`docs/BACKLOG.md`, section "API work for the frontend (from the UX spec)")
 
 **Sources:** `docs/ux-product-spec.md` (§4 journeys, §5 pages, §12 support tickets), the controllers in
@@ -12,9 +12,9 @@ database. Where the spec leaves a decision open this document lists an open ques
 - **10 pages** audited: Login, Home, Meal Planner, Recipes, Shopping list, Inventory, Offers, Purchases / receipts /
   finances, Profile / household settings, Help & Support. (The first seven are the ones the backlog item names; the
   last three are the other pages the spec defines, §5.8, §5.9 and §12.)
-- **87 calls** needed in total. **14 are covered** by an existing endpoint, **21 partly** (the endpoint exists but is
+- **87 calls** needed in total. **17 are covered** by an existing endpoint, **18 partly** (the endpoint exists but is
   inadequate), **52 are MISSING**. Per-page counts are in the table "Counts" below.
-- The API today has **24 endpoints** (`docs/API.md`), none for stores, offers, settings, households beyond `/me`,
+- The API today has **25 endpoints** (`docs/API.md`, now including `GET /api/recipes/search` from PR #93), none for stores, offers, settings, households beyond `/me`,
   receipts or support.
 - **The backlog's "known so far" was slightly off in one place:** meal plans can also *remove* a recipe
   (`DELETE /api/meal-plans/{id}/recipes/{recipeId}`). They still cannot be edited or moved, and one week cannot be
@@ -67,7 +67,7 @@ Legend: **OK** = exists and fits · **PARTIAL** = exists but inadequate (what is
 | 3.5 | Edit / move a planned meal (day, servings, label) | **MISSING** | No PUT / PATCH. |
 | 3.6 | Servings per planned meal | **MISSING** | No servings column on the plan entry; `?people=N` is only a parameter of the shopping-list generation, one value for the whole plan. |
 | 3.7 | Previous / next week | **MISSING** | Follows from 3.1: needs a week-by-date read. |
-| 3.8 | Recipe picker (search, filter, page, thumbnails) | `GET /api/recipes` — **PARTIAL** | Returns all ~11,000 recipes. See 4.1. |
+| 3.8 | Recipe picker (search, filter, page, thumbnails) | `GET /api/recipes/search` — OK | Covered since PR #93: `q`, `tags`, `minTime` / `maxTime`, `servings`, `sort`, `page` / `pageSize` and a `thumbnailUrl` on every card. See 4.1. The plain `GET /api/recipes` (every recipe, ~11,000) is unchanged and stays until the PHP has moved to `/search`. |
 | 3.9 | Planned meal with image and detail | **MISSING** | See 2.3. |
 | 3.10 | Generate shopping needs from the week | `POST /api/meal-plans/{id}/shopping-list` — OK | One `people` for the whole plan; see 3.6. Persisted list problems: see 5.x. |
 | 3.11 | Plan is shared household state | **MISSING** | `meal_plan` has no household column (docs/DATABASE.md: one shared household today). Backlog "Household isolation". |
@@ -76,8 +76,8 @@ Legend: **OK** = exists and fits · **PARTIAL** = exists but inadequate (what is
 
 | # | Needed call | Existing endpoint | Notes |
 |---|---|---|---|
-| 4.1 | Search by name / ingredient, filters, paging | `GET /api/recipes` — **PARTIAL** | Returns every recipe, no `q`, no `page` / `size`, no sort. Only diet / tag / item rules filter. The server-side diet filter loads the facts of every recipe per request. Already in the backlog ("Recipe search and paging"). |
-| 4.2 | Small card DTO | `GET /api/recipes` — **PARTIAL** | `RecipeSummaryDto` already has name, thumbnail, times, tags, cuisine, rating; it also carries the whole `diet` block, which a card rarely needs. |
+| 4.1 | Search by name / ingredient, filters, paging | `GET /api/recipes/search` — OK | Covered since PR #93: name words (`q`), `ingredient`, `tags`, `minTime` / `maxTime`, `servings`, `sort` (`name`, `time`, `rating`, `newest`), paging with `total` / `totalPages`; the diet rules page too, from a 60 s snapshot. Not yet (backlog "Recipe search and paging"): accent- and typo-tolerant search, filters on cuisine / calories / rating. Recipes without a time are hidden while a time filter is on (backlog "Recipes without a time"). The plain `GET /api/recipes` is unchanged. |
+| 4.2 | Small card DTO | `GET /api/recipes/search` — OK | Covered since PR #93: `RecipeCardDto` has `id`, `name`, image and thumbnail links, `prepTime` / `cookTime` / `totalTime`, `servings` / `servingsMax`, `cuisine`, `ratingAvg` and `tags`; `diet` only when diet rules were sent. |
 | 4.3 | Recipe detail, ingredients, instructions | `GET /api/recipes/{id}` — OK | |
 | 4.4 | Scale to N people | `GET /api/recipes/{id}?people=N&basis=` — OK | Scaling stays in the backend as the spec asks. |
 | 4.5 | Why is this recipe suggested (offers / stock evidence) | **MISSING** | See 2.5. |
@@ -174,17 +174,20 @@ Legend: **OK** = exists and fits · **PARTIAL** = exists but inadequate (what is
 |---|---:|---:|---:|---:|
 | 1 Login | 7 | 2 | 3 | 2 |
 | 2 Home | 10 | 2 | 3 | 5 |
-| 3 Meal Planner | 11 | 2 | 3 | 6 |
-| 4 Recipes | 10 | 3 | 4 | 3 |
+| 3 Meal Planner | 11 | 3 | 2 | 6 |
+| 4 Recipes | 10 | 5 | 2 | 3 |
 | 5 Shopping list | 13 | 3 | 2 | 8 |
 | 6 Inventory | 10 | 1 | 3 | 6 |
 | 7 Offers | 8 | 0 | 1 | 7 |
 | 8 Purchases | 7 | 1 | 2 | 4 |
 | 9 Profile / household | 6 | 0 | 0 | 6 |
 | 10 Help & Support | 5 | 0 | 0 | 5 |
-| **Total** | **87** | **14** | **21** | **52** |
+| **Total** | **87** | **17** | **18** | **52** |
 
 Row 5.11 (group by store) is counted OK because the data to group by is already in the list answer.
+
+Updated 2026-11-03: rows 3.8, 4.1 and 4.2 moved from PARTIAL to OK when `GET /api/recipes/search` merged (PR #93), so
+Meal Planner is 3 / 2 / 6 and Recipes 5 / 2 / 3; the other 84 rows are as of 2026-10-23.
 
 ## Possible bugs and contract problems found
 
