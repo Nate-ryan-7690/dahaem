@@ -239,14 +239,40 @@ class AmountlessLineRulesTest(unittest.TestCase):
         p = self.parse(["Stück mittelscharfer Senf"], ["1 TL Senf verrühren."])
         self.assertEqual((Decimal(1), "TL", False, "steps"), lines_of(p)[937])
 
-    def test_a_generic_stock_belongs_to_the_only_stock_of_the_recipe(self):
+    def test_a_bare_stock_belongs_to_the_only_stock_of_the_recipe(self):
         for line in ("Stück Gemüsebrühe", "Stück Rinderbrühe", "Stück Geflügelbrühe"):
             with self.subTest(line=line):
                 p = self.parse([line], ["100 ml Brühe zubereiten."])
                 self.assertEqual(1, len(lines_of(p)))
                 self.assertEqual((Decimal(100), "ml", False, "steps"), list(lines_of(p).values())[0])
-                p = self.parse([line], ["100 ml Gemüsebrühe zubereiten."])
-                self.assertEqual((Decimal(100), "ml", False, "steps"), list(lines_of(p).values())[0])
+
+    def test_a_step_naming_a_stock_type_belongs_only_to_that_type(self):
+        # Gemüse-, Rinder- and Geflügelbrühe are three different items (item rule): a step names one of them
+        # and only a recipe line of the same type takes its amount.
+        types = {"Gemüsebrühe": "Stück Gemüsebrühe", "Rinderbrühe": "Stück Rinderbrühe",
+                 "Geflügelbrühe": "Stück Geflügelbrühe"}
+        for step_type in types:
+            for line_type, line in types.items():
+                with self.subTest(step=step_type, line=line_type):
+                    p = self.parse([line], [f"100 ml {step_type} zubereiten."])
+                    origins = [v[3] for v in lines_of(p).values()]
+                    if step_type == line_type:
+                        self.assertEqual(["steps"], origins)
+                    else:
+                        self.assertNotIn("steps", origins)
+
+    def test_fond_and_stock_are_different_products(self):
+        # a bare "Brühe" step never feeds a fond line, and a "Fond" step never feeds a stock line
+        p = self.parse([" Rinderfond"], ["100 ml Brühe zubereiten."])
+        self.assertNotIn("steps", [v[3] for v in lines_of(p).values()])
+        p = self.parse(["Stück Gemüsebrühe"], ["100 ml Rinderfond zubereiten."])
+        self.assertNotIn("steps", [v[3] for v in lines_of(p).values()])
+        # a fond line still reads its own fond from the steps; a bare "Fond" is only a family hint, as before
+        self.assertEqual("found", step_amounts.step_amount("Rinderfond", ["100 ml Rinderfond zubereiten."])[0])
+        self.assertEqual("uncertain", step_amounts.step_amount("Rinderfond", ["100 ml Fond zubereiten."])[0])
+        # and with no amount anywhere a fond is to taste, as before the split
+        p = self.parse([" Rinderfond"], ["Alles verrühren."])
+        self.assertTrue(all(v[2] for v in lines_of(p).values()))
 
     def test_a_generic_stock_with_several_stocks_in_the_recipe_goes_to_review(self):
         p = self.parse(["Stück Gemüsebrühe", "Stück Rinderbrühe"], ["100 ml Brühe zubereiten."])

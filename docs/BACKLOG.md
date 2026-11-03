@@ -31,12 +31,23 @@ document the contract. Its open decisions are settled with Nate one at a time.
 - **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
   2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
   and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
-- **"Brühe" family rule for the repair tool** — `in progress` (PR #91). A step's generic `Brühe` / `Gemüsebrühe`
-  should count for a line `Stück Gemüsebrühe` (or Geflügel-, Rinderbrühe) when the recipe has
-  exactly ONE stock item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf`
-  (`MERGE_FAMILIES` in `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to
-  review for this ("100 ml Brühe zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the
-  recipe it stays a review. Source: Nate, step 3 of the recipe repair.
+- **"Brühe" family rule for the repair tool** — `in progress` (PR #91). A step's BARE `Brühe` should count for
+  the recipe's only stock line (`Stück Gemüsebrühe`, Geflügel-, Rinderbrühe) when the recipe has exactly ONE stock
+  item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf` (`MERGE_FAMILIES` in
+  `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to review for this ("100 ml Brühe
+  zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the recipe it stays a review. Source: Nate, step 3 of
+  the recipe repair. **Corrected 2026-11-03 (Nate, item rule):** Gemüsebrühe, Rinderbrühe and Geflügelbrühe are
+  three different items, so a step naming one type belongs only to a line of that type; Fond is a different product
+  from Brühe (own family `fond`, never matched with Brühe). Open for Nate: does a bare `Brühe` step still fill the
+  recipe's only stock line (what the PR does), or only the plain item 1851 `Brühe`?
+- **Stock and fond as catalogue items: one per type, quantity in litres** — `idea`, Nate 2026-11-03. Each type is its
+  own generic item (Gemüsebrühe, Rinderbrühe, Geflügelbrühe, and each fond: Kalbsfond, Fischfond …; fond ≠ Brühe).
+  The form is not a separate item: powder, cube (Würfel) and glass / paste of one type are the SAME item. Their
+  quantity is classified by how many litres of finished stock one pack, glass or cube makes (so a recipe's
+  "500 ml Gemüsebrühe" and a "Stück" cube can be compared in litres); needs a litres-per-pack value per store
+  product, and ties in with the "Conversion table" below. The Brühe family stays for matching and for substitutions
+  later (a household may swap one type for another), never for item identity. Today the catalogue has the plain item
+  1851 `Brühe` (unit g) from batch 2b and item 780 `Gemüsebrühe Würfel` (the form is in the item name: to rename).
 - **Remaining wrong rows after the repair** — `next`. ~301 ½-bug rows held because of uncertain
   item matches (mostly "Limette, gewachst", "Zitrone"): need overrides. 12 rows in ambiguous
   recipes. Unitless lines read as Stück ("75 Weizenmehl", "25 Sojasoße", "25
