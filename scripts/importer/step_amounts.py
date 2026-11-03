@@ -51,18 +51,24 @@ FAMILIES = [  # (family, test on one lower-case word)
     ("zitrone", lambda w: w.startswith("zitron")),
     ("limette", lambda w: w.startswith("limett")),
     ("sahne", lambda w: w.endswith("sahne")),
-    ("brühe", lambda w: "brühe" in w or "bouillon" in w or w.startswith("fond") or w.endswith("fond")),
+    # Stock (Brühe) and fond are different products (Nate, item rule): two families, never matched with each other.
+    # Gemüse-, Rinder- and Geflügelbrühe are different items inside the Brühe family, too; the family only decides
+    # which step words are looked at (and, later, substitutions), it never makes two types one item.
+    ("brühe", lambda w: "brühe" in w or "bouillon" in w),
+    ("fond", lambda w: w.startswith("fond") or w.endswith("fond")),
     ("wasser", lambda w: w == "wasser"),
 ]
-# Oil, vinegar and mustard are one ingredient for the recipe's steps when the recipe has only one item
-# of that kind: a step's generic "Essig" belongs to the recipe's only vinegar.
-MERGE_FAMILIES = {"öl", "essig", "senf"}
+# Oil, vinegar, mustard and stock are one ingredient for the recipe's steps when the recipe has only one item
+# of that kind: a step's generic "Essig" belongs to the recipe's only vinegar, a bare "Brühe" to the recipe's only
+# stock (whichever type that is). A step naming a type ("Gemüsebrühe") belongs only to that type.
+MERGE_FAMILIES = {"öl", "essig", "senf", "brühe"}
 # Liquids: a spoon is a volume, so EL / TL / dl / ml can be added up (Nate, 2026-10-22): 1 EL = 15 ml, 1 TL = 5 ml,
 # 1 dl = 100 ml. Grams against spoons or millilitres is never converted (it needs the per-item conversion table).
 LIQUID_FAMILIES = {"öl", "essig", "milch", "buttermilch", "sahne"}
 _ML = {"ml": Decimal(1), "TL": Decimal(5), "EL": Decimal(15)}
 # no amount anywhere: these become "to taste" (rules of 2026-10-11)
-TO_TASTE_FAMILIES = {"salz", "pfeffer", "öl", "essig", "zucker", "butter", "brühe", "honig", "mehl", "senf", "milch"}
+TO_TASTE_FAMILIES = {"salz", "pfeffer", "öl", "essig", "zucker", "butter", "brühe", "fond", "honig", "mehl", "senf",
+                     "milch"}
 # "Stück X" without an amount anywhere is 1 Stück only for countable things; anything else is reviewed
 COUNTABLE = re.compile(r"\b(?:ei(?:er)?|eigelb|eiweiß|frühlingszwiebeln?|zwiebeln?|zitronen?|limetten?|knoblauch(?:zehen?|knollen?)?|"
                        r"granatäpfel|granatapfel|schmand|chilischoten?|beete|pita\S*|fladenbrot|karotten?|gurken?|"
@@ -98,7 +104,7 @@ _FILLER = {"der", "die", "das", "dem", "den", "des", "etwas", "restliche", "rest
            "kalten", "kaltem", "flüssige", "flüssigen", "geschmolzene", "geschmolzenen", "gehackte",
            "gehackten", "ca", "gestrichenen", "gestrichenem", "gehäuften", "etwa", "weitere",
            "weiteren", "zusätzliche", "zusätzlichen", "gutes", "gute"}
-_GENERIC = (["essig"], ["öl"], ["senf"])        # the bare word: names no particular kind
+_GENERIC = (["essig"], ["öl"], ["senf"], ["brühe"])        # the bare word: names no particular kind
 _CUT = re.compile(r"\s+(?:und|oder|sowie|mit|in|auf|zu|dazu|dann|dabei|über|für|aus)\s+|\s+(?:und|oder)$")
 
 
@@ -187,7 +193,7 @@ def _match(words, fam, noun):
                         {phrase[0], words[0]} <= {"öl", "olivenöl"}:
                     return "exact"           # "(Oliven-)Öl", "Öl" and "Olivenöl" are one bottle
                 if fam in MERGE_FAMILIES and phrase not in _GENERIC and words not in _GENERIC:
-                    return None              # two specific vinegars / oils / mustards: different ingredients
+                    return None              # two specific vinegars / oils / mustards / stocks: different ingredients
                 return "family"
         return None
     if not words:
