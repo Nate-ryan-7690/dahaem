@@ -17,6 +17,9 @@ public class RecipeService {
 
     public List<Recipe> allRecipes(){return repository.findAll(); }
 
+    /** One recipe by id, or empty when there is none (a single-row query, not the whole table). */
+    public java.util.Optional<Recipe> findById(int id){return repository.findById(id); }
+
     public List<RecipeIngredient> findAllIngredients(int recipeId)
         {return repository.findAllIngredients(recipeId);}
 

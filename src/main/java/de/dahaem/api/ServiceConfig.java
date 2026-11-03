@@ -12,6 +12,7 @@ import de.dahaem.inventory.InventoryService;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.RecipeRepository;
+import de.dahaem.mealplanner.RecipeSearchService;
 import de.dahaem.mealplanner.RecipeService;
 import de.dahaem.shopping.ShoppingListRepository;
 import de.dahaem.shopping.ShoppingListService;
@@ -132,7 +133,14 @@ public class ServiceConfig {
     }
 
     @Bean
-    public DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets) {
-        return new DietFilterService(dietFilterRepository, dietPresets);
+    public DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets,
+                                               @org.springframework.beans.factory.annotation.Value("${dahaem.diet.cache-seconds:60}") long cacheSeconds) {
+        return new DietFilterService(dietFilterRepository, dietPresets, cacheSeconds, System::nanoTime);
+    }
+
+    @Bean
+    public RecipeSearchService recipeSearchService(RecipeRepository recipeRepository, TagService tagService,
+                                                   DietFilterService dietFilterService) {
+        return new RecipeSearchService(recipeRepository, tagService, dietFilterService);
     }
 }

@@ -4,7 +4,7 @@
 
 The database connection pool, units and portion arithmetic.
 
-5 types in 3 source files (`src/main/java/de/dahaem/shared`). Back to the [class index](README.md).
+7 types in 5 source files (`src/main/java/de/dahaem/shared`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -12,6 +12,10 @@ The database connection pool, units and portion arithmetic.
 classDiagram
     direction LR
     class shared_Database["Database"]
+    class shared_LikePattern["LikePattern"]
+    class shared_PageRequest["PageRequest"] {
+        <<record>>
+    }
     class shared_Portions["Portions"]
     class shared_Units["Units"]
     class shared_Units_Dimension["Units.Dimension"] {
@@ -30,6 +34,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`Database`](#database) | class |  | Single place that knows how to open a database connection. |
+| [`LikePattern`](#likepattern) | class |  | Builds LIKE patterns from user text, so a typed % or _ is searched for literally. |
+| [`PageRequest`](#pagerequest) | record |  | Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE. |
 | [`Portions`](#portions) | class |  | The single definition of portion scaling: a recipe written for servings people is scaled to people by the factor people / servings. |
 | [`Units`](#units) | class |  | Parses a recipe/store unit string into a physical dimension plus a factor to its base unit, so quantities can be compared or converted only when it is actually meaningful. |
 | [`Units.Dimension`](#unitsdimension) | enum |  |  |
@@ -62,7 +68,9 @@ classDiagram
         ~String USER_ENV$
         ~String PASSWORD_ENV$
         -HikariDataSource dataSource$
+        -AtomicLong GENERATION$
         +getConnection() Connection$
+        +generation() long$
         +configure(String url, String user, String password) void$
         +close() void$
     }
@@ -74,12 +82,76 @@ classDiagram
 | `USER_ENV` | `String` |
 | `PASSWORD_ENV` | `String` |
 | `dataSource` | `HikariDataSource` |
+| `GENERATION` | `AtomicLong` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `Connection getConnection()` | public static |  |
+| `long generation()` | public static | Changes whenever the pool is pointed at another database or closed. |
 | `void configure(String url, String user, String password)` | public static | Points the pool at a different database, closing the previous pool. |
 | `void close()` | public static | Closes the pool. |
+
+## LikePattern
+
+*class*
+
+Builds LIKE patterns from user text, so a typed % or _ is searched for literally.
+
+```mermaid
+classDiagram
+    direction LR
+    class shared_LikePattern["LikePattern"] {
+        +contains(String text) String$
+    }
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `String contains(String text)` | public static | %text% with the LIKE wildcards (and the escape character) in text escaped. |
+
+## PageRequest
+
+*record*
+
+Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE.
+Missing values get the documented defaults; out-of-range values are an IllegalArgumentException (the API answers
+400) rather than being silently clamped.
+
+```mermaid
+classDiagram
+    direction LR
+    class shared_PageRequest["PageRequest"] {
+        <<record>>
+        +int page
+        +int pageSize
+        +int DEFAULT_PAGE_SIZE$
+        +int MAX_PAGE_SIZE$
+        +of(Integer page, Integer pageSize) PageRequest$
+        +offset() long
+        +totalPages(long total) int
+    }
+    class mealplanner_RecipeSearchService_Result["RecipeSearchService.Result"] {
+        <<record>>
+    }
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
+    mealplanner_RecipeSearchService ..> shared_PageRequest
+    mealplanner_RecipeSearchService_Result --> shared_PageRequest
+```
+
+| Component | Type |
+|---|---|
+| `page` | `int` |
+| `pageSize` | `int` |
+| `DEFAULT_PAGE_SIZE` | `int` |
+| `MAX_PAGE_SIZE` | `int` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PageRequest of(Integer page, Integer pageSize)` | public static |  |
+| `long offset()` | public | Number of rows before this page. |
+| `int totalPages(long total)` | public | Pages needed for total rows (0 for none). |
+
+**Referenced by:** `RecipeSearchService`, `RecipeSearchService.Result`
 
 ## Portions
 

@@ -19,7 +19,7 @@ each controller method is the source of the descriptions.
 - A missing or expired CSRF token answers **403**; fetch a new one and retry.
 - `POST /api/auth/login` answers 204 (a session starts) or 401; `POST /api/auth/logout` answers 204.
 - Requests and answers are UTF-8 JSON. Dates are `YYYY-MM-DD`, date-times ISO 8601. Money is a plain JSON number (euros).
-- Lists are returned as plain JSON arrays. There is no pagination yet; `GET /api/recipes` returns all recipes.
+- Lists are returned as plain JSON arrays, except `GET /api/recipes/search`: it is paged and answers `{items, total, page, pageSize, totalPages}` (24 per page unless `pageSize` says otherwise). `GET /api/recipes` still returns every recipe as a plain array.
 - The service never decides for the user: it returns prices, savings and options, and the user chooses.
 
 ## Errors
@@ -59,6 +59,7 @@ Every error has the same shape:
 | GET | [`/api/purchases`](#get-apipurchases) |  |
 | POST | [`/api/purchases`](#post-apipurchases) | Records a purchase of a known store_item and applies it to inventory (one transaction, in the service). |
 | GET | [`/api/recipes`](#get-apirecipes) | All recipes by name. |
+| GET | [`/api/recipes/search`](#get-apirecipessearch) | GET /api/recipes/search: search the recipes, one page of cards plus the total. |
 | GET | [`/api/recipes/{id}`](#get-apirecipesid) | The recipe with its ingredients and instructions. |
 | GET | [`/api/recipes/{id}/tags`](#get-apirecipesidtags) |  |
 | POST | [`/api/recipes/{id}/tags`](#post-apirecipesidtags) | Tags the recipe, creating the tag first if no tag with that name exists. |
@@ -429,6 +430,7 @@ All recipes by name. Optional diet rules, applied on the server (the client neve
 With rules every recipe carries diet (status OK / ANPASSBAR / UNCLEAR, hints, softHits); HIDDEN
 recipes are not returned. The presets filter INGREDIENTS only; they are no halal or kosher certification:
 meat certification stays the shopper's responsibility. Without any rule the answer is unchanged.
+This is the plain list as an array; GET /api/recipes/search is the searchable, paged one.
 
 **Query parameters**
 
@@ -476,6 +478,99 @@ A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`exc
     }
   }
 ]
+```
+
+#### GET /api/recipes/search
+
+GET /api/recipes/search: search the recipes, one page of cards plus the total. Everything is applied
+on the server (the client never filters 11,000 recipes). All filters are optional and combine with AND:
+
+- search: q= (every word is in the recipe name), ingredient=a,b (repeatable; the
+      recipe has an ingredient whose name contains each text);
+
+- filters: tags=a,b (repeatable; the recipe carries all of these tags), minTime /
+      maxTime (total time = prep + cook, minutes; recipes without a time are left out when either is
+      set), servings=N (recipes for N people; a "3 – 4 Personen" recipe matches 3 and 4);
+
+- order: sort=name|time|rating|newest (default name; ties always end by id, so the order is stable
+      and paging neither repeats nor skips a recipe);
+
+- paging: page (from 1, default 1) and pageSize (1 - 100, default 24). Without paging
+      parameters you get the first 24 recipes, not all of them; use total / totalPages to go
+      on. A page past the end is empty. Out-of-range values are a 400.
+
+Optional diet rules, also applied on the server:
+
+- hard rules ("Was esse ich nicht?"): diet= (repeatable; halal, koscher, vegetarisch,
+      vegan, see config/diet_presets.json; an unknown preset is a 400), excludeTags=a,b,
+      excludeItems=;
+
+- soft rules ("Was esse ich lieber nicht?"): avoidTags, avoidItems: recipes stay, are
+      sorted after the others and list what matched in diet.softHits;
+
+- includeUnclear=true|false (default false): recipes with a line that was not matched are
+      UNCLEAR under a hard rule and left out unless this is true.
+
+With rules every card carries diet (status OK / ANPASSBAR / UNCLEAR, hints, softHits); HIDDEN recipes
+are not returned and not counted in total. With rules the order is: no soft hit first, then OK before
+ANPASSBAR before UNCLEAR, then the requested sort. The rules judge from a snapshot of the recipe facts that is
+at most a minute old; GET /api/recipes/{id} always judges fresh. The presets filter INGREDIENTS only;
+they are no halal or kosher certification: meat certification stays the shopper's responsibility.
+GET /api/recipes is unchanged: the plain array of all recipes.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `q` | `String` | no |  |
+| `ingredient` | `List<String>` | no |  |
+| `tags` | `List<String>` | no |  |
+| `minTime` | `Integer` | no |  |
+| `maxTime` | `Integer` | no |  |
+| `servings` | `Integer` | no |  |
+| `sort` | `String` | no |  |
+| `page` | `Integer` | no |  |
+| `pageSize` | `Integer` | no |  |
+| `diet` | `List<String>` | no |  |
+| `excludeTags` | `List<String>` | no |  |
+| `excludeItems` | `List<Integer>` | no |  |
+| `avoidTags` | `List<String>` | no |  |
+| `avoidItems` | `List<Integer>` | no |  |
+| `includeUnclear` | `boolean` | no | `false` |
+
+A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`excludeTags=a,b`).
+
+**Answer** 200 `RecipePageDto`
+
+```json
+{
+  "items": [
+    {
+      "id": 0,
+      "name": "…",
+      "imageUrl": "…",
+      "thumbnailUrl": "…",
+      "prepTime": 0,
+      "cookTime": 0,
+      "totalTime": 0,
+      "servings": 0,
+      "servingsMax": 0,
+      "cuisine": "…",
+      "ratingAvg": 0.00,
+      "tags": ["…"],
+      "diet": {
+        "status": "…",
+        "hints": [{ … }],
+        "softHits": { … },
+        "unmatchedIngredients": [{ … }]
+      }
+    }
+  ],
+  "total": 0,
+  "page": 0,
+  "pageSize": 0,
+  "totalPages": 0
+}
 ```
 
 #### GET /api/recipes/{id}
@@ -1075,6 +1170,38 @@ one for the user.
 { … }
 ```
 
+### RecipeCardDto
+
+A recipe as a card in the list: what a card shows, nothing more (GET /api/recipes/{id} has the rest:
+description, nutrition, image source, publish date, ingredients, instructions). totalTime is
+prepTime + cookTime in minutes (0 when the recipe has no time). servings is the number of people;
+servingsMax is the upper bound of a "3 – 4 Personen" range (servings is then the lower bound),
+null otherwise. imageUrl / thumbnailUrl are links the browser loads from their source (null when
+the recipe has no image: show a fallback; use the thumbnail in lists). cuisine is one German name,
+ratingAvg is 0 - 5 with 2 decimals; both null when unknown. tags are the recipe's tag names (no
+group or source: the detail has those), sorted by group then name; empty when it has none.
+diet is present only when diet rules were passed to GET /api/recipes (see DietDto).
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+| `imageUrl` | `String` |
+| `thumbnailUrl` | `String` |
+| `prepTime` | `int` |
+| `cookTime` | `int` |
+| `totalTime` | `int` |
+| `servings` | `int` |
+| `servingsMax` | `Integer` |
+| `cuisine` | `String` |
+| `ratingAvg` | `BigDecimal` |
+| `tags` | `List<String>` |
+| `diet` | `DietDto` |
+
+```json
+{ … }
+```
+
 ### RecipeDetailDto
 
 One recipe with its nutrition, ingredients and ordered instructions, as returned by /api/recipes/{id}.
@@ -1187,6 +1314,25 @@ A tag on the recipe: its name, its group (e.g. Tier, Ernährung, Zeit, Nährwert
 | `name` | `String` |
 | `category` | `String` |
 | `source` | `String` |
+
+```json
+{ … }
+```
+
+### RecipePageDto
+
+One page of GET /api/recipes. items are the cards of this page, in the requested sort order;
+total is the number of recipes that match in ALL pages (after search, filters and diet rules);
+page (from 1) and pageSize echo the request with its defaults applied; totalPages is
+ceil(total / pageSize), 0 when nothing matches. A page past the end has empty items.
+
+| Property | Type |
+|---|---|
+| `items` | `List<RecipeCardDto>` |
+| `total` | `long` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
 
 ```json
 { … }

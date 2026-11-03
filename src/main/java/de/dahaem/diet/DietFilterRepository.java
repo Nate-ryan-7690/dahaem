@@ -38,6 +38,11 @@ public class DietFilterRepository {
         return load(null);
     }
 
+    /** Changes when the database underneath was replaced; the service drops its cached facts then. */
+    public long dataGeneration() {
+        return Database.generation();
+    }
+
     /** tag name → group (tag_category) for every tag; the filter needs it to know which tags depend on the ingredients. */
     public Map<String, String> tagGroups() {
         Map<String, String> out = new HashMap<>();

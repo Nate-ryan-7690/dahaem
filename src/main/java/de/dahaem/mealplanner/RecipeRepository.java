@@ -1,6 +1,7 @@
 package de.dahaem.mealplanner;
 
 import de.dahaem.shared.Database;
+import de.dahaem.shared.LikePattern;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -8,7 +9,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -96,6 +99,152 @@ public class RecipeRepository {
             throw new RuntimeException("Could not load instructions for recipe " + recipeId, e);
         }
         return instruction;
+    }
+
+    private static final String COLUMNS = "r.recipe_id, r.recipe_name, r.recipe_servings, r.recipe_servings_max"
+            + ", r.recipe_cook_time, r.recipe_prep_time, r.recipe_calories, r.recipe_protein, r.recipe_carbs"
+            + ", r.recipe_fat, r.recipe_fibre, r.recipe_sugar, r.recipe_description, r.recipe_image_url"
+            + ", r.recipe_thumbnail_url, r.recipe_image_source, r.recipe_cuisine, r.recipe_rating_avg"
+            + ", r.recipe_rating_count, r.recipe_published_date";
+
+    private static final String TOTAL_TIME = "(r.recipe_prep_time + r.recipe_cook_time)";
+
+    /**
+     * The WHERE clause of a search; the values go into {@code params} in the order of the placeholders. Only fixed
+     * text is appended here, user text always travels as a parameter.
+     */
+    private static String where(RecipeQuery q, List<Object> params) {
+        StringBuilder w = new StringBuilder(" WHERE 1 = 1");
+        for (String word : q.nameWords()) {
+            w.append(" AND r.recipe_name LIKE ?");
+            params.add(LikePattern.contains(word));
+        }
+        for (String ingredient : q.ingredients()) {
+            w.append(" AND EXISTS (SELECT 1 FROM recipe_ingredient ri"
+                    + " INNER JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id"
+                    + " WHERE ri.recipe_ingredient_recipe_id = r.recipe_id"
+                    + " AND (ii.inventory_item_name_deutsch LIKE ? OR ii.inventory_item_name_english LIKE ?))");
+            params.add(LikePattern.contains(ingredient));
+            params.add(LikePattern.contains(ingredient));
+        }
+        // Through the tag id (index recipe_tag_by_tag); an unknown tag name gives NULL and so no recipe.
+        for (String tag : q.tags()) {
+            w.append(" AND r.recipe_id IN (SELECT rt.recipe_tag_recipe_id FROM recipe_tag rt"
+                    + " WHERE rt.recipe_tag_id = (SELECT t.tag_id FROM tag t WHERE t.tag_name = ?))");
+            params.add(tag);
+        }
+        if (q.hasTimeFilter()) {
+            w.append(" AND ").append(TOTAL_TIME).append(" > 0");   // 0 = no time known
+        }
+        if (q.minTime() != null) {
+            w.append(" AND ").append(TOTAL_TIME).append(" >= ?");
+            params.add(q.minTime());
+        }
+        if (q.maxTime() != null) {
+            w.append(" AND ").append(TOTAL_TIME).append(" <= ?");
+            params.add(q.maxTime());
+        }
+        if (q.servings() != null) {
+            w.append(" AND r.recipe_servings <= ? AND COALESCE(r.recipe_servings_max, r.recipe_servings) >= ?");
+            params.add(q.servings());
+            params.add(q.servings());
+        }
+        return w.toString();
+    }
+
+    private static void bind(PreparedStatement ps, List<Object> params) throws SQLException {
+        for (int i = 0; i < params.size(); i++) {
+            ps.setObject(i + 1, params.get(i));
+        }
+    }
+
+    /** How many recipes match the query. */
+    public long countMatching(RecipeQuery q) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT COUNT(*) FROM recipe r" + where(q, params);
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            bind(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not count the matching recipes", e);
+        }
+    }
+
+    /** One page of the recipes matching the query, in the query's (total) sort order. */
+    public List<Recipe> findPage(RecipeQuery q, int limit, long offset) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT " + COLUMNS + " FROM recipe r" + where(q, params)
+                + " ORDER BY " + q.sort().orderBy() + " LIMIT ? OFFSET ?";
+        params.add(limit);
+        params.add(offset);
+        List<Recipe> recipes = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            bind(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    recipes.add(mapRow(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not search recipes", e);
+        }
+        return recipes;
+    }
+
+    /** The ids of every recipe matching the query, in the query's sort order (for paging after the diet filter). */
+    public List<Integer> findMatchingIds(RecipeQuery q) {
+        List<Object> params = new ArrayList<>();
+        String sql = "SELECT r.recipe_id FROM recipe r" + where(q, params) + " ORDER BY " + q.sort().orderBy();
+        List<Integer> ids = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            bind(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ids.add(rs.getInt(1));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not search recipes", e);
+        }
+        return ids;
+    }
+
+    /** The recipes with these ids, in the order of {@code ids}; an id without a recipe is skipped. */
+    public List<Recipe> findByIds(List<Integer> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        // Only the number of placeholders is built here; the ids are bound.
+        String sql = "SELECT " + COLUMNS + " FROM recipe r WHERE r.recipe_id IN ("
+                + String.join(",", java.util.Collections.nCopies(ids.size(), "?")) + ")";
+        Map<Integer, Recipe> byId = new HashMap<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            for (int i = 0; i < ids.size(); i++) {
+                ps.setInt(i + 1, ids.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Recipe recipe = mapRow(rs);
+                    byId.put(recipe.getId(), recipe);
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load recipes by id", e);
+        }
+        List<Recipe> ordered = new ArrayList<>();
+        for (int id : ids) {
+            Recipe recipe = byId.get(id);
+            if (recipe != null) {
+                ordered.add(recipe);
+            }
+        }
+        return ordered;
     }
 
     // Searches recipes by id

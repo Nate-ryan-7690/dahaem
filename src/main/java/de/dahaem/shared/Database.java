@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Single place that knows how to open a database connection.
@@ -27,6 +28,7 @@ public final class Database {
     static final String PASSWORD_ENV = "DAHAEM_DB_PASSWORD";
 
     private static HikariDataSource dataSource;
+    private static final AtomicLong GENERATION = new AtomicLong();
 
     private Database() {
         // Utility class, no instances.
@@ -34,6 +36,14 @@ public final class Database {
 
     public static Connection getConnection() throws SQLException {
         return pool().getConnection();
+    }
+
+    /**
+     * Changes whenever the pool is pointed at another database or closed. Lets an in-memory cache notice that the
+     * data underneath it was replaced (tests do this between classes); it says nothing about ordinary writes.
+     */
+    public static long generation() {
+        return GENERATION.get();
     }
 
     /**
@@ -47,6 +57,7 @@ public final class Database {
 
     /** Closes the pool. The next {@link #getConnection()} reconnects using the environment. */
     public static synchronized void close() {
+        GENERATION.incrementAndGet();
         if (dataSource != null) {
             dataSource.close();
             dataSource = null;
