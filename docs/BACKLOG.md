@@ -31,12 +31,25 @@ document the contract. Its open decisions are settled with Nate one at a time.
 - **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
   2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
   and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
-- **"Brühe" family rule for the repair tool** — `next`. A step's generic `Brühe` / `Gemüsebrühe`
-  should count for a line `Stück Gemüsebrühe` (or Geflügel-, Rinderbrühe) when the recipe has
-  exactly ONE stock item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf`
-  (`MERGE_FAMILIES` in `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to
-  review for this ("100 ml Brühe zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the
-  recipe it stays a review. Source: Nate, step 3 of the recipe repair.
+- **"Brühe" family rule for the repair tool** — `in progress` (PR #91). A step's BARE `Brühe` should count for
+  the recipe's only stock line (`Stück Gemüsebrühe`, Geflügel-, Rinderbrühe) when the recipe has exactly ONE stock
+  item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf` (`MERGE_FAMILIES` in
+  `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to review for this ("100 ml Brühe
+  zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the recipe it stays a review. Source: Nate, step 3 of
+  the recipe repair. **Corrected 2026-11-03 (Nate, item rule):** Gemüsebrühe, Rinderbrühe and Geflügelbrühe are
+  three different items, so a step naming one type belongs only to a line of that type; Fond is a different product
+  from Brühe (own family `fond`, never matched with Brühe). **Settled 2026-11-03 (Nate):** a step that names no type
+  (bare `Brühe`) fills the recipe's only stock line; a step that names a type (Hähnchen-, Rinder-, Gemüsebrühe …)
+  fills only a line of that type. Known gaps, not built: Hähnchenbrühe is not treated as Geflügelbrühe (no alias
+  rule), and a typed step that matches no line leaves the line "to taste" instead of a review.
+- **Stock and fond as catalogue items: one per type, quantity in litres** — `idea`, Nate 2026-11-03. Each type is its
+  own generic item (Gemüsebrühe, Rinderbrühe, Geflügelbrühe, and each fond: Kalbsfond, Fischfond …; fond ≠ Brühe).
+  The form is not a separate item: powder, cube (Würfel) and glass / paste of one type are the SAME item. Their
+  quantity is classified by how many litres of finished stock one pack, glass or cube makes (so a recipe's
+  "500 ml Gemüsebrühe" and a "Stück" cube can be compared in litres); needs a litres-per-pack value per store
+  product, and ties in with the "Conversion table" below. The Brühe family stays for matching and for substitutions
+  later (a household may swap one type for another), never for item identity. Today the catalogue has the plain item
+  1851 `Brühe` (unit g) from batch 2b and item 780 `Gemüsebrühe Würfel` (the form is in the item name: to rename).
 - **Remaining wrong rows after the repair** — `next`. ~301 ½-bug rows held because of uncertain
   item matches (mostly "Limette, gewachst", "Zitrone"): need overrides. 12 rows in ambiguous
   recipes. Unitless lines read as Stück ("75 Weizenmehl", "25 Sojasoße", "25
@@ -305,15 +318,17 @@ not legal advice; verify before any public release.
 
 Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
 
-- **API audit for the UI** — `next`. Go through every page in the spec (Login, Home, Meal Planner,
-  Recipes, Shopping list, Inventory, Offers) and list each read / write it needs against the existing
-  endpoints; record each missing one here. Known so far: meal plans can only be listed, created and
-  appended to; inventory is read-only; a shopping list can't be saved, ticked off or completed; there
-  are no user / household settings.
+- **API audit for the UI** — `in progress`, done in this PR (2026-10-23): `docs/api-audit-ui.md` has a table per
+  page (10 pages, 87 needed calls: 14 covered, 21 partly, 52 missing) and 19 open questions for Nate. Every gap is
+  an item in this section. Correction to the earlier note: a recipe CAN be removed from a plan
+  (`DELETE /api/meal-plans/{id}/recipes/{recipeId}`); what is missing is editing / moving an entry and reading
+  one week. Move to Done when merged.
 - **Meal plan: any day, any number of meals** — `next`. `meal_plan_recipe` has no date, its key
   (recipe, plan) blocks the same recipe twice in a week, and `meal_time` is a fixed slot text. Needs
   an entry id, a date, an order within the day, servings per entry and an optional free label (no
-  breakfast / lunch / dinner slots); endpoints for one week by date, add / edit / remove / move.
+  breakfast / lunch / dinner slots); endpoints for one week by date (today only `GET /api/meal-plans`, all weeks), add / edit / remove / move
+  (`mealTime` is a required non-blank text on add; DELETE addresses the recipe, not an entry). Audit adds: each
+  planned entry carries its recipe thumbnail and servings so Home and the planner need no call per meal.
   Migration with a data move for existing plans → snapshot first, guarded.
 - **Recipe search and paging** — `in review`, PR #93. `GET /api/recipes` now searches (`q` name words,
   `ingredient`), filters (`tags`, `minTime` / `maxTime`, `servings`), sorts (`name`, `time`, `rating`, `newest`;
@@ -330,6 +345,9 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   what I have" — needs the item picker first; (d) the snapshot is per process: the tagger / importer run
   elsewhere, so a listed verdict can be up to 60 s old (the detail judges fresh) — a data-version check would
   remove that; (e) the PHP recipe list and the planner's recipe picker have to move to the new response.
+  (f) lists of tags, cuisines and diet presets so the filter controls can be built from data (asked for by the API
+  audit, `docs/api-audit-ui.md`; not in this PR). The audit's other ask, no `diet` block on cards unless rules
+  are sent, is already how the card works.
 - **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
@@ -355,26 +373,66 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 - **Recipe opportunities with evidence** — `next`. `/api/suggestions/by-savings` and `/by-expiring`
   exist; extend them so each suggestion says which ingredients are covered by which offer (store,
   product, price, valid until), which are already in stock and which are still uncovered. Suggestions
-  never change the plan by themselves.
+  never change the plan by themselves. Today a suggestion is only `recipeId`, name, score and matching item ids;
+  by-savings reads the curated `store_discount` only, not the flyer `store_offer` rows; nothing suggests from
+  low stock. Add the recipe image so Home needs no extra call.
 - **Shopping list lifecycle** — `next`. Save a list (from a meal-plan week), tick items, record the
   shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn
-  when a chosen offer has expired or a price changed, never substitute silently.
+  when a chosen offer has expired or a price changed, never substitute silently. Audit adds: list the lists (open
+  list of a week / household), add a manual line (`is_manual` column exists), change quantity, remove a line,
+  tick a line (`purchase_status` exists, never written), complete a list (`status` exists, never set), keep a
+  price snapshot per selection so "price changed" can be told. Problems in the current save (see
+  `docs/api-audit-ui.md` "Possible bugs"), to be fixed with this item: items nobody sells are silently dropped
+  (the spec wants them shown as unavailable); the saved line has no unit and `quantityNeeded` is an integer, so
+  fractional amounts are rounded up.
 - **Inventory writes** — `next`. Add, consume, correct and expiry changes with a history, so low /
-  expiring items can lead to "adjust stock", "plan a recipe" or "add to the list".
+  expiring items can lead to "adjust stock", "plan a recipe" or "add to the list". Audit adds: today only a
+  purchase changes stock; `GET /api/inventory` returns the whole catalogue incl. zero stock with no search,
+  category filter or paging; expiry is one date per item (batches are an open question); low-stock has no
+  recipe suggestion. Open: threshold is whole units regardless of unit.
 - **Auth and session review** — `next`. Check PHP sessions against the Java login / me / CSRF
   endpoints together: session expiry, logout, errors that reveal nothing internal. Account creation /
-  invitation is open (spec decision 6); no public self-registration until it is decided.
+  invitation is open (spec decision 6); no public self-registration until it is decided. Audit finding (the main blocker): with `X-Internal-Token` the
+  principal is the fixed name `internal-api`, so `GET /api/auth/me` answers 401 for the PHP frontend and no
+  endpoint knows which user or household is asking. Needs a decision how PHP passes the acting user (trusted
+  header next to the token, or a credentials-check call that returns a user id) and a "verify credentials"
+  endpoint that does not open a Java session. Blocks "Household isolation" and every per-user setting.
 - **Stores and pinned stores** — `later`. A store list with name and logo for the Home offers deck and
   "offers of one store"; per-user pinned stores change only the order, never hide stores or offers.
-  Store logos / banners: check the usage rights, fall back to a neutral DAHÄM card.
+  Store logos / banners: check the usage rights, fall back to a neutral DAHÄM card. Today `store` is id + name
+  only and no endpoint lists stores.
 - **Personal vs household settings** — `later`, needs Nate's decision (spec decision 7). Greeting,
-  language, theme per user; plan, stock, list and purchases shared per household.
+  language, theme per user; plan, stock, list and purchases shared per household. Audit adds the endpoints the
+  profile page needs: read / change own profile and password, list household members, invite / remove, roles
+  (tables exist, only `/me` reads them).
 - **Food questionnaire** — `next`, PHP / Nate. A page per person: "Was esse ich nicht?" (hard rule) and "Was esse
   ich lieber nicht?" (soft rule), on tags (Schwein, Alkohol, vegetarisch …, or a preset) AND on single
   ingredients (Pilze, Koriander). The API side is ready: the PHP passes the answers as `diet`,
   `excludeTags`, `excludeItems` (hard) and `avoidTags`, `avoidItems` (soft) and `includeUnclear`. Open: where
   the answers are stored (see "Personal vs household settings") and per person vs household.
   Recommendation: the hard rules of EVERY member apply to the shared meal plan, soft rules only mark.
+- **Offers read API** — `next`. The Offers page and the Home store deck have nothing to read: `store_offer`
+  (flyer rows with price, deal, deposit, valid from / until, region, source) and `store_offer_price_change` are filled
+  by the importers but no endpoint exposes them. Needed: current offers of one store, search / category / paging,
+  offer detail, and the match to a generic item with uncertain matches shown as uncertain. Open for Nate: flyer
+  `store_offer` vs curated `store_discount`; whether the store region is chosen per user or per household.
+- **Purchases and receipts for the UI** — `later`. `GET /api/purchases` returns the whole history with ids only
+  (no product, store or item name), no paging or date filter; spending is one total with no breakdown by store,
+  category or month; receipt import is a command-line runner only, so the review-and-confirm flow (spec journey D)
+  has no endpoint (upload or pass text, list matches, confirm / correct, then purchases + inventory), and the
+  price history (`store_price_history`) is not exposed.
+- **Meal-plan endpoints scale with history** — `later`. The add, remove and shopping-list handlers load every plan
+  to find one id and `GET /api/meal-plans` runs one query per plan. Harmless today; replaced naturally by "one week
+  by date" in the meal-plan item. Found in the API audit, not fixed.
+- **Unit check when stock is subtracted from a list** — `idea`, verify first (read-only). `persistGeneratedList`
+  computes `missing = totalQuantity - inStock` with `Item.getQuantity` in the item's own unit. Check whether a
+  recipe unit and a stock unit can differ for the same item; if yes it is a bug, if not, document the guarantee.
+  Found in the API audit.
+- **Open questions from the API audit** — needs Nate. 19 questions (acting user, week definition, repeated
+  recipes in a plan, servings level, one or several open lists, what completing a list does, unavailable lines,
+  offers source and region, logos, inventory batches, receipt upload …) are listed at the end of
+  `docs/api-audit-ui.md`; answer them one at a time (spec rule), the matching items above wait on them.
+
 ## Platform
 
 - **Support tickets: backend foundation** — `next` per the spec (it says "do now"; Nate sets the
