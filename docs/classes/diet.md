@@ -4,7 +4,7 @@
 
 The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR).
 
-13 types in 9 source files (`src/main/java/de/dahaem/diet`). Back to the [class index](README.md).
+14 types in 9 source files (`src/main/java/de/dahaem/diet`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -13,6 +13,9 @@ classDiagram
     direction LR
     class diet_DietFilterRepository["DietFilterRepository"]
     class diet_DietFilterService["DietFilterService"]
+    class diet_DietFilterService_Snapshot["DietFilterService.Snapshot"] {
+        <<record>>
+    }
     class diet_DietFilterService_Judged["DietFilterService.Judged"] {
         <<record>>
     }
@@ -43,11 +46,14 @@ classDiagram
     }
     class diet_RecipeDietFilter["RecipeDietFilter"]
     diet_DietFilterRepository ..> diet_RecipeDietFacts
+    diet_DietFilterService *-- diet_DietFilterService_Snapshot
     diet_DietFilterService *-- diet_DietFilterService_Judged
     diet_DietFilterService --> diet_DietFilterRepository
     diet_DietFilterService --> diet_DietPresets
     diet_DietFilterService ..> diet_DietRules
     diet_DietFilterService ..> diet_DietVerdict
+    diet_DietFilterService_Snapshot --> diet_RecipeDietFacts
+    diet_DietFilterService_Snapshot --> diet_RecipeDietFilter
     diet_DietFilterService_Judged --> diet_DietVerdict
     diet_DietFilterService_Judged --> diet_RecipeDietFacts
     diet_DietPresets --> diet_DietPreset
@@ -69,6 +75,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 |------|------|------|------------|
 | [`DietFilterRepository`](#dietfilterrepository) | class |  | All SQL for the diet filter. |
 | [`DietFilterService`](#dietfilterservice) | class |  | Applies diet rules to recipes on the server, so the client never receives 11,000 recipes to filter itself. |
+| [`DietFilterService.Snapshot`](#dietfilterservicesnapshot) | record |  |  |
 | [`DietFilterService.Judged`](#dietfilterservicejudged) | record |  | A verdict together with the facts it was made from. |
 | [`DietPreset`](#dietpreset) | record |  | One diet preset from config/diet_presets.json: tags a recipe must NOT have (excludeTags) and tags it MUST have (requireTags). |
 | [`DietPresets`](#dietpresets) | class |  | The diet presets, read from config/diet_presets.json (no hardcoding: the lists are Nate's to change). |
@@ -96,6 +103,7 @@ classDiagram
         -TagRepository tags
         +loadRecipe(int recipeId) RecipeDietFacts
         +loadAll() Map~Integer, RecipeDietFacts~
+        +dataGeneration() long
         +tagGroups() Map~String, String~
     }
     class tags_ItemAnimalRepository["ItemAnimalRepository"]
@@ -126,6 +134,7 @@ classDiagram
 |---|---|---|
 | `RecipeDietFacts loadRecipe(int recipeId)` | public | The facts of one recipe, or empty facts when it has none. |
 | `Map<Integer, RecipeDietFacts> loadAll()` | public | The facts of every recipe, by recipe id. |
+| `long dataGeneration()` | public | Changes when the database underneath was replaced; the service drops its cached facts then. |
 | `Map<String, String> tagGroups()` | public | tag name → group (tag_category) for every tag; the filter needs it to know which tags depend on the ingredients. |
 
 **Referenced by:** `DietFilterService`, `ServiceConfig`
@@ -138,6 +147,11 @@ Applies diet rules to recipes on the server, so the client never receives 11,000
 Reusable: .judgeAll and .judge take rules and return verdicts by recipe id; the recipe list
 (and later the full search / paging) only decides what to do with them. No SQL here.
 
+Loading the facts of every recipe (catalogue, ingredients, tags) costs a few hundred ms, so
+.judgeAll judges against a snapshot kept in memory for .DEFAULT_CACHE_SECONDS seconds (and dropped
+by .invalidate(), or when the database is replaced). A listed verdict can therefore be up to that old;
+.judge for one recipe always reads fresh, so the detail view is authoritative.
+
 Presets filter INGREDIENTS only. DAHÄM cannot certify halal or kosher (slaughter, certification): meat
 certification stays the shopper's responsibility.
 
@@ -145,13 +159,22 @@ certification stays the shopper's responsibility.
 classDiagram
     direction LR
     class diet_DietFilterService["DietFilterService"] {
+        +long DEFAULT_CACHE_SECONDS$
         -DietFilterRepository repository
         -DietPresets presets
+        -long cacheNanos
+        -LongSupplier nanoTime
+        -Snapshot snapshot
         +DietFilterService(DietFilterRepository repository, DietPresets presets)
+        +DietFilterService(DietFilterRepository repository, DietPresets presets, long cacheSeconds, LongSupplier nanoTime)
         +presets() DietPresets
         +rules(List~String~ diets, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) DietRules
         +judgeAll(DietRules rules, Iterable~Integer~ recipeIds) Map~Integer, DietVerdict~
+        +invalidate() void
         +judge(DietRules rules, int recipeId) Judged
+    }
+    class diet_DietFilterService_Snapshot["DietFilterService.Snapshot"] {
+        <<record>>
     }
     class diet_DietFilterService_Judged["DietFilterService.Judged"] {
         <<record>>
@@ -161,6 +184,7 @@ classDiagram
     class api_RecipeController["RecipeController"] {
         <<controller>>
     }
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
     class diet_DietRules["DietRules"] {
         <<record>>
     }
@@ -170,6 +194,7 @@ classDiagram
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
+    diet_DietFilterService *-- diet_DietFilterService_Snapshot
     diet_DietFilterService *-- diet_DietFilterService_Judged
     diet_DietFilterService --> diet_DietFilterRepository
     diet_DietFilterService --> diet_DietPresets
@@ -177,22 +202,62 @@ classDiagram
     diet_DietFilterService ..> diet_DietVerdict
     api_RecipeController --> diet_DietFilterService
     api_ServiceConfig ..> diet_DietFilterService
+    mealplanner_RecipeSearchService --> diet_DietFilterService
 ```
 
 | Field | Type |
 |---|---|
+| `DEFAULT_CACHE_SECONDS` | `long` |
 | `repository` | `DietFilterRepository` |
 | `presets` | `DietPresets` |
+| `cacheNanos` | `long` |
+| `nanoTime` | `LongSupplier` |
+| `snapshot` | `Snapshot` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `DietFilterService(DietFilterRepository repository, DietPresets presets)` | public |  |
+| `DietFilterService(DietFilterRepository repository, DietPresets presets, long cacheSeconds, LongSupplier nanoTime)` | public |  |
 | `DietPresets presets()` | public |  |
 | `DietRules rules(List<String> diets, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | The rules for the given request parameters; an unknown preset is an IllegalArgumentException. |
 | `Map<Integer, DietVerdict> judgeAll(DietRules rules, Iterable<Integer> recipeIds)` | public | A verdict for EVERY recipe that has any facts, by recipe id (recipes without ingredients are UNCLEAR). |
+| `void invalidate()` | public | Drops the cached facts, e.g. |
 | `Judged judge(DietRules rules, int recipeId)` | public | The verdict for one recipe, with its unmatched lines in RecipeDietFacts.unmatched(). |
 
-**Referenced by:** `RecipeController`, `ServiceConfig`
+**Referenced by:** `RecipeController`, `RecipeSearchService`, `ServiceConfig`
+
+## DietFilterService.Snapshot
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class diet_DietFilterService_Snapshot["DietFilterService.Snapshot"] {
+        <<record>>
+        +Map~Integer, RecipeDietFacts~ facts
+        +RecipeDietFilter filter
+        +long generation
+        +long loadedAt
+    }
+    class diet_DietFilterService["DietFilterService"]
+    class diet_RecipeDietFacts["RecipeDietFacts"] {
+        <<record>>
+    }
+    class diet_RecipeDietFilter["RecipeDietFilter"]
+    diet_DietFilterService_Snapshot --> diet_RecipeDietFacts
+    diet_DietFilterService_Snapshot --> diet_RecipeDietFilter
+    diet_DietFilterService *-- diet_DietFilterService_Snapshot
+```
+
+| Component | Type |
+|---|---|
+| `facts` | `Map<Integer, RecipeDietFacts>` |
+| `filter` | `RecipeDietFilter` |
+| `generation` | `long` |
+| `loadedAt` | `long` |
+
+**Referenced by:** `DietFilterService`
 
 ## DietFilterService.Judged
 
@@ -338,9 +403,11 @@ classDiagram
     class diet_DietPresets["DietPresets"]
     class diet_DietFilterService["DietFilterService"]
     class diet_RecipeDietFilter["RecipeDietFilter"]
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
     diet_DietRules ..> diet_DietPresets
     diet_DietFilterService ..> diet_DietRules
     diet_RecipeDietFilter ..> diet_DietRules
+    mealplanner_RecipeSearchService ..> diet_DietRules
 ```
 
 | Component | Type |
@@ -359,7 +426,7 @@ classDiagram
 | `boolean hasHardRules()` | public | True if any hard rule (exclusion or required tag) is set. |
 | `boolean hasRules()` | public | True if any rule at all is set (includeUnclear alone is no rule). |
 
-**Referenced by:** `DietFilterService`, `RecipeDietFilter`
+**Referenced by:** `DietFilterService`, `RecipeDietFilter`, `RecipeSearchService`
 
 ## DietStatus
 
@@ -420,6 +487,9 @@ classDiagram
     class diet_DietFilterService_Judged["DietFilterService.Judged"] {
         <<record>>
     }
+    class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
+        <<record>>
+    }
     class api_DietDto["DietDto"] {
         <<record>>
     }
@@ -428,6 +498,7 @@ classDiagram
     }
     class diet_DietFilterService["DietFilterService"]
     class diet_RecipeDietFilter["RecipeDietFilter"]
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
     diet_DietVerdict *-- diet_DietVerdict_Hint
     diet_DietVerdict *-- diet_DietVerdict_Item
     diet_DietVerdict *-- diet_DietVerdict_SoftHits
@@ -437,6 +508,8 @@ classDiagram
     diet_DietFilterService ..> diet_DietVerdict
     diet_DietFilterService_Judged --> diet_DietVerdict
     diet_RecipeDietFilter ..> diet_DietVerdict
+    mealplanner_RecipeSearchService ..> diet_DietVerdict
+    mealplanner_RecipeSearchService_Entry --> diet_DietVerdict
 ```
 
 | Component | Type |
@@ -449,7 +522,7 @@ classDiagram
 |---|---|---|
 | `boolean hasSoftHits()` | public |  |
 
-**Referenced by:** `DietDto`, `DietDto.Hint`, `DietFilterService`, `RecipeDietFilter`
+**Referenced by:** `DietDto`, `DietDto.Hint`, `DietFilterService`, `RecipeDietFilter`, `RecipeSearchService`, `RecipeSearchService.Entry`
 
 ## DietVerdict.Hint
 
@@ -580,6 +653,9 @@ classDiagram
     class tags_RecipeFacts["RecipeFacts"] {
         <<record>>
     }
+    class diet_DietFilterService_Snapshot["DietFilterService.Snapshot"] {
+        <<record>>
+    }
     class diet_DietFilterService_Judged["DietFilterService.Judged"] {
         <<record>>
     }
@@ -587,6 +663,7 @@ classDiagram
     class diet_RecipeDietFilter["RecipeDietFilter"]
     diet_RecipeDietFacts --> tags_RecipeFacts
     diet_DietFilterRepository ..> diet_RecipeDietFacts
+    diet_DietFilterService_Snapshot --> diet_RecipeDietFacts
     diet_DietFilterService_Judged --> diet_RecipeDietFacts
     diet_RecipeDietFilter ..> diet_RecipeDietFacts
 ```
@@ -635,6 +712,9 @@ classDiagram
         +judge(DietRules rules, RecipeDietFacts recipe) DietVerdict
         +displayOrder() Comparator~DietVerdict~$
     }
+    class diet_DietFilterService_Snapshot["DietFilterService.Snapshot"] {
+        <<record>>
+    }
     class diet_DietRules["DietRules"] {
         <<record>>
     }
@@ -647,6 +727,7 @@ classDiagram
     diet_RecipeDietFilter ..> diet_DietRules
     diet_RecipeDietFilter ..> diet_DietVerdict
     diet_RecipeDietFilter ..> diet_RecipeDietFacts
+    diet_DietFilterService_Snapshot --> diet_RecipeDietFilter
 ```
 
 | Field | Type |

@@ -1334,6 +1334,7 @@ classDiagram
         +tagsForRecipe(int recipeId) List~Tag~
         +recipeTagsForRecipe(int recipeId) List~RecipeTag~
         +tagNamesByRecipe() java.util.Map~Integer, List~String~~
+        +tagNamesForRecipes(java.util.Collection~Integer~ recipeIds) java.util.Map~Integer, List~String~~
         +recipesForTag(int tagId) List~Integer~
         +allTags() List~Tag~
     }
@@ -1369,6 +1370,7 @@ classDiagram
 | `List<Tag> tagsForRecipe(int recipeId)` | public |  |
 | `List<RecipeTag> recipeTagsForRecipe(int recipeId)` | public |  |
 | `java.util.Map<Integer, List<String>> tagNamesByRecipe()` | public |  |
+| `java.util.Map<Integer, List<String>> tagNamesForRecipes(java.util.Collection<Integer> recipeIds)` | public |  |
 | `List<Integer> recipesForTag(int tagId)` | public |  |
 | `List<Tag> allTags()` | public |  |
 
@@ -1416,12 +1418,14 @@ classDiagram
         +tagsForRecipe(int recipeId) List~Tag~
         +recipeTagsForRecipe(int recipeId) List~TagRepository.RecipeTag~
         +tagNamesByRecipe() java.util.Map~Integer, List~String~~
+        +tagNamesForRecipes(java.util.Collection~Integer~ recipeIds) java.util.Map~Integer, List~String~~
         +recipesWithTag(String name) List~Integer~
     }
     class tags_TagRepository["TagRepository"]
     class api_RecipeController["RecipeController"] {
         <<controller>>
     }
+    class mealplanner_RecipeSearchService["RecipeSearchService"]
     class tags_Tag["Tag"]
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
@@ -1430,6 +1434,7 @@ classDiagram
     tags_TagService ..> tags_Tag
     api_RecipeController --> tags_TagService
     api_ServiceConfig ..> tags_TagService
+    mealplanner_RecipeSearchService --> tags_TagService
 ```
 
 | Field | Type |
@@ -1443,9 +1448,10 @@ classDiagram
 | `List<Tag> tagsForRecipe(int recipeId)` | public |  |
 | `List<TagRepository.RecipeTag> recipeTagsForRecipe(int recipeId)` | public |  |
 | `java.util.Map<Integer, List<String>> tagNamesByRecipe()` | public |  |
+| `java.util.Map<Integer, List<String>> tagNamesForRecipes(java.util.Collection<Integer> recipeIds)` | public |  |
 | `List<Integer> recipesWithTag(String name)` | public |  |
 
-**Referenced by:** `RecipeController`, `ServiceConfig`
+**Referenced by:** `RecipeController`, `RecipeSearchService`, `ServiceConfig`
 
 ## TagSettings
 
