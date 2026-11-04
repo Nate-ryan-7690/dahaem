@@ -601,7 +601,8 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.recipes[0].recipeId").value(recipeId))
                 .andExpect(jsonPath("$.recipes[0].mealTime").value("Abendessen"));
 
-        // Same week again violates meal_plan's UNIQUE week start; same recipe again violates the PK.
+        // Same week again violates meal_plan's UNIQUE week start. The same recipe again is allowed since migration 0016
+        // (every planned meal has its own id): it adds a second meal.
         mvc.perform(post("/api/meal-plans").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekStartDate\": \"2031-01-06\"}"))
@@ -609,7 +610,9 @@ class ApiSmokeTest {
         mvc.perform(post("/api/meal-plans/{id}/recipes", planId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"recipeId\": " + recipeId + ", \"mealTime\": \"Abendessen\"}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.recipes", hasSize(2)))
+                .andExpect(jsonPath("$.recipes[1].recipeId").value(recipeId));
 
         mvc.perform(post("/api/meal-plans/{id}/recipes", 999_999).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
