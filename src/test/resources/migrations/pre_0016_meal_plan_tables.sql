@@ -1,10 +1,11 @@
--- household, recipe, meal_plan and meal_plan_recipe exactly as schema.sql had them before migrations/0016_meal_plan_entries.sql (for MealPlanSchemaMigrationTest).
+-- household, recipe, meal_plan and meal_plan_recipe exactly as schema.sql had them before migrations/0016_meal_plan_entries.sql (for MealPlanSchemaMigrationTest and RecipeQuantitiesMigrationTest).
+-- CREATE TABLE IF NOT EXISTS: a table an earlier migration already made (recipe) is left as it is.
 
-CREATE TABLE household ( household_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE IF NOT EXISTS household ( household_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	household_name TEXT NOT NULL,
 	created_date DATE NOT NULL);
 
-CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE IF NOT EXISTS recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_name TEXT NOT NULL,
 
@@ -52,11 +53,11 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	CONSTRAINT recipe_servings_max_above_servings
 		CHECK (recipe_servings_max IS NULL OR recipe_servings_max > recipe_servings));
 
-CREATE TABLE meal_plan ( meal_plan_id INTEGER PRIMARY KEY AUTO_INCREMENT,
+CREATE TABLE IF NOT EXISTS meal_plan ( meal_plan_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	meal_plan_week_start_date DATE NOT NULL UNIQUE);
 
-CREATE TABLE meal_plan_recipe(meal_plan_recipe_id INTEGER,
+CREATE TABLE IF NOT EXISTS meal_plan_recipe(meal_plan_recipe_id INTEGER,
 
 	meal_plan_recipe_plan_id INTEGER,
 

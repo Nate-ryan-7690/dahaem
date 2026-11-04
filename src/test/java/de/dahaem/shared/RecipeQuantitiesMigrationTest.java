@@ -77,6 +77,9 @@ class RecipeQuantitiesMigrationTest {
 
         List<Path> migrations = new ArrayList<>(List.of(OLD_TABLES, MIGRATION));
         migrations.addAll(LATER_MIGRATIONS);
+        // 0016 also changes household and meal_plan_recipe, which this test's old tables do not have
+        migrations.add(Path.of("src", "test", "resources", "migrations", "pre_0016_meal_plan_tables.sql"));
+        migrations.add(Path.of("migrations", "0016_meal_plan_entries.sql"));
         TestDatabase.reset(migrations);
         List<String> migrated = recipeColumnsAndChecks();
 
