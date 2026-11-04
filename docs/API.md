@@ -48,6 +48,8 @@ Every error has the same shape:
 | POST | `/api/auth/login` | Log in (form fields `email`, `password`). 204 on success, 401 on a wrong email or password. Handled by Spring Security, not by a controller. |
 | POST | `/api/auth/logout` | End the session and delete the `JSESSIONID` cookie. 204. |
 | GET | [`/api/auth/me`](#get-apiauthme) | The logged-in user and their household. |
+| GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
+| PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
 | GET | [`/api/inventory`](#get-apiinventory) |  |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
@@ -184,6 +186,61 @@ The logged-in user and their household.
     "name": "…",
     "role": "…"
   }
+}
+```
+
+### HouseholdController
+
+The household's head count, so the app can scale portions to the people it feeds. The PHP decides
+which logged-in account may call this; the household is named in the URL so the API can check
+membership later without a contract change.
+
+
+#### GET /api/households/{id}
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `id` | `int` |
+
+**Answer** 200 `HouseholdDto`
+
+```json
+{
+  "id": 0,
+  "name": "…",
+  "people": 0,
+  "createdDate": "2026-10-14"
+}
+```
+
+#### PUT /api/households/{id}/people
+
+Sets the head count and returns the household. 400 when people is missing or below 1, 404 for an unknown household.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `id` | `int` |
+
+**Request body** `SetHouseholdPeopleRequest`
+
+```json
+{
+  "people": 0
+}
+```
+
+**Answer** 200 `HouseholdDto`
+
+```json
+{
+  "id": 0,
+  "name": "…",
+  "people": 0,
+  "createdDate": "2026-10-14"
 }
 ```
 
@@ -1072,6 +1129,21 @@ Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly per
 { … }
 ```
 
+### HouseholdDto
+
+A household as the API shows it. people is the head count and null until someone has set it.
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+| `people` | `Integer` |
+| `createdDate` | `LocalDate` |
+
+```json
+{ … }
+```
+
 ### ItemDto
 
 One inventory item as returned by /api/inventory.
@@ -1397,6 +1469,18 @@ A null (or omitted) storeItemId clears the line's selection.
 | Property | Type |
 |---|---|
 | `storeItemId` | `Integer` |
+
+```json
+{ … }
+```
+
+### SetHouseholdPeopleRequest
+
+Body of PUT /api/households/{id}/people. people is boxed so a missing field is a 400, not a 0.
+
+| Property | Type |
+|---|---|
+| `people` | `Integer` |
 
 ```json
 { … }

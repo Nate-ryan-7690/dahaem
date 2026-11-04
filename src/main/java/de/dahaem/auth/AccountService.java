@@ -1,5 +1,6 @@
 package de.dahaem.auth;
 
+import de.dahaem.shared.Portions;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.nio.charset.StandardCharsets;
@@ -7,6 +8,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.Locale;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -112,6 +114,29 @@ public class AccountService {
 
     public Optional<HouseholdMembership> membershipFor(int userId) {
         return repository.findMembershipForUser(userId);
+    }
+
+    public Optional<Household> findHousehold(int householdId) {
+        return repository.findHousehold(householdId);
+    }
+
+    /**
+     * Sets how many people the household feeds (household_people). Any account of the household may do
+     * this; the caller (PHP) decides who is allowed to call it.
+     *
+     * @return the household as it is now
+     * @throws IllegalArgumentException if people is below 1
+     * @throws NoSuchElementException   if there is no such household
+     */
+    public Household setHouseholdPeople(int householdId, int people) {
+        if (!Portions.isValidPeople(people)) {
+            throw new IllegalArgumentException(Portions.INVALID_PEOPLE_MESSAGE);
+        }
+        if (!repository.updateHouseholdPeople(householdId, people)) {
+            throw new NoSuchElementException("No household with id " + householdId);
+        }
+        return repository.findHousehold(householdId)
+                .orElseThrow(() -> new NoSuchElementException("No household with id " + householdId));
     }
 
     private static void validatePassword(String rawPassword) {

@@ -116,8 +116,8 @@ needs the item, no amount). To-taste rows never reach a shopping list. Changed b
 Indexes on the recipe, on the plan and on (plan, date). Servings of a meal, most specific first: its own number,
 then `recipe.recipe_preferred_servings`, then `household.household_people`, then 2. A nightly job (not built yet,
 00:01) is meant to write the resolved number onto yesterday's rows with NULL servings, so past meals stop following
-the household number; the service is meant to refuse edits to a past day. The API does not use the new columns yet:
-the old endpoints keep working (their INSERT names its columns), and adding the same recipe to a plan twice no longer
+the household number; the service is meant to refuse edits to a past day. The API only uses `household_people` so far (read and set, `/api/households/{id}`); the meal-plan endpoints
+keep working (their INSERT names its columns), and adding the same recipe to a plan twice no longer
 answers 409, it adds a second meal. The shopping list still counts a recipe once per plan
 (`ShoppingListService` takes the distinct recipe ids).
 

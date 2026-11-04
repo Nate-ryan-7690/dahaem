@@ -33,6 +33,7 @@ classDiagram
     auth_AccountService ..> auth_CreatedAccount
     auth_AccountService ..> auth_AppUser
     auth_AccountService ..> auth_HouseholdMembership
+    auth_AccountService ..> auth_Household
     auth_CreatedAccount --> auth_AppUser
     auth_CreatedAccount --> auth_HouseholdMembership
     auth_HouseholdMembership --> auth_Household
@@ -73,6 +74,8 @@ classDiagram
         +findUserByEmail(String email) Optional~AppUser~
         +updatePasswordHash(int userId, String passwordHash) boolean
         +findFirstHousehold() Optional~Household~
+        +findHousehold(int householdId) Optional~Household~
+        +updateHouseholdPeople(int householdId, int people) boolean
         +findMembershipForUser(int userId) Optional~HouseholdMembership~
     }
     class auth_AccountService["AccountService"]
@@ -104,6 +107,8 @@ classDiagram
 | `Optional<AppUser> findUserByEmail(String email)` | public | Finds the user with exactly this (already normalized) email. |
 | `boolean updatePasswordHash(int userId, String passwordHash)` | public | Replaces a user's password hash. |
 | `Optional<Household> findFirstHousehold()` | public | The oldest household, i.e. |
+| `Optional<Household> findHousehold(int householdId)` | public | The household with this id, or empty when there is none. |
+| `boolean updateHouseholdPeople(int householdId, int people)` | public | Sets the household's head count. |
 | `Optional<HouseholdMembership> findMembershipForUser(int userId)` | public | The household a user belongs to, with their role in it. |
 
 **Referenced by:** `AccountService`, `ServiceConfig`
@@ -138,9 +143,14 @@ classDiagram
         +setPassword(String email, String rawPassword) void
         +findByEmail(String email) Optional~AppUser~
         +membershipFor(int userId) Optional~HouseholdMembership~
+        +findHousehold(int householdId) Optional~Household~
+        +setHouseholdPeople(int householdId, int people) Household
     }
     class auth_AccountRepository["AccountRepository"]
     class api_AuthController["AuthController"] {
+        <<controller>>
+    }
+    class api_HouseholdController["HouseholdController"] {
         <<controller>>
     }
     class auth_CreatedAccount["CreatedAccount"] {
@@ -150,6 +160,7 @@ classDiagram
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
     }
+    class auth_Household["Household"]
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
@@ -160,7 +171,9 @@ classDiagram
     auth_AccountService ..> auth_CreatedAccount
     auth_AccountService ..> auth_AppUser
     auth_AccountService ..> auth_HouseholdMembership
+    auth_AccountService ..> auth_Household
     api_AuthController --> auth_AccountService
+    api_HouseholdController --> auth_AccountService
     api_SecurityConfig ..> auth_AccountService
     api_ServiceConfig ..> auth_AccountService
 ```
@@ -182,8 +195,10 @@ classDiagram
 | `void setPassword(String email, String rawPassword)` | public | Sets a new password for an existing user (the operator's stand-in for "forgot password"). |
 | `Optional<AppUser> findByEmail(String email)` | public |  |
 | `Optional<HouseholdMembership> membershipFor(int userId)` | public |  |
+| `Optional<Household> findHousehold(int householdId)` | public |  |
+| `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AuthController`, `SecurityConfig`, `ServiceConfig`
+**Referenced by:** `AuthController`, `HouseholdController`, `SecurityConfig`, `ServiceConfig`
 
 ## AppUser
 
@@ -292,17 +307,26 @@ classDiagram
         -int id
         -String name
         -LocalDate createdDate
+        -Integer people
         +Household(int id, String name, LocalDate createdDate)
+        +Household(int id, String name, LocalDate createdDate, Integer people)
         +getId() int
         +getName() String
         +getCreatedDate() LocalDate
+        +getPeople() Integer
         +toString() String
     }
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
     }
+    class api_HouseholdDto["HouseholdDto"] {
+        <<record>>
+    }
     class auth_AccountRepository["AccountRepository"]
+    class auth_AccountService["AccountService"]
+    api_HouseholdDto ..> auth_Household
     auth_AccountRepository ..> auth_Household
+    auth_AccountService ..> auth_Household
     auth_HouseholdMembership --> auth_Household
 ```
 
@@ -311,16 +335,19 @@ classDiagram
 | `id` | `int` |
 | `name` | `String` |
 | `createdDate` | `LocalDate` |
+| `people` | `Integer` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `Household(int id, String name, LocalDate createdDate)` | public |  |
+| `Household(int id, String name, LocalDate createdDate, Integer people)` | public | people is the household's head count (household_people); null until someone has set it. |
 | `int getId()` | public |  |
 | `String getName()` | public |  |
 | `LocalDate getCreatedDate()` | public |  |
+| `Integer getPeople()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `AccountRepository`, `HouseholdMembership`
+**Referenced by:** `AccountRepository`, `AccountService`, `HouseholdDto`, `HouseholdMembership`
 
 ## HouseholdMembership
 

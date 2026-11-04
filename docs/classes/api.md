@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-52 types in 39 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+55 types in 42 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -57,6 +57,12 @@ classDiagram
         <<record>>
     }
     class api_GeneratedShoppingListDto["GeneratedShoppingListDto"] {
+        <<record>>
+    }
+    class api_HouseholdController["HouseholdController"] {
+        <<controller>>
+    }
+    class api_HouseholdDto["HouseholdDto"] {
         <<record>>
     }
     class api_InternalTokenFilter["InternalTokenFilter"] {
@@ -129,6 +135,9 @@ classDiagram
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
+    class api_SetHouseholdPeopleRequest["SetHouseholdPeopleRequest"] {
+        <<record>>
+    }
     class api_ShoppingListController["ShoppingListController"] {
         <<controller>>
     }
@@ -169,6 +178,8 @@ classDiagram
     api_DietDto *-- api_DietDto_Unmatched
     api_DietDto_SoftHits --> api_DietDto_Item
     api_DietDto_SoftHits --> api_DietDto_Hint
+    api_HouseholdController ..> api_HouseholdDto
+    api_HouseholdController ..> api_SetHouseholdPeopleRequest
     api_InventoryController ..> api_ItemDto
     api_MealPlanController ..> api_MealPlanDto
     api_MealPlanController ..> api_CreateMealPlanRequest
@@ -226,6 +237,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`DietDto.Unmatched`](#dietdtounmatched) | record |  |  |
 | [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, and a readable message. |
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
+| [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
+| [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
 | [`InternalTokenFilter`](#internaltokenfilter) | class | Spring component | Shared-secret gate for the internal API. |
 | [`InventoryController`](#inventorycontroller) | class | REST controller |  |
 | [`ItemDto`](#itemdto) | record |  | One inventory item as returned by /api/inventory. |
@@ -250,6 +263,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`SecurityConfig`](#securityconfig) | class | configuration | Who may call the API. |
 | [`SelectStoreItemRequest`](#selectstoreitemrequest) | record |  | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](#serviceconfig) | class | configuration | Wires the existing plain-Java repositories and services as Spring beans. |
+| [`SetHouseholdPeopleRequest`](#sethouseholdpeoplerequest) | record |  | Body of PUT /api/households/{id}/people. |
 | [`ShoppingListController`](#shoppinglistcontroller) | class | REST controller |  |
 | [`ShoppingListDto`](#shoppinglistdto) | record |  | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |
 | [`ShoppingListDto.Line`](#shoppinglistdtoline) | record |  |  |
@@ -865,6 +879,84 @@ classDiagram
 | `shoppingListId` | `int` |
 
 **Referenced by:** `MealPlanController`
+
+## HouseholdController
+
+*class · REST controller*
+
+The household's head count, so the app can scale portions to the people it feeds. The PHP decides
+which logged-in account may call this; the household is named in the URL so the API can check
+membership later without a contract change.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_HouseholdController["HouseholdController"] {
+        <<controller>>
+        -AccountService accountService
+        +HouseholdController(AccountService accountService)
+        +get(int id) HouseholdDto
+        +setPeople(int id, SetHouseholdPeopleRequest request) HouseholdDto
+    }
+    class auth_AccountService["AccountService"]
+    class api_HouseholdDto["HouseholdDto"] {
+        <<record>>
+    }
+    class api_SetHouseholdPeopleRequest["SetHouseholdPeopleRequest"] {
+        <<record>>
+    }
+    api_HouseholdController --> auth_AccountService
+    api_HouseholdController ..> api_HouseholdDto
+    api_HouseholdController ..> api_SetHouseholdPeopleRequest
+```
+
+| Field | Type |
+|---|---|
+| `accountService` | `AccountService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `HouseholdController(AccountService accountService)` | public |  |
+| `HouseholdDto get(int id)` | public |  |
+| `HouseholdDto setPeople(int id, SetHouseholdPeopleRequest request)` | public | Sets the head count and returns the household. |
+
+## HouseholdDto
+
+*record*
+
+A household as the API shows it. people is the head count and null until someone has set it.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_HouseholdDto["HouseholdDto"] {
+        <<record>>
+        +int id
+        +String name
+        +Integer people
+        +LocalDate createdDate
+        +from(Household household) HouseholdDto$
+    }
+    class auth_Household["Household"]
+    class api_HouseholdController["HouseholdController"] {
+        <<controller>>
+    }
+    api_HouseholdDto ..> auth_Household
+    api_HouseholdController ..> api_HouseholdDto
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+| `people` | `Integer` |
+| `createdDate` | `LocalDate` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `HouseholdDto from(Household household)` | public static |  |
+
+**Referenced by:** `HouseholdController`
 
 ## InternalTokenFilter
 
@@ -2079,6 +2171,31 @@ classDiagram
 | `DietPresets dietPresets()` | public | Presets come from config/diet_presets.json (relative to the working directory, /app in the container). |
 | `DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds)` | public |  |
 | `RecipeSearchService recipeSearchService(RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService)` | public |  |
+
+## SetHouseholdPeopleRequest
+
+*record*
+
+Body of PUT /api/households/{id}/people. people is boxed so a missing field is a 400, not a 0.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_SetHouseholdPeopleRequest["SetHouseholdPeopleRequest"] {
+        <<record>>
+        +Integer people
+    }
+    class api_HouseholdController["HouseholdController"] {
+        <<controller>>
+    }
+    api_HouseholdController ..> api_SetHouseholdPeopleRequest
+```
+
+| Component | Type |
+|---|---|
+| `people` | `Integer` |
+
+**Referenced by:** `HouseholdController`
 
 ## ShoppingListController
 
