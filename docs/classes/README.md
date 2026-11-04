@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (52)"]
+    api["api (55)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (3)"]
@@ -20,7 +20,7 @@ flowchart TD
     stores["stores (47)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
-    api -->|7| auth
+    api -->|9| auth
     api -->|9| diet
     api -->|4| finance
     api -->|4| inventory
@@ -45,7 +45,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 52 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 55 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
@@ -117,6 +117,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, and a readable message. |
 | [`GeneratedShoppingListDto`](api.md#generatedshoppinglistdto) | api | record | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
+| [`HouseholdController`](api.md#householdcontroller) | api | class | The household's head count, so the app can scale portions to the people it feeds. |
+| [`HouseholdDto`](api.md#householddto) | api | record | A household as the API shows it. |
 | [`HouseholdMembership`](auth.md#householdmembership) | auth | record | A household together with the role one user has in it (one household_member row, joined to its household). |
 | [`HouseholdRole`](auth.md#householdrole) | auth | enum | What a user may do in their household. |
 | [`HttpFetcher`](stores.md#httpfetcher) | stores | class | Fetches public web pages / JSON politely: a normal browser User-Agent, timeouts, a few retries with growing backoff, and a pause after every successful request. |
@@ -237,6 +239,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`SecurityConfig`](api.md#securityconfig) | api | class | Who may call the API. |
 | [`SelectStoreItemRequest`](api.md#selectstoreitemrequest) | api | record | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](api.md#serviceconfig) | api | class | Wires the existing plain-Java repositories and services as Spring beans. |
+| [`SetHouseholdPeopleRequest`](api.md#sethouseholdpeoplerequest) | api | record | Body of PUT /api/households/{id}/people. |
 | [`ShoppingList`](shopping.md#shoppinglist) | shopping | record | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
 | [`ShoppingListController`](api.md#shoppinglistcontroller) | api | class |  |
 | [`ShoppingListDto`](api.md#shoppinglistdto) | api | record | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |
