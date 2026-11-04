@@ -11,11 +11,18 @@ public class Household {
     private final int id;
     private final String name;
     private final LocalDate createdDate;
+    private final Integer people;
 
     public Household(int id, String name, LocalDate createdDate) {
+        this(id, name, createdDate, null);
+    }
+
+    /** people is the household's head count (household_people); null until someone has set it. */
+    public Household(int id, String name, LocalDate createdDate, Integer people) {
         this.id = id;
         this.name = name;
         this.createdDate = createdDate;
+        this.people = people;
     }
 
     public int getId() { return id; }
@@ -24,8 +31,11 @@ public class Household {
 
     public LocalDate getCreatedDate() { return createdDate; }
 
+    public Integer getPeople() { return people; }
+
     @Override
     public String toString() {
-        return "Household{id=" + id + ", name='" + name + "', createdDate=" + createdDate + '}';
+        return "Household{id=" + id + ", name='" + name + "', createdDate=" + createdDate
+                + ", people=" + people + '}';
     }
 }

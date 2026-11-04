@@ -31,6 +31,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -186,6 +187,60 @@ class AuthApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"weekStartDate\": \"2031-01-06\"}"))
                 .andExpect(status().isCreated());
+    }
+
+    @Test
+    void householdHeadCountCanBeReadAndSetByALoggedInAccount() throws Exception {
+        int householdId = new AccountRepository().findFirstHousehold().orElseThrow().getId();
+        String path = "/api/households/" + householdId;
+
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+
+        MockHttpSession session = login();
+        mvc.perform(get(path).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(householdId))
+                .andExpect(jsonPath("$.name").value("Zuhause"))
+                .andExpect(jsonPath("$.people").doesNotExist());
+
+        mvc.perform(put(path + "/people").session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"people\": 4}"))
+                .andExpect(status().isForbidden());   // CSRF token needed, like every write
+
+        mvc.perform(put(path + "/people").session(session)
+                        .header("X-CSRF-TOKEN", csrfToken(session))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"people\": 4}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.people").value(4));
+        mvc.perform(get(path).session(session))
+                .andExpect(jsonPath("$.people").value(4));
+        mvc.perform(get("/api/auth/me").session(session))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void householdHeadCountRejectsBadInputAndUnknownHouseholds() throws Exception {
+        int householdId = new AccountRepository().findFirstHousehold().orElseThrow().getId();
+        MockHttpSession session = login();
+        String token = csrfToken(session);
+
+        for (String body : new String[] {"{\"people\": 0}", "{\"people\": -2}", "{}", "{\"people\": null}",
+                "{\"people\": \"many\"}"}) {
+            mvc.perform(put("/api/households/" + householdId + "/people").session(session)
+                            .header("X-CSRF-TOKEN", token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        mvc.perform(put("/api/households/" + (householdId + 99) + "/people").session(session)
+                        .header("X-CSRF-TOKEN", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"people\": 3}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/households/" + (householdId + 99)).session(session))
+                .andExpect(status().isNotFound());
     }
 
     private MockHttpSession login() throws Exception {

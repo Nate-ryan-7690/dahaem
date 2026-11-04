@@ -306,6 +306,10 @@ Login is a normal session cookie. State-changing requests need the session's CSR
 | POST | `/api/auth/login` | form fields `email`, `password`; 204, or 401 on wrong credentials |
 | POST | `/api/auth/logout` | ends the session; 204 |
 | GET | `/api/auth/me` | the logged-in user and their household |
+| GET | `/api/households/{id}` | `{id, name, people, createdDate}`; `people` is the head count, `null` until it is set; 404 for an unknown household |
+| PUT | `/api/households/{id}/people` | body `{"people": N}` (a whole number, at least 1); sets the head count and answers the household; 400 for a missing or invalid number, 404 for an unknown household |
+
+The head count (`household_people`) is what the planner uses for portions when a meal has no number of its own (2 when unset). Any account of the household may change it; the PHP decides who may call the endpoint, since the API cannot tell which account is acting yet.
 
 The API binds to `127.0.0.1` by default. To use it from phones on the network, put it behind a TLS reverse proxy; see [docs/VISION.md](docs/VISION.md#running-it-on-the-network).
 

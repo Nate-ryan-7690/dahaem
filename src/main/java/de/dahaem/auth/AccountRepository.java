@@ -104,7 +104,7 @@ public class AccountRepository {
 
     /** The oldest household, i.e. the one the first user created. Empty on a fresh database. */
     public Optional<Household> findFirstHousehold() {
-        String sql = "SELECT household_id, household_name, created_date FROM household "
+        String sql = "SELECT household_id, household_name, household_people, created_date FROM household "
                 + "ORDER BY household_id LIMIT 1";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql);
@@ -115,13 +115,42 @@ public class AccountRepository {
         }
     }
 
+    /** The household with this id, or empty when there is none. */
+    public Optional<Household> findHousehold(int householdId) {
+        String sql = "SELECT household_id, household_name, household_people, created_date FROM household "
+                + "WHERE household_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, householdId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(mapHousehold(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not look up household " + householdId, e);
+        }
+    }
+
+    /** Sets the household's head count. Returns false when no household has this id. */
+    public boolean updateHouseholdPeople(int householdId, int people) {
+        String sql = "UPDATE household SET household_people = ? WHERE household_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, people);
+            ps.setInt(2, householdId);
+            // Count matched rows, not changed rows: setting the same number again must not look like "not found".
+            return ps.executeUpdate() > 0 || findHousehold(householdId).isPresent();
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not set the head count of household " + householdId, e);
+        }
+    }
+
     /**
      * The household a user belongs to, with their role in it. A user is in at most one household
      * for now (no multi-household switching yet); if there were several, the oldest membership wins.
      */
     public Optional<HouseholdMembership> findMembershipForUser(int userId) {
         String sql = "SELECT m.household_member_id, m.user_id, m.role, "
-                + "h.household_id, h.household_name, h.created_date "
+                + "h.household_id, h.household_name, h.household_people, h.created_date "
                 + "FROM household_member m "
                 + "INNER JOIN household h ON h.household_id = m.household_id "
                 + "WHERE m.user_id = ? "
@@ -165,6 +194,7 @@ public class AccountRepository {
         return new Household(
                 rs.getInt("household_id"),
                 rs.getString("household_name"),
-                rs.getObject("created_date", LocalDate.class));
+                rs.getObject("created_date", LocalDate.class),
+                rs.getObject("household_people", Integer.class));
     }
 }

@@ -175,4 +175,34 @@ class AccountServiceTest {
         assertTrue(repository.findFirstHousehold().isEmpty());
     }
 
+    @Test
+    void householdHeadCountIsEmptyUntilSetThenReadBack() {
+        int id = service.createUser("anna@example.de", "Anna", PASSWORD, null, TODAY)
+                .membership().household().getId();
+        assertEquals(null, service.findHousehold(id).orElseThrow().getPeople());
+
+        assertEquals(4, service.setHouseholdPeople(id, 4).getPeople());
+        assertEquals(4, service.findHousehold(id).orElseThrow().getPeople());
+        // Setting the same number again is not "household not found".
+        assertEquals(4, service.setHouseholdPeople(id, 4).getPeople());
+        assertEquals(3, service.setHouseholdPeople(id, 3).getPeople());
+        // The login's own household view carries it too.
+        int userId = service.findByEmail("anna@example.de").orElseThrow().getId();
+        assertEquals(3, service.membershipFor(userId).orElseThrow().household().getPeople());
+    }
+
+    @Test
+    void householdHeadCountMustBeAtLeastOneAndTheHouseholdMustExist() {
+        int id = service.createUser("anna@example.de", "Anna", PASSWORD, null, TODAY)
+                .membership().household().getId();
+        service.setHouseholdPeople(id, 2);
+
+        assertThrows(IllegalArgumentException.class, () -> service.setHouseholdPeople(id, 0));
+        assertThrows(IllegalArgumentException.class, () -> service.setHouseholdPeople(id, -1));
+        assertEquals(2, service.findHousehold(id).orElseThrow().getPeople());
+
+        assertThrows(java.util.NoSuchElementException.class, () -> service.setHouseholdPeople(id + 99, 2));
+        assertTrue(service.findHousehold(id + 99).isEmpty());
+    }
+
 }
