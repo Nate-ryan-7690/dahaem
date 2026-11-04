@@ -31,17 +31,6 @@ document the contract. Its open decisions are settled with Nate one at a time.
 - **Servings review: 60 titles** — `next`. 59 ready meals with alternative portions ("1 Portion für
   2 Prs. oder 2 Portionen für 1 Prs.", "2 Portionen als Vorspeise oder 1 Portion als Hauptspeise")
   and 28614 ("OTP 4P … 2 Portionen") stay at servings 2 until Nate decides a rule or edits them.
-- **"Brühe" family rule for the repair tool** — `in progress` (PR #91). A step's BARE `Brühe` should count for
-  the recipe's only stock line (`Stück Gemüsebrühe`, Geflügel-, Rinderbrühe) when the recipe has exactly ONE stock
-  item, like `Öl` ↔ `Olivenöl` and a generic `Essig` / `Senf` (`MERGE_FAMILIES` in
-  `scripts/importer/step_amounts.py`). In the 2026-10-11 run 32 lines went to review for this ("100 ml Brühe
-  zubereiten" vs `Stück Gemüsebrühe`); with several stocks in the recipe it stays a review. Source: Nate, step 3 of
-  the recipe repair. **Corrected 2026-11-03 (Nate, item rule):** Gemüsebrühe, Rinderbrühe and Geflügelbrühe are
-  three different items, so a step naming one type belongs only to a line of that type; Fond is a different product
-  from Brühe (own family `fond`, never matched with Brühe). **Settled 2026-11-03 (Nate):** a step that names no type
-  (bare `Brühe`) fills the recipe's only stock line; a step that names a type (Hähnchen-, Rinder-, Gemüsebrühe …)
-  fills only a line of that type. Known gaps, not built: Hähnchenbrühe is not treated as Geflügelbrühe (no alias
-  rule), and a typed step that matches no line leaves the line "to taste" instead of a review.
 - **Stock and fond as catalogue items: one per type, quantity in litres** — `idea`, Nate 2026-11-03. Each type is its
   own generic item (Gemüsebrühe, Rinderbrühe, Geflügelbrühe, and each fond: Kalbsfond, Fischfond …; fond ≠ Brühe).
   The form is not a separate item: powder, cube (Würfel) and glass / paste of one type are the SAME item. Their
@@ -50,6 +39,9 @@ document the contract. Its open decisions are settled with Nate one at a time.
   product, and ties in with the "Conversion table" below. The Brühe family stays for matching and for substitutions
   later (a household may swap one type for another), never for item identity. Today the catalogue has the plain item
   1851 `Brühe` (unit g) from batch 2b and item 780 `Gemüsebrühe Würfel` (the form is in the item name: to rename).
+- **Brühe rule gaps** — `idea`. Two gaps left by #91, not built: a Hähnchenbrühe step does not fill a Geflügelbrühe
+  line (no alias rule; Nate decides whether Hähnchen counts as Geflügel), and a typed step that matches no stock line
+  leaves that line "to taste" instead of putting it in the review. Source: review of #91.
 - **Remaining wrong rows after the repair** — `next`. ~301 ½-bug rows held because of uncertain
   item matches (mostly "Limette, gewachst", "Zitrone"): need overrides. 12 rows in ambiguous
   recipes. Unitless lines read as Stück ("75 Weizenmehl", "25 Sojasoße", "25
@@ -66,7 +58,8 @@ document the contract. Its open decisions are settled with Nate one at a time.
   proteinreich ≥ 30 g protein, per serving (`config/recipe_tags.properties`). **Changed 2026-10-14:** proteinreich
   is now the EU "high protein" rule (Regulation (EC) No 1924/2006, Annex: ≥ 20 % of the energy from protein) AND
   ≥ 20 g protein per serving (`high-protein.energy.share`, `high-protein.min.grams`).
-- **Diet filter: what a household does not eat** — `in progress`, this PR (migration 0012). New Tier values
+- **Diet filter: what a household does not eat** — `in progress`, merged in #79 / #80 (migrations 0012 / 0013); the
+  live steps below are Nate's. New Tier values
   (Geflügel, Ente, Gans, Kaninchen, Pferd); POSSIBLE animals for generic items (Salami, Fleischwurst,
   Wiener, Lyoner, Leberwurst, Chorizo, Gelatine …: no Tier tag, but they block vegetarisch and make a
   recipe "anpassbar"); the alcohol flag; Inhalt tags (Alkohol, Fleisch mit Milch); `unklar` for a recipe
@@ -180,7 +173,7 @@ document the contract. Its open decisions are settled with Nate one at a time.
 
 ## Receipts and purchases
 
-- **Receipts → purchase history** — `in progress`. 22 Penny receipts (June–Oct 2026, PDFs) parse to
+- **Receipts → purchase history** — `in progress`, merged in #73 / #76. 22 Penny receipts (June–Oct 2026, PDFs) parse to
   the cent (#64); read-only analysis: every line parsed. Receipts get their OWN
   tables (`purchase_receipt`, `purchase_receipt_line`, `purchase_receipt_adjustment`, migration 0008) —
   NOT `purchase_history`, which doesn't fit (store_item / expiration date NOT NULL, INTEGER quantity, no
@@ -248,14 +241,10 @@ document the contract. Its open decisions are settled with Nate one at a time.
 Research from Nate's design-patterns session, 2026-10-23. Nothing here is built. Licence readings are
 not legal advice; verify before any public release.
 
-- **`OfferSource` interface + factory** — `in progress`, this PR. `OfferSource` (`fetchOffers(OfferScope)`),
-  `AldiNordSource` / `PennySource` / `AggregatorSource` and `OfferSourceFactory` (keys `aldi`, `penny`,
-  `aggregator:<chain>`) are in; `StoreImportService.importOffers(source, scope)` is the one shared flow and
-  the three old methods delegate to it, so behaviour and `RefreshServiceTest` are unchanged. Simple Factory
-  is enough; Abstract Factory would be overkill. Still to do: `RefreshService.refreshWeekly()` and
-  `StoreImportRunner` still list the chains by hand (`RefreshServiceTest` mocks the three old methods, so
-  switching them to `importOffers(key)` means rewriting those mocks); an unknown aggregator key now throws
-  `IllegalArgumentException` (was a NullPointerException). Not run locally: the Docker-based tests.
+- **`importOffers(key)` in the refresh jobs** — `next`. Left over from #88: `RefreshService.refreshWeekly()` and
+  `StoreImportRunner` still list the chains by hand. Switching them to `StoreImportService.importOffers(key)` (a loop
+  over `OfferSourceFactory.keys()`) means rewriting the mocks in `RefreshServiceTest`, which mocks the three old
+  methods. Small, Java only, no schema change.
 - **Offers scoped by household location** — `idea`. Design agreed in the session: postal code + radius →
   store discovery → refresh → homepage prioritises favourite retailers → "all stores" view lists every
   supported retailer in the area. Favourites only sort, never filter ("surface, don't decide").
@@ -279,7 +268,7 @@ not legal advice; verify before any public release.
   Penny, Netto, Lidl, Edeka, Rewe, famila, Combi, Mix Markt, Hol'ab, Rossmann, TEDi, Jawoll, Woolworth, JYSK,
   OBI, Das Futterhaus, plus fashion chains); the rest are independents with no flyer. Curate a "supported
   chains" list; discovery lists all branches. Open: decide the manual "my store is missing" path.
-- **Offer sources: what is reachable** — `next`, Nate decides scope. Tested 2026-10-23, one request each:
+- **Offer sources: what is reachable** — `next`. Tested 2026-10-23, one request each:
   Edeka `edeka.de/eh/service/eh/offers` → 403 Akamai; Rewe national offers page → 403 bot-challenge page
   (both left alone, bot protection is not bypassed); Lidl leaflet JSON
   `endpoints.leaflets.schwarz/v4/flyer?flyer_identifier=<slug>&region_id=0` works (slug from
@@ -290,8 +279,11 @@ not legal advice; verify before any public release.
   consent or another source. kaufDA / Bonial, marktguru and Shopfully list no public API or data licence;
   Bonial's CEO says data flows from retailers to Bonial, not out. No price for a licence found. Apify
   scrapers (about $2 per 1,000 offers) read the same public pages, say "not a paid data license" and add
-  no technical gain over our own clients; not worth using. Open: send a short inquiry to Bonial, marktguru
-  and Shopfully; decide private household tool vs public product (decides whether licensing blocks).
+  no technical gain over our own clients; not worth using. **Decided 2026-11-03 (Nate): private use for now, open
+  sources only.** Parse what is publicly reachable: Aldi Nord and Penny directly, the aggregator (private use only,
+  see its terms) and flyer images read by a model (next entry); Lidl, Edeka, Rewe and Netto stay out until a way in
+  exists. No inquiry to Bonial, marktguru or Shopfully and no company API or licence work until the MVP runs and Nate
+  is happy with the product; then a private API for the sources.
 - **Flyer images → structured offers with a vision model** — `idea`. Lidl's grocery offers exist only as flyer
   page images (`pages[].image` in the leaflet JSON, 73 pages for 19–24.10.2026). Reading them with a model
   works, no custom training needed (archive.org's old flyer scans have no labels and are the wrong era,
@@ -312,18 +304,13 @@ not legal advice; verify before any public release.
   link per offer. Proposed pipeline: Haiku 5.5 first pass, re-run pages that fail validation on Sonnet.
   Open: hand-label 30–50 offers for a measured accuracy (the labels here were model-made, 3 of 73 pages and
   about 10 disagreements were checked by eye); copyright and text-and-data-mining rights for Lidl's flyer
-  images (German TDM exception applies only if the rightsholder has not reserved it machine-readably).
+  images (German TDM exception applies only if the rightsholder has not reserved it machine-readably). Private use
+  for now (Nate, 2026-11-03), so the licence question waits for the MVP like the other sources.
 
 ## API work for the frontend (from the UX spec)
 
 Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
 
-- **API audit for the UI** — `in progress`, audit merged in PR #92 (2026-10-23): `docs/api-audit-ui.md` has a table
-  per page (10 pages, 87 needed calls: 17 covered, 18 partly, 52 missing; recounted 2026-11-03 after PR #93 added
-  `GET /api/recipes/search`, which covers rows 3.8, 4.1 and 4.2, were 14 / 21 / 52) and 19 open questions for Nate.
-  Every gap is an item in this section. Correction to the earlier note: a recipe CAN be removed from a plan
-  (`DELETE /api/meal-plans/{id}/recipes/{recipeId}`); what is missing is editing / moving an entry and reading
-  one week. Move to Done when merged.
 - **Meal plan: any day, any number of meals** — `next`. `meal_plan_recipe` has no date, its key
   (recipe, plan) blocks the same recipe twice in a week, and `meal_time` is a fixed slot text. Needs
   an entry id, a date, an order within the day, servings per entry and an optional free label (no
@@ -331,36 +318,24 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   (`mealTime` is a required non-blank text on add; DELETE addresses the recipe, not an entry). Audit adds: each
   planned entry carries its recipe thumbnail and servings so Home and the planner need no call per meal.
   Migration with a data move for existing plans → snapshot first, guarded.
-- **Recipe search and paging** — `in review`, PR #93. The new `GET /api/recipes/search` searches (`q` name words,
-  `ingredient`), filters (`tags`, `minTime` / `maxTime`, `servings`), sorts (`name`, `time`, `rating`, `newest`;
-  ties by id) and pages (`page` from 1, `pageSize` default 24, max 100) on the server, and answers
-  `{items, total, page, pageSize, totalPages}` with small cards (no `description`, `calories`, `imageSource`,
-  `ratingCount`, `publishedDate`: they stay in the detail). **`GET /api/recipes` is unchanged** (the plain array of
-  every recipe), so the PHP keeps working until it moves to `/search` (Nate's decision 2026-11-03; the old endpoint
-  can go once the PHP list and the planner picker use the new one). Contract and example: README "Recipe search
-  and paging". Decided by Nate 2026-11-03: diet verdicts in the list may be 60 s old; page size 24; a bad paging
-  value is a 400; recipes without a time are hidden while a time filter is on (until the data is cleaned, see
-  "Recipes without a time"); with diet rules the list is grouped by diet fit and then sorted; the card stays as is.
-  The diet rules page too: SQL narrows to candidate ids, the verdicts come from a 60 s in-memory snapshot of the
-  facts in `DietFilterService` (`dahaem.diet.cache-seconds`), so a page request no longer loads all recipes.
-  Deferred from it: (a) accent- and typo-tolerant search (`gemuese` ≠ `gemüse` today; `LIKE` on 11,000 rows is
-  fast enough, a FULLTEXT index or a folded search column is the next step if the PHP needs it); (b) filters on
-  data that exists but that Nate has not asked for yet: `cuisine`, calories / protein, rating, `servingsMax`
-  basis — Nate decides which the page shows; (c) search by ingredient item id (`ingredientItems=`) for "use up
-  what I have" — needs the item picker first; (d) the snapshot is per process: the tagger / importer run
-  elsewhere, so a listed verdict can be up to 60 s old (the detail judges fresh) — a data-version check would
-  remove that; (e) the PHP recipe list and the planner's recipe picker have to move to `/api/recipes/search` (then
-  the plain list can be removed). (f) lists of tags, cuisines and diet presets so the filter controls can be built
-  from data (asked for by the API audit, `docs/api-audit-ui.md`; not in this PR). The audit's other ask, no `diet`
-  block on cards unless rules are sent, is already how the card works.
+- **Recipe search: follow-ups** — `later`. Left over from #93: (a) accent- and typo-tolerant search (`gemuese` ≠
+  `gemüse` today; `LIKE` on 11,000 rows is fast enough, a FULLTEXT index or a folded search column is the next step
+  if the PHP needs it); (b) filters on data that exists but that Nate has not asked for yet: `cuisine`, calories /
+  protein, rating, `servingsMax` basis, Nate decides which the page shows; (c) search by ingredient item id
+  (`ingredientItems=`) for "use up what I have", needs the item picker first; (d) the diet snapshot is per process,
+  so a listed verdict can be up to 60 s old after a tagger or importer run (the detail judges fresh), a data-version
+  check would remove that; (e) the PHP recipe list and the planner's recipe picker move to `/api/recipes/search`,
+  then the plain `GET /api/recipes` can be removed (Nate's PHP); (f) lists of tags, cuisines and diet presets so the
+  filter controls can be built from data (API audit row 4.10).
 - **Recipes without a time** — `next`, Nate 2026-11-03. Some recipes have no prep or cook time (stored as 0), so
   the time filter and the `time` sort cannot place them. Nate: with a dataset this large there is no need to work
   with incomplete data: give a time to every recipe that is otherwise complete, and for the rest either complete
   them or remove them from the databank. First, read-only: how many recipes have prep + cook = 0 and which of them
-  are otherwise complete (the page cache may hold the times for some). Removing recipes is a live-data change:
+  are otherwise complete (the page cache may hold the times for some). Nate runs the count (2026-11-03). Removing recipes is a live-data change:
   snapshot first (keep at most 3), guarded SQL, Nate's approval; nothing is deleted before that. Until then the
   search hides them while a time filter is on.
-- **Recipe images** — `in progress`, this PR (migration 0010, `enrich_recipes.py`). Images are LINKED, never
+- **Recipe images** — `in progress`, merged in #75 (migration 0010, `enrich_recipes.py`); the live steps below are
+  Nate's. Images are LINKED, never
   copied: `recipe_image_url` / `recipe_thumbnail_url` hold the URLs and the browser loads them from
   HelloFresh; `recipe_image_source` (`hellofresh` | `own` | `generated`) lets all of them be replaced in
   bulk later (bought licence, own photos or AI-generated). The PHP shows a designed fallback when there is
@@ -498,19 +473,42 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 
 ## Done
 
-- Catalogue batch 2b: migration 0015 (67 new items, ids 1833–1899, every no-item name with ≥ 5 lines plus Nate's
+- #93 Recipe search and paging: `GET /api/recipes/search` searches (`q`, `ingredient`), filters (`tags`,
+  `minTime` / `maxTime`, `servings`), sorts (`name`, `time`, `rating`, `newest`) and pages (default 24, max 100, a bad
+  value is a 400) on the server and answers `{items, total, page, pageSize, totalPages}` with small cards.
+  `GET /api/recipes` is unchanged (the plain array) until the PHP has moved over. The diet rules page too, from a
+  60 s snapshot in `DietFilterService`. Decided by Nate 2026-11-03; contract in the README. Open: "Recipe search:
+  follow-ups", "Recipes without a time".
+- #92 / #95 API audit for the UI: `docs/api-audit-ui.md`, a table per page (10 pages, 87 needed calls: 17 covered,
+  18 partly, 52 missing after the recount of 2026-11-03) and 19 open questions for Nate; every gap is an item in "API
+  work for the frontend". Correction to the earlier note: a recipe CAN be removed from a plan
+  (`DELETE /api/meal-plans/{id}/recipes/{recipeId}`); what is missing is editing / moving an entry and reading one
+  week.
+- #91 "Brühe" family rule: a step's bare `Brühe` fills the recipe's only stock line; a step naming a type (Hähnchen-,
+  Rinder-, Gemüsebrühe ...) fills only a line of that type; Fond is its own family and never matches Brühe (item rule;
+  Nate, 2026-11-03). `scripts/importer/step_amounts.py`, 185 importer tests. Open: "Brühe rule gaps".
+- #89 CI approval gate for stale generated docs: `docs-diff` → `docs-update` (waits for an approval in the
+  `docs-approval` environment, then commits the regenerated docs to the PR branch) → `docs`. Tested end to end on
+  throwaway PRs (#90, #94) and on #93. GitHub asks for one more "Approve and run" click on the bot's commit.
+- #88 `OfferSource` interface and factory: `OfferSource`, `AldiNordSource` / `PennySource` / `AggregatorSource`,
+  `OfferSourceFactory` (keys `aldi`, `penny`, `aggregator:<chain>`); `StoreImportService.importOffers(source, scope)`
+  is the one shared flow and the old per-chain methods delegate to it. An unknown aggregator key is now an
+  `IllegalArgumentException` (was a NullPointerException). Open: "`importOffers(key)` in the refresh jobs".
+- #87 Store offers research (location, sources, flyer extraction) recorded in this file, "Store offers" section.
+- #86 Catalogue batch 2b: migration 0015 (67 new items, ids 1833–1899, every no-item name with ≥ 5 lines plus Nate's
   varieties and products), the tightened item rule in CLAUDE.md / `docs/DATABASE.md`, the amount rules of the rematch
   and the importer (kept amounts incl. salt, EL/TL/ml/dl for liquids, pinch dropped next to a spoon, alcohol to taste,
   dl / mg), overrides, `non_food.json` (Ausstechformen, Gratis Veltins Bier), `docs/variant_split_review.md`
-  (report only). Nothing applied live; PR number added when merged.
+  (report only). As of the PR nothing was applied live.
 
-- Cleanup: the old SQLite catalogue tools (`add_ingredients.py`, `dedup_catalog.py`, `scan_ingredients.py`), the
+- #85 Cleanup: the old SQLite catalogue tools (`add_ingredients.py`, `dedup_catalog.py`, `scan_ingredients.py`), the
   console runners `Main` / `ShoppingListDemo` and the SQLite-era `docs/CODE_REVIEW.md` are removed; stale SQLite
   wording fixed in the README, docs and test comments.
 
-- Rematch of the unmatched recipe lines, catalogue items 1822 / 1823, the canned-dish corrections (877 chili sin
+- #84 Rematch follow-up: matching fixes, catalogue batch 2a (migration 0014).
+- #80 Rematch of the unmatched recipe lines, catalogue items 1822 / 1823, the canned-dish corrections (877 chili sin
   carne → canned legumes, 887 gemüsetopf → canned vegetables), the currywurst-sauce tagger fix and the EU
-  proteinreich rule: migration 0013, `rematch_unmatched.py` (follow-up to #79; PR number added when merged).
+  proteinreich rule: migration 0013, `rematch_unmatched.py` (follow-up to #79).
 
 - #59 Override full-name lookup, 0 = excluded, overrides skip the price check; parser: capital I
   litre, WL, multipacks, ranges use the lower number, broth yields; ALDI sizes; 0 € offers to
