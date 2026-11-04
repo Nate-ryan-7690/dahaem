@@ -311,13 +311,29 @@ not legal advice; verify before any public release.
 
 Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
 
-- **Meal plan: any day, any number of meals** — `next`. `meal_plan_recipe` has no date, its key
-  (recipe, plan) blocks the same recipe twice in a week, and `meal_time` is a fixed slot text. Needs
-  an entry id, a date, an order within the day, servings per entry and an optional free label (no
-  breakfast / lunch / dinner slots); endpoints for one week by date (today only `GET /api/meal-plans`, all weeks), add / edit / remove / move
-  (`mealTime` is a required non-blank text on add; DELETE addresses the recipe, not an entry). Audit adds: each
-  planned entry carries its recipe thumbnail and servings so Home and the planner need no call per meal.
-  Migration with a data move for existing plans → snapshot first, guarded.
+- **Meal plan: any day, any number of meals** — `in progress`. **Design decided 2026-11-04 (Nate), schema in
+  migration 0016 (not applied by its PR):** `meal_plan_recipe` is changed in place, no archive table. Its own
+  `meal_plan_recipe_entry_id` is the primary key (the same recipe can be planned many times, each meal is addressed by
+  its id); the recipe and plan columns stay foreign keys; new columns: date of the meal, servings (nullable), position
+  within the day, note; the existing `meal_plan_recipe_meal_time` becomes the free label. A plan stays one
+  Monday-to-Sunday week. Servings of a meal, most specific first: its own number, then `recipe.recipe_preferred_servings`
+  ("this meal is always for X"), then `household.household_people`, then 2; meals that have not happened yet follow
+  the household number, a hand-set number stays. Opening a week with no plan returns seven empty days, adding the
+  first meal creates the plan. The old endpoints stay until the PHP has moved (a meal added the old way lands on the
+  week's Monday with its text as the label). **Still to build (Java, API):** one week by date; add / edit / move /
+  remove a meal by id; servings resolution; the shopping list scaling each meal by its own servings (today it takes
+  one `people` and the distinct recipe ids); a nightly job at 00:01 that writes the resolved servings onto yesterday's
+  rows and a service rule that refuses edits to a past day; each planned meal carrying its recipe thumbnail
+  (audit). **Blocked:** the household column on plans and where the head count is set (the user / household
+  decision, see "Auth and session review"). The `household_people` field exists but nothing sets it yet.
+- **Retire `recipe_servings_max`** — `later`. Nate wants to drop the range column once ranges are unwanted (stored
+  amounts are always for `recipe_servings`, 2 as the standard, and scaled in the logic). It is its own clean-up, not
+  part of the meal plan: clear the ~77 values (the range is in the title), drop the CHECK
+  `recipe_servings_max_above_servings`, remove `servingsMax` from the card and detail, `basis=max`, the servings
+  filter of the search ("3–4 matches 3 and 4") and the importer's and repair tool's range handling (about 120 lines
+  in about 20 code files, plus tests and docs). Breaking for the PHP contract. It would supersede "Servings ranges:
+  importer, shopping list, household choice" and the portion-ranges idea. Decided 2026-11-04: not now, so the meal
+  plan work does not depend on it; `recipe_preferred_servings` is a separate new column.
 - **Recipe search: follow-ups** — `later`. Left over from #93: (a) accent- and typo-tolerant search (`gemuese` ≠
   `gemüse` today; `LIKE` on 11,000 rows is fast enough, a FULLTEXT index or a folded search column is the next step
   if the PHP needs it); (b) filters on data that exists but that Nate has not asked for yet: `cuisine`, calories /

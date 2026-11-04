@@ -35,6 +35,8 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 	recipe_servings_max INT NULL,
 
+	recipe_preferred_servings INT NULL,
+
 	recipe_cook_time INTEGER NOT NULL,
 
 	recipe_prep_time INTEGER NOT NULL,
@@ -73,7 +75,10 @@ CREATE TABLE recipe ( recipe_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 		CHECK (recipe_image_source IS NULL OR recipe_image_source IN ('hellofresh', 'own', 'generated')),
 
 	CONSTRAINT recipe_servings_max_above_servings
-		CHECK (recipe_servings_max IS NULL OR recipe_servings_max > recipe_servings));
+		CHECK (recipe_servings_max IS NULL OR recipe_servings_max > recipe_servings),
+
+	CONSTRAINT recipe_preferred_servings_at_least_one
+		CHECK (recipe_preferred_servings IS NULL OR recipe_preferred_servings >= 1));
 
 CREATE TABLE store ( store_id INTEGER PRIMARY KEY AUTO_INCREMENT, 
 
@@ -81,7 +86,10 @@ CREATE TABLE store ( store_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 CREATE TABLE household ( household_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	household_name TEXT NOT NULL,
-	created_date DATE NOT NULL);
+	household_people INT NULL,
+	created_date DATE NOT NULL,
+	CONSTRAINT household_people_at_least_one
+		CHECK (household_people IS NULL OR household_people >= 1));
 
 CREATE TABLE app_user ( user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	user_email TEXT NOT NULL UNIQUE,
@@ -89,17 +97,37 @@ CREATE TABLE app_user ( user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	user_password_hash TEXT NOT NULL,
 	user_created_date DATE NOT NULL);
 
-CREATE TABLE meal_plan_recipe(meal_plan_recipe_id INTEGER,
+-- One planned meal. Its own id is the primary key, so the same recipe can be planned many times (migration 0016).
+-- date NULL = a row made by the old endpoint; servings NULL = follow the default (recipe_preferred_servings,
+-- then household_people, then 2); meal_time is the free label.
+CREATE TABLE meal_plan_recipe(meal_plan_recipe_entry_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
-	meal_plan_recipe_plan_id INTEGER,
+	meal_plan_recipe_id INTEGER NOT NULL,
+
+	meal_plan_recipe_plan_id INTEGER NOT NULL,
+
+	meal_plan_recipe_date DATE NULL,
 
 	meal_plan_recipe_meal_time TEXT,
 
-	PRIMARY KEY(meal_plan_recipe_id,meal_plan_recipe_plan_id),
+	meal_plan_recipe_servings INTEGER NULL,
+
+	meal_plan_recipe_position INTEGER NOT NULL DEFAULT 0,
+
+	meal_plan_recipe_note TEXT NULL,
+
+	INDEX meal_plan_recipe_by_recipe (meal_plan_recipe_id),
+
+	INDEX meal_plan_recipe_by_plan (meal_plan_recipe_plan_id),
+
+	INDEX meal_plan_recipe_by_plan_date (meal_plan_recipe_plan_id, meal_plan_recipe_date),
 
 	FOREIGN KEY(meal_plan_recipe_id) REFERENCES recipe(recipe_id),
 
-	FOREIGN KEY(meal_plan_recipe_plan_id) REFERENCES meal_plan(meal_plan_id));
+	FOREIGN KEY(meal_plan_recipe_plan_id) REFERENCES meal_plan(meal_plan_id),
+
+	CONSTRAINT meal_plan_recipe_servings_at_least_one
+		CHECK (meal_plan_recipe_servings IS NULL OR meal_plan_recipe_servings >= 1));
 
 CREATE TABLE recipe_ingredient (recipe_ingredient_item_id INTEGER,
 

@@ -23,7 +23,7 @@ on an older database. All SQL for them is in `de.dahaem.auth.AccountRepository`.
 
 | Table | Columns | Notes |
 |-------|---------|-------|
-| `household` | `household_id` PK, `household_name`, `created_date` | one row today (single shared household) |
+| `household` | `household_id` PK, `household_name`, nullable `household_people`, `created_date` | one row today (single shared household). `household_people` is the head count (CHECK >= 1; NULL = not set, so the default of 2 applies); added by `migrations/0016_meal_plan_entries.sql` |
 | `app_user` | `user_id` PK, `user_email` UNIQUE, `user_display_name`, `user_password_hash`, `user_created_date` | email stored trimmed + lower-cased; the hash is BCrypt, never plaintext. Not named `user` (reserved in some engines) |
 | `household_member` | `household_member_id` PK, `household_id` → household, `user_id` → app_user, `role` | `role` is `ADMIN` or `MEMBER`; `UNIQUE(household_id, user_id)` |
 
@@ -76,6 +76,11 @@ Added by `migrations/0006_recipe_servings_max.sql`; the importer fills it (see `
 "Servings ranges"). The API scales from `recipe_servings` unless `?basis=max` is asked for; the
 shopping list always scales from `recipe_servings`.
 
+`recipe_preferred_servings` (nullable INT, CHECK >= 1; migration 0016) is the number of people the planner assumes
+for this recipe when the user said "this meal is always for X". NULL = no preference. It never changes
+`recipe_servings`, which stays the base the stored amounts are written for (2 as the standard); it only sets the
+default head count of a planned meal. Nothing reads it yet.
+
 `recipe_ingredient`: `recipe_ingredient_item_id` (FK -> `inventory_item`),
 `recipe_ingredient_recipe_id` (FK -> `recipe`), `recipe_ingredient_unit`,
 `recipe_ingredient_quantity_needed` (`DECIMAL(10,3)`, nullable: the exact amount for
@@ -90,6 +95,31 @@ needs the item, no amount). To-taste rows never reach a shopping list. Changed b
 `recipe_instructions_recipe_id` (FK -> `recipe`),
 `recipe_instructions_step_number`, `recipe_instructions_instruction`,
 `recipe_instructions_notes` (nullable), `recipe_instructions_source`.
+
+### `meal_plan`, `meal_plan_recipe` — meal plans
+
+`meal_plan`: `meal_plan_id` (PK), `meal_plan_week_start_date` (UNIQUE): one plan per Monday-to-Sunday week.
+
+`meal_plan_recipe` is one planned meal (the table name is kept; migration 0016 changed it in place):
+
+| Column | Notes |
+|--------|-------|
+| `meal_plan_recipe_entry_id` | PK, auto-increment: one planned meal. The same recipe may appear many times in a plan |
+| `meal_plan_recipe_id` | the recipe (FK -> `recipe`), no longer part of the primary key |
+| `meal_plan_recipe_plan_id` | the plan (FK -> `meal_plan`), no longer part of the primary key |
+| `meal_plan_recipe_date` | nullable DATE, the day of the meal; NULL = a row made by the old endpoint |
+| `meal_plan_recipe_meal_time` | the free label ("Frühstück", "Snack" ...), no fixed slots |
+| `meal_plan_recipe_servings` | nullable INT (CHECK >= 1): NULL = follow the default, a number = set for this meal |
+| `meal_plan_recipe_position` | INT NOT NULL DEFAULT 0, the order within the day |
+| `meal_plan_recipe_note` | nullable free note |
+
+Indexes on the recipe, on the plan and on (plan, date). Servings of a meal, most specific first: its own number,
+then `recipe.recipe_preferred_servings`, then `household.household_people`, then 2. A nightly job (not built yet,
+00:01) is meant to write the resolved number onto yesterday's rows with NULL servings, so past meals stop following
+the household number; the service is meant to refuse edits to a past day. The API does not use the new columns yet:
+the old endpoints keep working (their INSERT names its columns), and adding the same recipe to a plan twice no longer
+answers 409, it adds a second meal. The shopping list still counts a recipe once per plan
+(`ShoppingListService` takes the distinct recipe ids).
 
 ### `tag`, `recipe_tag`, `inventory_item_animal`, `recipe_unmatched_ingredient` — recipe tags and the diet filter
 
