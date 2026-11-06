@@ -8,23 +8,23 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (61)"]
+    api["api (63)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (3)"]
     inventory["inventory (3)"]
-    mealplanner["mealplanner (24)"]
+    mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
     shared["shared (7)"]
     shopping["shopping (11)"]
     stores["stores (47)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
-    api -->|11| auth
+    api -->|14| auth
     api -->|9| diet
     api -->|4| finance
     api -->|4| inventory
-    api -->|28| mealplanner
+    api -->|31| mealplanner
     api -->|11| shopping
     api -->|2| stores
     api -->|4| suggestions
@@ -45,12 +45,12 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 61 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 63 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 3 | The item catalogue and the pantry. |
-| [`mealplanner`](mealplanner.md) | 24 | Recipes, ingredients, instructions, scaling and meal plans. |
+| [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
 | [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
@@ -155,6 +155,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`MealPlanWeekDto.DayDto`](api.md#mealplanweekdtodaydto) | api | record |  |
 | [`MealServings`](mealplanner.md#mealservings) | mealplanner | class | The single definition of how many people a planned meal is cooked for. |
 | [`MealServings.Resolved`](mealplanner.md#mealservingsresolved) | mealplanner | record | The resolved number and where it came from (meal, recipe, household, default). |
+| [`MealServingsScheduleConfig`](api.md#mealservingsscheduleconfig) | api | class | Registers the nightly servings freeze. |
 | [`Normalizer`](stores.md#normalizer) | stores | class | Turns a German product or ingredient name into a comparable key: lowercase, umlauts to ae/oe/ue/ss, allergen markers and leading ALL-CAPS brand words removed, punctuation to spaces. |
 | [`NotFoundException`](api.md#notfoundexception) | api | class | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`OfferPull`](stores.md#offerpull) | stores | record | Offers pulled from one chain, plus the requests that failed (so a run can be marked PARTIAL). |
@@ -164,6 +165,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`OfferSourceFactory`](stores.md#offersourcefactory) | stores | class | Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for every chain in AggregatorClient.STORES. |
 | [`PageRequest`](shared.md#pagerequest) | shared | record | Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE. |
 | [`ParsedReceipt`](receipts.md#parsedreceipt) | receipts | record | Structured result of parsing one receipt's text. |
+| [`PastDayException`](mealplanner.md#pastdayexception) | mealplanner | class | Thrown when a planned meal on a day before today would be added, changed, moved or removed. |
 | [`PennyClient`](stores.md#pennyclient) | stores | class | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |
 | [`PennyClient.Market`](stores.md#pennyclientmarket) | stores | record | A Penny store and the price regions it belongs to this week and next week. |
 | [`PennyReceiptFormat`](receipts.md#pennyreceiptformat) | receipts | class | PENNY (REWE Group) layout. |
@@ -247,6 +249,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`RefreshService.Run`](stores.md#refreshservicerun) | stores | class | Collects step results for one flow, running every step regardless of earlier failures. |
 | [`RefreshSummary`](stores.md#refreshsummary) | stores | record | Outcome of one refresh flow ("weekly" / "monthly"): the summary of every step that returned one, plus a message for every step that threw. |
 | [`ReviewReports`](stores.md#reviewreports) | stores | class | Row builders for the review reports (unmatched_offers.tsv, review_matches.tsv, review_prices.tsv). |
+| [`ScheduledMealServings`](api.md#scheduledmealservings) | api | class | The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when the household number |
 | [`ScheduledRefresh`](stores.md#scheduledrefresh) | stores | class | Runs the weekly / monthly refresh on a cron schedule inside the long-running API process. |
 | [`SecurityConfig`](api.md#securityconfig) | api | class | Who may call the API. |
 | [`SelectStoreItemRequest`](api.md#selectstoreitemrequest) | api | record | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |

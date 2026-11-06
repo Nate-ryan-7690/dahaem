@@ -143,6 +143,7 @@ classDiagram
         +setPassword(String email, String rawPassword) void
         +findByEmail(String email) Optional~AppUser~
         +membershipFor(int userId) Optional~HouseholdMembership~
+        +findFirstHousehold() Optional~Household~
         +findHousehold(int householdId) Optional~Household~
         +setHouseholdPeople(int householdId, int people) Household
     }
@@ -159,6 +160,7 @@ classDiagram
     class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
+    class api_ScheduledMealServings["ScheduledMealServings"]
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
     }
@@ -167,6 +169,9 @@ classDiagram
         <<record>>
     }
     class auth_Household["Household"]
+    class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
+        <<spring>>
+    }
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
@@ -181,7 +186,9 @@ classDiagram
     api_AuthController --> auth_AccountService
     api_HouseholdController --> auth_AccountService
     api_MealPlanController --> auth_AccountService
+    api_MealServingsScheduleConfig ..> auth_AccountService
     api_PlannedMealController --> auth_AccountService
+    api_ScheduledMealServings --> auth_AccountService
     api_SecurityConfig ..> auth_AccountService
     api_ServiceConfig ..> auth_AccountService
 ```
@@ -203,10 +210,11 @@ classDiagram
 | `void setPassword(String email, String rawPassword)` | public | Sets a new password for an existing user (the operator's stand-in for "forgot password"). |
 | `Optional<AppUser> findByEmail(String email)` | public |  |
 | `Optional<HouseholdMembership> membershipFor(int userId)` | public |  |
+| `Optional<Household> findFirstHousehold()` | public | The shared household of this installation (the oldest one), or empty on a fresh database. |
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AuthController`, `HouseholdController`, `MealPlanController`, `PlannedMealController`, `SecurityConfig`, `ServiceConfig`
+**Referenced by:** `AuthController`, `HouseholdController`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `SecurityConfig`, `ServiceConfig`
 
 ## AppUser
 

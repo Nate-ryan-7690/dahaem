@@ -2,6 +2,7 @@ package de.dahaem.mealplanner;
 
 import de.dahaem.shared.Database;
 import de.dahaem.tags.TagFixtures;
+import de.dahaem.testsupport.TestClock;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,7 @@ class PlannedMealServiceTest {
     private static final LocalDate SUN = LocalDate.of(2026, 11, 8);
     private static final LocalDate NEXT_MON = LocalDate.of(2026, 11, 9);
 
+    private final TestClock clock = new TestClock(LocalDate.of(2026, 11, 1));   // a Sunday: the whole week is ahead
     private MealPlanService service;
     private RecipeService recipes;
     private int soup;
@@ -40,7 +42,8 @@ class PlannedMealServiceTest {
     @BeforeEach
     void setUp() throws SQLException {
         TestDatabase.reset();
-        service = new MealPlanService(new MealPlanRepository());
+        clock.setToday(LocalDate.of(2026, 11, 1));
+        service = new MealPlanService(new MealPlanRepository(), clock);
         recipes = new RecipeService(new RecipeRepository());
         soup = TagFixtures.recipe("Suppe", 10, 20, null, null);
         stew = TagFixtures.recipe("Eintopf", 10, 40, null, null);
@@ -262,6 +265,119 @@ class PlannedMealServiceTest {
         assertNull(service.findMeal(meal.getEntryId()).orElseThrow().getRecipePreferredServings());
         assertFalse(recipes.setPreferredServings(9999, 4));
         assertThrows(IllegalArgumentException.class, () -> recipes.setPreferredServings(soup, 0));
+    }
+
+    // ---------- past days: refused, and frozen overnight ----------
+
+    @Test
+    void aPastDayCannotBePlannedButTodayCan() {
+        clock.setToday(WED);
+
+        assertThrows(PastDayException.class, () -> service.addMeal(soup, WED.minusDays(1), null, null, null, null));
+        assertEquals(WED, service.addMeal(soup, WED, null, null, null, null).getDate());
+        assertEquals(1, service.week(WED).days().get(2).meals().size());
+        assertTrue(service.week(WED).days().get(1).meals().isEmpty(), "nothing was written for the past day");
+    }
+
+    @Test
+    void aMealOfAPastDayCannotBeEditedMovedOrRemoved() {
+        PlannedMeal meal = service.addMeal(soup, WED, "Abendessen", null, null, null);
+        clock.setToday(WED.plusDays(1));   // the day has passed
+
+        assertThrows(PastDayException.class,
+                () -> service.updateMeal(meal.getEntryId(), new MealChange().withServings(4)));
+        assertThrows(PastDayException.class,
+                () -> service.updateMeal(meal.getEntryId(), new MealChange().withDate(SUN)));
+        assertThrows(PastDayException.class, () -> service.removeMeal(meal.getEntryId()));
+        assertNull(service.findMeal(meal.getEntryId()).orElseThrow().getOwnServings(), "unchanged");
+        assertEquals(WED, service.findMeal(meal.getEntryId()).orElseThrow().getDate());
+    }
+
+    @Test
+    void aMealCannotBeMovedToAPastDayButTodaysMealCanBeEdited() {
+        PlannedMeal today = service.addMeal(soup, WED, "Abendessen", null, null, null);
+        clock.setToday(WED);
+
+        assertThrows(PastDayException.class,
+                () -> service.updateMeal(today.getEntryId(), new MealChange().withDate(WED.minusDays(1))));
+        PlannedMeal edited = service.updateMeal(today.getEntryId(), new MealChange().withServings(5)).orElseThrow();
+        assertEquals(5, edited.getOwnServings());
+        assertTrue(service.removeMeal(today.getEntryId()));
+    }
+
+    @Test
+    void anUnknownMealIsStillNotFoundNotPast() {
+        clock.setToday(SUN);
+
+        assertEquals(Optional.empty(), service.updateMeal(9999, new MealChange().withPosition(1)));
+        assertFalse(service.removeMeal(9999));
+    }
+
+    @Test
+    void theFreezeWritesTheResolvedServingsOntoPastMealsOnly() {
+        recipes.setPreferredServings(stew, 6);
+        PlannedMeal followsHousehold = service.addMeal(soup, MON, null, null, null, null);
+        PlannedMeal followsRecipe = service.addMeal(stew, MON, null, null, null, null);
+        PlannedMeal ownNumber = service.addMeal(soup, MON, null, 5, null, null);
+        PlannedMeal tomorrow = service.addMeal(soup, WED, null, null, null, null);
+        clock.setToday(MON.plusDays(1));   // Monday is now past, Wednesday is not
+
+        assertEquals(2, service.freezePastServings(3), "the two meals of Monday that followed the default");
+
+        assertEquals(3, own(followsHousehold));
+        assertEquals(6, own(followsRecipe));
+        assertEquals(5, own(ownNumber));
+        assertNull(own(tomorrow), "a meal of today or later keeps following the default");
+        assertEquals(0, service.freezePastServings(3), "running it again freezes nothing new");
+    }
+
+    @Test
+    void aFrozenMealNoLongerFollowsALaterChangeOfThePreferenceOrTheHousehold() {
+        PlannedMeal meal = service.addMeal(soup, MON, null, null, null, null);
+        clock.setToday(MON.plusDays(1));
+        service.freezePastServings(3);
+
+        recipes.setPreferredServings(soup, 8);
+
+        PlannedMeal frozen = service.findMeal(meal.getEntryId()).orElseThrow();
+        assertEquals(new MealServings.Resolved(3, "meal"), MealServings.resolve(frozen, 5));
+    }
+
+    @Test
+    void theFreezeWithoutAHouseholdNumberFreezesTheDefault() {
+        PlannedMeal meal = service.addMeal(soup, MON, null, null, null, null);
+        clock.setToday(MON.plusDays(1));
+
+        assertEquals(1, service.freezePastServings(null));
+
+        assertEquals(2, own(meal));
+    }
+
+    @Test
+    void theFreezeCatchesUpOnNightsTheApiWasNotRunning() {
+        PlannedMeal early = service.addMeal(soup, MON, null, null, null, null);
+        PlannedMeal later = service.addMeal(soup, WED, null, null, null, null);
+        clock.setToday(NEXT_MON);   // a whole week passed without a run
+
+        assertEquals(2, service.freezePastServings(4));
+
+        assertEquals(4, own(early));
+        assertEquals(4, own(later));
+    }
+
+    @Test
+    void aMealMadeByTheOldEndpointIsFrozenOnceItsWeeksMondayHasPassed() {
+        int planId = service.createWeeklyPlan(MON);
+        service.addRecipe(planId, soup, "Abendessen");
+        clock.setToday(MON);
+
+        assertEquals(0, service.freezePastServings(3), "Monday is today");
+        clock.setToday(MON.plusDays(1));
+        assertEquals(1, service.freezePastServings(3));
+    }
+
+    private Integer own(PlannedMeal meal) {
+        return service.findMeal(meal.getEntryId()).orElseThrow().getOwnServings();
     }
 
     private static void exec(String sql) throws SQLException {

@@ -1,7 +1,9 @@
 package de.dahaem.mealplanner;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,9 +16,22 @@ import java.util.Optional;
  */
 
 public class MealPlanService {
-    private final MealPlanRepository repository;
+    /** The household's time zone: "today" (and so which days are past) is the date there, not the server's. */
+    public static final ZoneId DEFAULT_ZONE = ZoneId.of("Europe/Berlin");
 
-    public MealPlanService(MealPlanRepository repository) { this.repository = repository; }
+    private final MealPlanRepository repository;
+    private final Clock clock;
+
+    public MealPlanService(MealPlanRepository repository) { this(repository, Clock.system(DEFAULT_ZONE)); }
+
+    /** The clock decides what "today" is, so tests (and a configured time zone) control which days are past. */
+    public MealPlanService(MealPlanRepository repository, Clock clock) {
+        this.repository = repository;
+        this.clock = clock;
+    }
+
+    /** Today's date on the service's clock. */
+    public LocalDate today() { return LocalDate.now(clock); }
 
     public int createWeeklyPlan(LocalDate weekStart) { return repository.create(weekStart); }
 
@@ -72,6 +87,7 @@ public class MealPlanService {
      * position the meal goes last on its day. servings null = follow the default (see {@link MealServings}).
      *
      * @throws IllegalArgumentException for a missing date or a servings / position below its minimum
+     * @throws PastDayException         when the day is before today
      */
     public PlannedMeal addMeal(int recipeId, LocalDate date, String label, Integer servings, String note,
                                Integer position) {
@@ -80,6 +96,7 @@ public class MealPlanService {
         }
         requireServings(servings);
         requirePosition(position);
+        requireNotPast(date);
         int planId = planIdForWeek(mondayOf(date));
         int at = position != null ? position : repository.nextPosition(planId, date);
         int entryId = repository.insertMeal(planId, recipeId, date, cleanText(label), servings, at, cleanText(note));
@@ -94,6 +111,7 @@ public class MealPlanService {
      *
      * @return the meal as it is now, or empty when there is no such meal
      * @throws IllegalArgumentException for a servings / position below its minimum or an empty change
+     * @throws PastDayException         when the meal is on a past day or would be moved to one
      */
     public Optional<PlannedMeal> updateMeal(int entryId, MealChange change) {
         if (change.isEmpty()) {
@@ -106,6 +124,10 @@ public class MealPlanService {
             return Optional.empty();
         }
         PlannedMeal meal = found.get();
+        requireNotPast(meal.getDate());
+        if (change.date() != null) {
+            requireNotPast(change.date());
+        }
         LocalDate date = change.date() != null ? change.date() : meal.getDate();
         int planId = meal.getPlanId();
         if (!mondayOf(date).equals(mondayOf(meal.getDate()))) {
@@ -127,9 +149,37 @@ public class MealPlanService {
         return repository.findMeal(entryId);
     }
 
-    /** Removes one planned meal by its own id. Returns true if it existed. */
+    /**
+     * Removes one planned meal by its own id. Returns true if it existed.
+     *
+     * @throws PastDayException when the meal is on a past day
+     */
     public boolean removeMeal(int entryId) {
+        Optional<PlannedMeal> found = repository.findMeal(entryId);
+        if (found.isEmpty()) {
+            return false;
+        }
+        requireNotPast(found.get().getDate());
         return repository.deleteMeal(entryId);
+    }
+
+    /**
+     * The nightly job: writes the resolved servings onto every meal of a past day that still follows the default,
+     * so a later change of the household number or of a recipe's preference no longer rewrites history. The number
+     * is worked out by {@link MealServings} (recipe preference, then {@code householdPeople}, then 2) and stored as
+     * the meal's own. Meals that already have a number of their own and meals of today or later are left alone,
+     * and running it again freezes nothing new. {@code householdPeople} may be null (not set).
+     *
+     * @return how many meals were frozen
+     */
+    public int freezePastServings(Integer householdPeople) {
+        int frozen = 0;
+        for (PlannedMeal meal : repository.findUnfrozenMealsBefore(today())) {
+            if (repository.freezeServings(meal.getEntryId(), MealServings.resolve(meal, householdPeople).servings())) {
+                frozen++;
+            }
+        }
+        return frozen;
     }
 
     public Optional<PlannedMeal> findMeal(int entryId) {
@@ -147,6 +197,13 @@ public class MealPlanService {
             return repository.create(monday);
         } catch (RuntimeException e) {
             return repository.findPlanByWeekStart(monday).map(MealPlan::getId).orElseThrow(() -> e);
+        }
+    }
+
+    private void requireNotPast(LocalDate day) {
+        LocalDate today = today();
+        if (day.isBefore(today)) {
+            throw new PastDayException(day, today);
         }
     }
 

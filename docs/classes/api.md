@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-61 types in 47 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+63 types in 49 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -92,6 +92,9 @@ classDiagram
     class api_MealPlanWeekDto_DayDto["MealPlanWeekDto.DayDto"] {
         <<record>>
     }
+    class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
+        <<spring>>
+    }
     class api_NotFoundException["NotFoundException"]
     class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
         <<record>>
@@ -144,6 +147,7 @@ classDiagram
     class api_RecipeSummaryDto["RecipeSummaryDto"] {
         <<record>>
     }
+    class api_ScheduledMealServings["ScheduledMealServings"]
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
@@ -206,6 +210,7 @@ classDiagram
     api_MealPlanDto *-- api_MealPlanDto_PlannedRecipe
     api_MealPlanWeekDto *-- api_MealPlanWeekDto_DayDto
     api_MealPlanWeekDto_DayDto --> api_PlannedMealDto
+    api_MealServingsScheduleConfig ..> api_ScheduledMealServings
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
     api_PersistedShoppingListDto_Line --> api_ShoppingListDto
     api_PlannedMealController ..> api_MealPlanWeekDto
@@ -272,6 +277,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`MealPlanDto.PlannedRecipe`](#mealplandtoplannedrecipe) | record |  |  |
 | [`MealPlanWeekDto`](#mealplanweekdto) | record |  | One Monday-to-Sunday week: always seven days, each with its meals in order. |
 | [`MealPlanWeekDto.DayDto`](#mealplanweekdtodaydto) | record |  |  |
+| [`MealServingsScheduleConfig`](#mealservingsscheduleconfig) | class | configuration | Registers the nightly servings freeze. |
 | [`NotFoundException`](#notfoundexception) | class |  | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`PersistedShoppingListDto`](#persistedshoppinglistdto) | record |  | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
 | [`PersistedShoppingListDto.Line`](#persistedshoppinglistdtoline) | record |  |  |
@@ -290,6 +296,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`RecipePageDto`](#recipepagedto) | record |  | One page of GET /api/recipes. |
 | [`RecipeSuggestionDto`](#recipesuggestiondto) | record |  | A ranked recipe suggestion: which recipe, how strongly it matched the signal, and why. |
 | [`RecipeSummaryDto`](#recipesummarydto) | record |  | A recipe in a list: identity and the numbers you'd scan a list by. |
+| [`ScheduledMealServings`](#scheduledmealservings) | class |  | The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when the household number |
 | [`SecurityConfig`](#securityconfig) | class | configuration | Who may call the API. |
 | [`SelectStoreItemRequest`](#selectstoreitemrequest) | record |  | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](#serviceconfig) | class | configuration | Wires the existing plain-Java repositories and services as Spring beans. |
@@ -411,6 +418,7 @@ classDiagram
     class api_ApiExceptionHandler["ApiExceptionHandler"] {
         -Logger log$
         +notFound(NotFoundException e) ResponseEntity~ErrorResponse~
+        +pastDay(PastDayException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +badRequest(RuntimeException e) ResponseEntity~ErrorResponse~
         +missingParameter(MissingServletRequestParameterException e) ResponseEntity~ErrorResponse~
@@ -422,9 +430,11 @@ classDiagram
         <<record>>
     }
     class api_NotFoundException["NotFoundException"]
+    class mealplanner_PastDayException["PastDayException"]
     class api_UnauthorizedException["UnauthorizedException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
+    api_ApiExceptionHandler ..> mealplanner_PastDayException
     api_ApiExceptionHandler ..> api_UnauthorizedException
 ```
 
@@ -435,6 +445,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `ResponseEntity<ErrorResponse> notFound(NotFoundException e)` | public |  |
+| `ResponseEntity<ErrorResponse> pastDay(PastDayException e)` | public | A meal on a past day cannot be added, changed, moved or removed: the request conflicts with the calendar. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> badRequest(RuntimeException e)` | public |  |
 | `ResponseEntity<ErrorResponse> missingParameter(MissingServletRequestParameterException e)` | public |  |
@@ -1362,6 +1373,33 @@ classDiagram
 | `meals` | `List<PlannedMealDto>` |
 
 **Referenced by:** `MealPlanWeekDto`
+
+## MealServingsScheduleConfig
+
+*class · configuration*
+
+Registers the nightly servings freeze. On by default (it only writes numbers onto meals of past days, no external
+site is touched); switch it off with dahaem.mealplan.freeze-enabled=false. Scheduling itself is switched on
+here, independent of the store refresh.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
+        <<spring>>
+        ~scheduledMealServings(MealPlanService mealPlanService, AccountService accountService) ScheduledMealServings
+    }
+    class auth_AccountService["AccountService"]
+    class mealplanner_MealPlanService["MealPlanService"]
+    class api_ScheduledMealServings["ScheduledMealServings"]
+    api_MealServingsScheduleConfig ..> auth_AccountService
+    api_MealServingsScheduleConfig ..> mealplanner_MealPlanService
+    api_MealServingsScheduleConfig ..> api_ScheduledMealServings
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `ScheduledMealServings scheduledMealServings(MealPlanService mealPlanService, AccountService accountService)` | package |  |
 
 ## NotFoundException
 
@@ -2303,6 +2341,50 @@ classDiagram
 
 **Referenced by:** `RecipeController`
 
+## ScheduledMealServings
+
+*class*
+
+The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day
+that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when
+the household number or a recipe's preference does. It also catches up on any night the API was not running.
+The head count is the shared household's. The scheduled method never throws, so a failure cannot stop later runs.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ScheduledMealServings["ScheduledMealServings"] {
+        -Logger log$
+        -MealPlanService mealPlanService
+        -AccountService accountService
+        +ScheduledMealServings(MealPlanService mealPlanService, AccountService accountService)
+        +freeze() void
+        +run() int
+    }
+    class mealplanner_MealPlanService["MealPlanService"]
+    class auth_AccountService["AccountService"]
+    class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
+        <<spring>>
+    }
+    api_ScheduledMealServings --> mealplanner_MealPlanService
+    api_ScheduledMealServings --> auth_AccountService
+    api_MealServingsScheduleConfig ..> api_ScheduledMealServings
+```
+
+| Field | Type |
+|---|---|
+| `log` | `Logger` |
+| `mealPlanService` | `MealPlanService` |
+| `accountService` | `AccountService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `ScheduledMealServings(MealPlanService mealPlanService, AccountService accountService)` | public |  |
+| `void freeze()` | public |  |
+| `int run()` | public | One run; public so an operator or a test can call it directly. |
+
+**Referenced by:** `MealServingsScheduleConfig`
+
 ## SecurityConfig
 
 *class · configuration*
@@ -2397,7 +2479,7 @@ classDiagram
         +recipeRepository() RecipeRepository
         +recipeService(RecipeRepository recipeRepository) RecipeService
         +mealPlanRepository() MealPlanRepository
-        +mealPlanService(MealPlanRepository mealPlanRepository) MealPlanService
+        +mealPlanService(MealPlanRepository mealPlanRepository, String zone) MealPlanService
         +tagRepository() TagRepository
         +tagService(TagRepository tagRepository) TagService
         +shoppingListRepository() ShoppingListRepository
@@ -2456,7 +2538,7 @@ classDiagram
 | `RecipeRepository recipeRepository()` | public |  |
 | `RecipeService recipeService(RecipeRepository recipeRepository)` | public |  |
 | `MealPlanRepository mealPlanRepository()` | public |  |
-| `MealPlanService mealPlanService(MealPlanRepository mealPlanRepository)` | public |  |
+| `MealPlanService mealPlanService(MealPlanRepository mealPlanRepository, String zone)` | public |  |
 | `TagRepository tagRepository()` | public |  |
 | `TagService tagService(TagRepository tagRepository)` | public |  |
 | `ShoppingListRepository shoppingListRepository()` | public |  |

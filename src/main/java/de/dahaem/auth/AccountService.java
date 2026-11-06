@@ -116,6 +116,11 @@ public class AccountService {
         return repository.findMembershipForUser(userId);
     }
 
+    /** The shared household of this installation (the oldest one), or empty on a fresh database. */
+    public Optional<Household> findFirstHousehold() {
+        return repository.findFirstHousehold();
+    }
+
     public Optional<Household> findHousehold(int householdId) {
         return repository.findHousehold(householdId);
     }
