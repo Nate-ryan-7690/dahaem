@@ -174,8 +174,8 @@ class ShoppingListByServingsTest {
     }
 
     private static void recipe(int id, int servings, int onionGrams) throws SQLException {
-        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (" + id + ", 'R" + id + "', "
-                + servings + ")");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings, recipe_cook_time, recipe_prep_time) "
+                + "VALUES (" + id + ", 'R" + id + "', " + servings + ", 20, 10)");
         exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, "
                 + "recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, " + id + ", 'g', "
                 + onionGrams + ")");
