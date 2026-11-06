@@ -115,7 +115,8 @@ flowchart LR
     admin --> r2(["RecipeTagRunner"])
     admin --> r3(["StoreImportRunner"])
     admin --> r4(["UserAdminRunner"])
-    cron(("Scheduler")) --> s0(["ScheduledRefresh"])
+    cron(("Scheduler")) --> s0(["ScheduledMealServings"])
+    cron(("Scheduler")) --> s1(["ScheduledRefresh"])
 ```
 
 | Tool | Package | What it does |
@@ -125,6 +126,7 @@ flowchart LR
 | `RecipeTagRunner` | tags | Command-line tool that derives recipe tags from DAHÄM's own data. |
 | `StoreImportRunner` | stores | Command-line entry point for the store imports. |
 | `UserAdminRunner` | auth | Command-line entry point for managing logins. |
+| `ScheduledMealServings` (scheduled) | api | The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when the household number |
 | `ScheduledRefresh` (scheduled) | stores | Runs the weekly / monthly refresh on a cron schedule inside the long-running API process. |
 
 Python tools in `scripts/importer` (recipe import, repair, unmatched-line finder and rematch) are described in [scripts/importer/README.md](../scripts/importer/README.md).

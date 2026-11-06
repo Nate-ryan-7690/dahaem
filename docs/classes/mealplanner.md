@@ -4,7 +4,7 @@
 
 Recipes, ingredients, instructions, scaling and meal plans.
 
-24 types in 16 source files (`src/main/java/de/dahaem/mealplanner`). Back to the [class index](README.md).
+25 types in 17 source files (`src/main/java/de/dahaem/mealplanner`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -26,6 +26,7 @@ classDiagram
     class mealplanner_MealServings_Resolved["MealServings.Resolved"] {
         <<record>>
     }
+    class mealplanner_PastDayException["PastDayException"]
     class mealplanner_PlannedMeal["PlannedMeal"]
     class mealplanner_Recipe["Recipe"]
     class mealplanner_RecipeIngredient["RecipeIngredient"]
@@ -102,6 +103,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`MealPlanService.Week`](#mealplanserviceweek) | record |  | One Monday-to-Sunday week. |
 | [`MealServings`](#mealservings) | class |  | The single definition of how many people a planned meal is cooked for. |
 | [`MealServings.Resolved`](#mealservingsresolved) | record |  | The resolved number and where it came from (meal, recipe, household, default). |
+| [`PastDayException`](#pastdayexception) | class |  | Thrown when a planned meal on a day before today would be added, changed, moved or removed. |
 | [`PlannedMeal`](#plannedmeal) | class |  | Plain data holder for one planned meal: a row of meal_plan_recipe joined to its recipe and its plan. |
 | [`Recipe`](#recipe) | class |  | Plain data holder for one row of the Recipe table. |
 | [`RecipeIngredient`](#recipeingredient) | class |  |  |
@@ -309,6 +311,8 @@ classDiagram
         +findPlanByWeekStart(LocalDate weekStart) Optional~MealPlan~
         +findMeals(int planId) List~PlannedMeal~
         +findMeal(int entryId) Optional~PlannedMeal~
+        +findUnfrozenMealsBefore(LocalDate today) List~PlannedMeal~
+        +freezeServings(int entryId, int servings) boolean
         +nextPosition(int planId, LocalDate date) int
         +insertMeal(int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) int
         +updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) boolean
@@ -344,6 +348,8 @@ classDiagram
 | `Optional<MealPlan> findPlanByWeekStart(LocalDate weekStart)` | public | The plan of the week that starts on this Monday, if there is one. |
 | `List<PlannedMeal> findMeals(int planId)` | public | Every meal of a plan, ordered by day, then position, then entry id. |
 | `Optional<PlannedMeal> findMeal(int entryId)` | public |  |
+| `List<PlannedMeal> findUnfrozenMealsBefore(LocalDate today)` | public | Meals on a day before today that still have no number of their own (they follow the default), oldest entry first. |
+| `boolean freezeServings(int entryId, int servings)` | public | Writes a meal's own number only while it still has none, so a number set by hand in the meantime is never overwritten. |
 | `int nextPosition(int planId, LocalDate date)` | public | The next free position on a day of a plan (0 for an empty day). |
 | `int insertMeal(int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Adds one planned meal and returns its entry id. |
 | `boolean updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Writes every editable column of one meal. |
@@ -363,8 +369,12 @@ This is the class future web controllers will call.
 classDiagram
     direction LR
     class mealplanner_MealPlanService["MealPlanService"] {
+        +ZoneId DEFAULT_ZONE$
         -MealPlanRepository repository
+        -Clock clock
         +MealPlanService(MealPlanRepository repository)
+        +MealPlanService(MealPlanRepository repository, Clock clock)
+        +today() LocalDate
         +createWeeklyPlan(LocalDate weekStart) int
         +addRecipe(int planId, int recipeId, String mealTime) void
         +removeRecipe(int planId, int recipeId) boolean
@@ -375,6 +385,7 @@ classDiagram
         +addMeal(int recipeId, LocalDate date, String label, Integer servings, String note, Integer position) PlannedMeal
         +updateMeal(int entryId, MealChange change) Optional~PlannedMeal~
         +removeMeal(int entryId) boolean
+        +freezePastServings(Integer householdPeople) int
         +findMeal(int entryId) Optional~PlannedMeal~
     }
     class mealplanner_MealPlanService_Day["MealPlanService.Day"] {
@@ -390,12 +401,16 @@ classDiagram
     class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
+    class api_ScheduledMealServings["ScheduledMealServings"]
     class mealplanner_MealPlanRecipe["MealPlanRecipe"]
     class mealplanner_MealPlan["MealPlan"]
     class mealplanner_PlannedMeal["PlannedMeal"]
     class mealplanner_MealChange["MealChange"]
     class api_MealPlanWeekDto["MealPlanWeekDto"] {
         <<record>>
+    }
+    class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
+        <<spring>>
     }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
@@ -409,17 +424,23 @@ classDiagram
     mealplanner_MealPlanService ..> mealplanner_MealChange
     api_MealPlanController --> mealplanner_MealPlanService
     api_MealPlanWeekDto ..> mealplanner_MealPlanService
+    api_MealServingsScheduleConfig ..> mealplanner_MealPlanService
     api_PlannedMealController --> mealplanner_MealPlanService
+    api_ScheduledMealServings --> mealplanner_MealPlanService
     api_ServiceConfig ..> mealplanner_MealPlanService
 ```
 
 | Field | Type |
 |---|---|
+| `DEFAULT_ZONE` | `ZoneId` |
 | `repository` | `MealPlanRepository` |
+| `clock` | `Clock` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `MealPlanService(MealPlanRepository repository)` | public |  |
+| `MealPlanService(MealPlanRepository repository, Clock clock)` | public | The clock decides what "today" is, so tests (and a configured time zone) control which days are past. |
+| `LocalDate today()` | public | Today's date on the service's clock. |
 | `int createWeeklyPlan(LocalDate weekStart)` | public |  |
 | `void addRecipe(int planId, int recipeId, String mealTime)` | public |  |
 | `boolean removeRecipe(int planId, int recipeId)` | public | Removes a recipe from a plan. |
@@ -430,9 +451,10 @@ classDiagram
 | `PlannedMeal addMeal(int recipeId, LocalDate date, String label, Integer servings, String note, Integer position)` | public | Plans a recipe on a day. |
 | `Optional<PlannedMeal> updateMeal(int entryId, MealChange change)` | public | Edits or moves one planned meal. |
 | `boolean removeMeal(int entryId)` | public | Removes one planned meal by its own id. |
+| `int freezePastServings(Integer householdPeople)` | public | The nightly job: writes the resolved servings onto every meal of a past day that still follows the default, so a later change of the household number or of a recipe's preference no longer rewrites history. |
 | `Optional<PlannedMeal> findMeal(int entryId)` | public |  |
 
-**Referenced by:** `MealPlanController`, `MealPlanWeekDto`, `PlannedMealController`, `ServiceConfig`
+**Referenced by:** `MealPlanController`, `MealPlanWeekDto`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
 
 ## MealPlanService.Day
 
@@ -562,6 +584,29 @@ classDiagram
 | `source` | `String` |
 
 **Referenced by:** `MealServings`
+
+## PastDayException
+
+*class · extends RuntimeException*
+
+Thrown when a planned meal on a day before today would be added, changed, moved or removed. Meals of past days
+are history (their servings were frozen overnight); today and later stay editable. Mapped to 409 by the API.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_PastDayException["PastDayException"] {
+        +PastDayException(LocalDate day, LocalDate today)
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> mealplanner_PastDayException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PastDayException(LocalDate day, LocalDate today)` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## PlannedMeal
 
