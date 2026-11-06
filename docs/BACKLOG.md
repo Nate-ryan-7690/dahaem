@@ -312,7 +312,7 @@ not legal advice; verify before any public release.
 Gaps found 2026-10-13 by reading the current API and schema; agents build these, Nate builds the pages.
 
 - **Meal plan: any day, any number of meals** — `in progress`. **Design decided 2026-11-04 (Nate), schema in
-  migration 0016 (not applied by its PR):** `meal_plan_recipe` is changed in place, no archive table. Its own
+  migration 0016 (applied live by Nate on 2026-11-04, verified 2026-11-06):** `meal_plan_recipe` is changed in place, no archive table. Its own
   `meal_plan_recipe_entry_id` is the primary key (the same recipe can be planned many times, each meal is addressed by
   its id); the recipe and plan columns stay foreign keys; new columns: date of the meal, servings (nullable), position
   within the day, note; the existing `meal_plan_recipe_meal_time` becomes the free label. A plan stays one
@@ -439,6 +439,17 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   `docs/api-audit-ui.md`; answer them one at a time (spec rule), the matching items above wait on them.
 
 ## Platform
+
+- **Live deployment state (checked 2026-11-06)** — `next`, Nate. Read-only check on llmbox against the live `sandbox`
+  database: migrations 0001–0016 are all applied (objects and sample rows checked, not every row; the 0015
+  animal-link rows were not checked one by one). There is no migration-tracking table, since migrations are run by hand
+  in phpMyAdmin. Gaps 1713, 1715 and 1719 in the 0004 id range are gaps in `seed/inventory_catalog.sql` itself. Three
+  things are open: (1) the `dahaem-api` container is out of date: created 2026-10-22, jar dated 2026-10-15, so it has
+  none of #87–#98 (offer sources, recipe search, diet cache, household head count, the 0016 meal-plan code); the old API
+  runs against the 0016 schema, which only adds columns and keys, so no migration is needed before a rebuild from main.
+  Rebuild is Nate's decision. (2) The newest snapshot (`dahaem-20261022-084240.sql`) predates 0016; take a fresh one
+  before the rebuild (keep ≤ 3, newest replaces oldest). (3) `schema_migrations` table — `idea`: record which migration
+  ran and when, replacing this manual check; a schema change, so it needs Nate's approval and a snapshot first.
 
 - **Support tickets: backend foundation** — `next` per the spec (it says "do now"; Nate sets the
   order). Tickets, messages (user-visible vs staff notes), access requests, explicit time-limited
