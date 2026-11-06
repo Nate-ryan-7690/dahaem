@@ -331,6 +331,7 @@ classDiagram
     class shopping_ShoppingListRepository["ShoppingListRepository"] {
         +aggregateIngredients(List~Integer~ recipeIds) List~AggregatedIngredient~
         +aggregateIngredients(List~Integer~ recipeIds, int people) List~AggregatedIngredient~
+        +aggregateIngredientsByServings(java.util.Map~Integer, Integer~ servingsPerRecipe) List~AggregatedIngredient~
         +loadStoreCandidates(int inventoryItemId, LocalDate today) List~StoreItemCandidate~
         +openTransaction() Connection
         +insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, boolean status) int
@@ -369,6 +370,7 @@ classDiagram
 |---|---|---|
 | `List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds)` | public | Sums recipe_ingredient_quantity_needed per (inventory item, unit) across the given recipes, and collects which recipes contributed. |
 | `List<AggregatedIngredient> aggregateIngredients(List<Integer> recipeIds, int people)` | public | Same as .aggregateIngredients(List), but scales each recipe's ingredient quantities by people / recipe_servings before summing across recipes — so a 2-serving recipe's ingredients double at people=4. |
+| `List<AggregatedIngredient> aggregateIngredientsByServings(java.util.Map<Integer, Integer> servingsPerRecipe)` | public | Same as .aggregateIngredients(List, int), but every recipe has its own head count: the map gives, per recipe id, the total number of servings planned across all its meals (a recipe planned twice, for 2 and for 4, is 6). |
 | `List<StoreItemCandidate> loadStoreCandidates(int inventoryItemId, LocalDate today)` | public | Every store_item that can supply the given inventory item, with its brand and store name, and its store_discount for today if one is currently running. |
 | `Connection openTransaction()` | public | Opens a connection with auto-commit off, for a caller that needs to combine several writes atomically. |
 | `int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, boolean status)` | public | Inserts a new shopping_list row, on the caller's transaction. |
@@ -433,6 +435,8 @@ classDiagram
         +generateFromMealPlan(int mealPlanId) int
         +generateFromMealPlan(int mealPlanId, LocalDate today) int
         +generateFromMealPlan(int mealPlanId, LocalDate today, int people) int
+        +generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople) int
+        ~servingsPerRecipe(int mealPlanId, Integer householdPeople) Map~Integer, Integer~
         +selectStoreItem(int shoppingListItemId, Integer storeItemId) void
         +findShoppingListIdForItem(int shoppingListItemId) Optional~Integer~
         +loadPersistedList(int shoppingListId) Optional~PersistedShoppingList~
@@ -486,6 +490,8 @@ classDiagram
 | `int generateFromMealPlan(int mealPlanId)` | public |  |
 | `int generateFromMealPlan(int mealPlanId, LocalDate today)` | public | Builds a shopping list from a meal plan's recipes, subtracts what is already in inventory, and persists it: a shopping_list row linked to the plan, plus one shopping_list_item per item still missing (an item already fully in stock is droppe |
 | `int generateFromMealPlan(int mealPlanId, LocalDate today, int people)` | public | Scales each recipe's ingredient quantities by people / recipe_servings before summing (see .buildFromRecipes(List, LocalDate, int)), otherwise identical to .generateFromMealPlan(int, LocalDate). |
+| `int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople)` | public | Builds and persists a shopping list in which every planned meal is scaled by its OWN servings: the meal's own number, then its recipe's preferred servings, then householdPeople, then 2 (see MealServings). |
+| `Map<Integer, Integer> servingsPerRecipe(int mealPlanId, Integer householdPeople)` | package | Per recipe on the plan, the servings of all its meals added up (a recipe planned for 2 and for 4 is 6). |
 | `void selectStoreItem(int shoppingListItemId, Integer storeItemId)` | public | Records the store_item the user picked for a persisted shopping_list_item line, or clears the choice when storeItemId is null. |
 | `Optional<Integer> findShoppingListIdForItem(int shoppingListItemId)` | public | The shopping_list a persisted shopping_list_item belongs to, or empty if the item doesn't exist. |
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId)` | public |  |

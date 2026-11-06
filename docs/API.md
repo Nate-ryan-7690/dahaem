@@ -61,7 +61,7 @@ Every error has the same shape:
 | GET | [`/api/meal-plans/week`](#get-apimeal-plansweek) | The week that contains date (today when omitted): seven days with their meals. |
 | POST | [`/api/meal-plans/{id}/recipes`](#post-apimeal-plansidrecipes) | Adds a recipe to a plan and returns the updated plan. |
 | DELETE | [`/api/meal-plans/{id}/recipes/{recipeId}`](#delete-apimeal-plansidrecipesrecipeid) | Removes a recipe from a plan and returns the updated plan. |
-| POST | [`/api/meal-plans/{id}/shopping-list`](#post-apimeal-plansidshopping-list) | Builds and persists a shopping list from a plan's recipes (see ShoppingListService.generateFromMealPlan(int)): one line per item still missing after subtracting inventory, no store item pre-chosen. |
+| POST | [`/api/meal-plans/{id}/shopping-list`](#post-apimeal-plansidshopping-list) | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
 | GET | [`/api/purchases`](#get-apipurchases) |  |
 | POST | [`/api/purchases`](#post-apipurchases) | Records a purchase of a known store_item and applies it to inventory (one transaction, in the service). |
 | GET | [`/api/recipes`](#get-apirecipes) | All recipes by name. |
@@ -444,11 +444,14 @@ Removes a recipe from a plan and returns the updated plan. 404 if the plan or th
 
 #### POST /api/meal-plans/{id}/shopping-list
 
-Builds and persists a shopping list from a plan's recipes (see
-ShoppingListService.generateFromMealPlan(int)): one line per item still missing after
-subtracting inventory, no store item pre-chosen. Returns the new list's id. An optional
-?people=N scales each recipe's ingredient quantities by people / recipe_servings
-before summing; omitted, the raw per-recipe quantities are summed.
+Builds and persists a shopping list from a plan's meals: one line per item still missing after
+subtracting inventory, no store item pre-chosen. Returns the new list's id.
+
+By default every planned meal is scaled by its own servings (the meal's own number, then its recipe's
+preferred servings, then the household head count, then 2; see
+ShoppingListService.generateFromMealPlanByServings), so a recipe planned twice counts twice. The
+optional ?householdId=N lets the head count apply. An explicit ?people=N overrides all of
+that: every recipe is scaled to N people, as before.
 
 **Path parameters**
 
@@ -461,6 +464,7 @@ before summing; omitted, the raw per-recipe quantities are summed.
 | Name | Type | Required | Default |
 |---|---|---|---|
 | `people` | `Integer` | no |  |
+| `householdId` | `Integer` | no |  |
 
 
 

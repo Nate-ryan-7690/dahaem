@@ -153,6 +153,9 @@ classDiagram
     class api_HouseholdController["HouseholdController"] {
         <<controller>>
     }
+    class api_MealPlanController["MealPlanController"] {
+        <<controller>>
+    }
     class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
@@ -177,6 +180,7 @@ classDiagram
     auth_AccountService ..> auth_Household
     api_AuthController --> auth_AccountService
     api_HouseholdController --> auth_AccountService
+    api_MealPlanController --> auth_AccountService
     api_PlannedMealController --> auth_AccountService
     api_SecurityConfig ..> auth_AccountService
     api_ServiceConfig ..> auth_AccountService
@@ -202,7 +206,7 @@ classDiagram
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AuthController`, `HouseholdController`, `PlannedMealController`, `SecurityConfig`, `ServiceConfig`
+**Referenced by:** `AuthController`, `HouseholdController`, `MealPlanController`, `PlannedMealController`, `SecurityConfig`, `ServiceConfig`
 
 ## AppUser
 
