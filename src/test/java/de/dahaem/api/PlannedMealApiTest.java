@@ -71,29 +71,29 @@ class PlannedMealApiTest {
 
     @Test
     void anEmptyWeekIsSevenEmptyDaysStartingOnMonday() throws Exception {
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-04"))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.weekStart").value("2026-11-02"))
+                .andExpect(jsonPath("$.weekStart").value("2031-01-06"))
                 .andExpect(jsonPath("$.planId").value(nullValue()))
                 .andExpect(jsonPath("$.days", hasSize(7)))
-                .andExpect(jsonPath("$.days[0].date").value("2026-11-02"))
-                .andExpect(jsonPath("$.days[6].date").value("2026-11-08"))
+                .andExpect(jsonPath("$.days[0].date").value("2031-01-06"))
+                .andExpect(jsonPath("$.days[6].date").value("2031-01-12"))
                 .andExpect(jsonPath("$.days[3].meals", hasSize(0)));
     }
 
     @Test
     void addingAMealCreatesThePlanAndShowsOnItsDayWithTheThumbnail() throws Exception {
         mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"recipeId\": " + soup + ", \"date\": \"2026-11-04\", \"label\": \"Abendessen\"}"))
+                        .content("{\"recipeId\": " + soup + ", \"date\": \"2031-01-08\", \"label\": \"Abendessen\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.entryId").isNumber())
                 .andExpect(jsonPath("$.recipeName").value("Suppe"))
                 .andExpect(jsonPath("$.recipeThumbnailUrl").value("https://example.test/suppe.jpg"))
-                .andExpect(jsonPath("$.date").value("2026-11-04"))
+                .andExpect(jsonPath("$.date").value("2031-01-08"))
                 .andExpect(jsonPath("$.label").value("Abendessen"))
                 .andExpect(jsonPath("$.position").value(0));
 
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-02"))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-06"))
                 .andExpect(jsonPath("$.planId").isNumber())
                 .andExpect(jsonPath("$.days[2].meals", hasSize(1)))
                 .andExpect(jsonPath("$.days[2].meals[0].recipeId").value(soup));
@@ -102,14 +102,14 @@ class PlannedMealApiTest {
     @Test
     void servingsResolveFromMealThenRecipeThenHouseholdThenDefault() throws Exception {
         // no household named: default 2
-        int entry = addMeal("2026-11-04", null);
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-04"))
+        int entry = addMeal("2031-01-08", null);
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(jsonPath("$.householdPeople").value(nullValue()))
                 .andExpect(jsonPath("$.days[2].meals[0].servings").value(2))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("default"));
 
         // household named (3 people)
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-04").param("householdId", "" + household))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08").param("householdId", "" + household))
                 .andExpect(jsonPath("$.householdPeople").value(3))
                 .andExpect(jsonPath("$.days[2].meals[0].servings").value(3))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("household"));
@@ -120,7 +120,7 @@ class PlannedMealApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recipeId").value(soup))
                 .andExpect(jsonPath("$.preferredServings").value(4));
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-04").param("householdId", "" + household))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08").param("householdId", "" + household))
                 .andExpect(jsonPath("$.days[2].meals[0].servings").value(4))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("recipe"))
                 .andExpect(jsonPath("$.days[2].meals[0].recipePreferredServings").value(4));
@@ -145,30 +145,30 @@ class PlannedMealApiTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"servings\": null}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.preferredServings").value(nullValue()));
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-04").param("householdId", "" + household))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08").param("householdId", "" + household))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("household"));
     }
 
     @Test
     void aMealCanBeMovedEditedAndRemovedByItsId() throws Exception {
-        int entry = addMeal("2026-11-04", 5);
+        int entry = addMeal("2031-01-08", 5);
 
         mvc.perform(patch("/api/meal-plans/meals/{id}", entry).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"date\": \"2026-11-09\", \"label\": \"Mittagessen\", \"note\": \"Reste\"}"))
+                        .content("{\"date\": \"2031-01-13\", \"label\": \"Mittagessen\", \"note\": \"Reste\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.date").value("2026-11-09"))
+                .andExpect(jsonPath("$.date").value("2031-01-13"))
                 .andExpect(jsonPath("$.label").value("Mittagessen"))
                 .andExpect(jsonPath("$.note").value("Reste"))
                 .andExpect(jsonPath("$.ownServings").value(5));
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-04"))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(jsonPath("$.days[2].meals", hasSize(0)));
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-09"))
-                .andExpect(jsonPath("$.weekStart").value("2026-11-09"))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-13"))
+                .andExpect(jsonPath("$.weekStart").value("2031-01-13"))
                 .andExpect(jsonPath("$.days[0].meals", hasSize(1)));
 
         mvc.perform(delete("/api/meal-plans/meals/{id}", entry).with(csrf()))
                 .andExpect(status().isNoContent());
-        mvc.perform(get("/api/meal-plans/week").param("date", "2026-11-09"))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-13"))
                 .andExpect(jsonPath("$.days[0].meals", hasSize(0)));
         mvc.perform(delete("/api/meal-plans/meals/{id}", entry).with(csrf()))
                 .andExpect(status().isNotFound());
@@ -177,23 +177,23 @@ class PlannedMealApiTest {
     @Test
     void badRequestsGetTheRightStatus() throws Exception {
         mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"date\": \"2026-11-04\"}"))
+                        .content("{\"date\": \"2031-01-08\"}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"recipeId\": " + soup + "}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"recipeId\": " + soup + ", \"date\": \"2026-11-04\", \"servings\": 0}"))
+                        .content("{\"recipeId\": " + soup + ", \"date\": \"2031-01-08\", \"servings\": 0}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"recipeId\": 999999, \"date\": \"2026-11-04\"}"))
+                        .content("{\"recipeId\": 999999, \"date\": \"2031-01-08\"}"))
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/meal-plans/week").param("date", "not-a-date"))
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/api/meal-plans/week").param("householdId", "999999"))
                 .andExpect(status().isNotFound());
 
-        int entry = addMeal("2026-11-04", null);
+        int entry = addMeal("2031-01-08", null);
         mvc.perform(patch("/api/meal-plans/meals/{id}", entry).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest());
@@ -220,7 +220,7 @@ class PlannedMealApiTest {
 
     @Test
     void theShoppingListEndpointTakesAHouseholdAndStillValidatesPeople() throws Exception {
-        addMeal("2026-11-04", null);
+        addMeal("2031-01-08", null);
         int planId = id("SELECT MAX(meal_plan_id) FROM meal_plan");
 
         mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf())
@@ -237,12 +237,43 @@ class PlannedMealApiTest {
 
     @Test
     void theOldPlanEndpointsStillWorkAlongsideTheNewOnes() throws Exception {
-        addMeal("2026-11-04", null);
+        addMeal("2031-01-08", null);
         mvc.perform(get("/api/meal-plans"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].weekStartDate").value("2026-11-02"))
+                .andExpect(jsonPath("$[0].weekStartDate").value("2031-01-06"))
                 .andExpect(jsonPath("$[0].recipes", hasSize(1)));
+    }
+
+    @Test
+    void mealsOfPastDaysAreRefusedWith409() throws Exception {
+        // a week long gone (2020-01-06 was a Monday) with one meal on its Wednesday, written straight into the table
+        exec("INSERT INTO meal_plan (meal_plan_id, meal_plan_week_start_date) VALUES (900, '2020-01-06')");
+        exec("INSERT INTO meal_plan_recipe (meal_plan_recipe_id, meal_plan_recipe_plan_id, meal_plan_recipe_date, "
+                + "meal_plan_recipe_meal_time) VALUES (" + soup + ", 900, '2020-01-08', 'Abendessen')");
+        int pastEntry = id("SELECT MAX(meal_plan_recipe_entry_id) FROM meal_plan_recipe");
+        int futureEntry = addMeal("2031-01-08", null);
+
+        mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"recipeId\": " + soup + ", \"date\": \"2020-01-08\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+        mvc.perform(patch("/api/meal-plans/meals/{id}", pastEntry).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"servings\": 4}"))
+                .andExpect(status().isConflict());
+        mvc.perform(patch("/api/meal-plans/meals/{id}", futureEntry).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"date\": \"2020-01-08\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(delete("/api/meal-plans/meals/{id}", pastEntry).with(csrf()))
+                .andExpect(status().isConflict());
+
+        // the past meal is still there, and the future one was not moved
+        mvc.perform(get("/api/meal-plans/week").param("date", "2020-01-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days[2].meals", hasSize(1)))
+                .andExpect(jsonPath("$.days[2].meals[0].entryId").value(pastEntry));
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
+                .andExpect(jsonPath("$.days[2].meals", hasSize(1)));
     }
 
     // ---------- helpers ----------

@@ -166,6 +166,46 @@ public class MealPlanRepository {
         }
     }
 
+    /**
+     * Meals on a day before {@code today} that still have no number of their own (they follow the default), oldest
+     * entry first. These are the ones the nightly job freezes.
+     */
+    public List<PlannedMeal> findUnfrozenMealsBefore(LocalDate today) {
+        String sql = MEAL_SELECT + "WHERE mpr.meal_plan_recipe_servings IS NULL "
+                + "AND COALESCE(mpr.meal_plan_recipe_date, mp.meal_plan_week_start_date) < ? "
+                + "ORDER BY mpr.meal_plan_recipe_entry_id";
+        List<PlannedMeal> meals = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setObject(1, today);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    meals.add(mapMeal(rs));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load the meals before " + today + " that follow the default", e);
+        }
+        return meals;
+    }
+
+    /**
+     * Writes a meal's own number only while it still has none, so a number set by hand in the meantime is never
+     * overwritten. Returns true if the row was changed.
+     */
+    public boolean freezeServings(int entryId, int servings) {
+        String sql = "UPDATE meal_plan_recipe SET meal_plan_recipe_servings = ? "
+                + "WHERE meal_plan_recipe_entry_id = ? AND meal_plan_recipe_servings IS NULL";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, servings);
+            ps.setInt(2, entryId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not freeze the servings of planned meal " + entryId, e);
+        }
+    }
+
     /** The next free position on a day of a plan (0 for an empty day). */
     public int nextPosition(int planId, LocalDate date) {
         String sql = "SELECT COALESCE(MAX(meal_plan_recipe_position), -1) + 1 FROM meal_plan_recipe " +

@@ -363,7 +363,14 @@ A planned meal looks like this (`PlannedMealDto`):
   (with no head count set that is the default 2). A recipe stored for 4 and cooked for 2 halves. `householdId` lets the
   head count apply; an explicit `people=N` overrides everything and scales every recipe to N people, as before. The
   rest of the list behaves as before (inventory subtracted, items nobody sells left out, no store item pre-chosen).
-- Not built yet (backlog): yesterday's servings are not frozen yet and a past day can still be edited.
+- **Past days are history.** "Today" is the date in the household's time zone (`dahaem.mealplan.zone`, default
+  `Europe/Berlin`). Adding a meal to a day before today, and editing, moving or removing a meal of such a day, or
+  moving a meal onto one, is refused with **409** (`{"status": 409, ...}`); today and later stay editable. A nightly job
+  (00:01 in that zone, `dahaem.mealplan.freeze-cron`, switch off with `dahaem.mealplan.freeze-enabled=false`) writes the
+  resolved servings (recipe preference, then the shared household's head count, then 2) onto every meal of a past
+  day that still followed the default, so a later change of the household number or a recipe's preference no longer
+  rewrites what was cooked. It catches up on any night the API was not running. The old endpoints
+  (`/api/meal-plans/{id}/recipes`) do not check the day.
 
 The database lives in MariaDB and is not part of the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
 
