@@ -60,15 +60,15 @@ Legend: **OK** = exists and fits · **PARTIAL** = exists but inadequate (what is
 
 | # | Needed call | Existing endpoint | Notes |
 |---|---|---|---|
-| 3.1 | Load one week by date | **MISSING** | Only `GET /api/meal-plans` (all weeks). Needs `?week=YYYY-MM-DD` or `/api/meal-plans/week/{date}` (spec §7: "fetch only the week needed"). |
+| 3.1 | Load one week by date | `GET /api/meal-plans/week?date=` — OK | Covered since the meal planner PR: seven days, any day of the week works, no plan = seven empty days. |
 | 3.2 | Create the week's plan | `POST /api/meal-plans` — OK | 409 for a second plan for the same week; the UI would rather get-or-create. `weekStartDate` is not checked to be a Monday. |
-| 3.3 | Add a meal to *any* day, *any number* of times | `POST /api/meal-plans/{id}/recipes` — **PARTIAL** | Body is `recipeId` + a **required** non-blank `mealTime` text (a fixed slot, which the spec rejects). No date; the same recipe twice on one plan is a 409 because `meal_plan_recipe` is keyed (recipe, plan). Already in the backlog as "Meal plan: any day, any number of meals". |
-| 3.4 | Remove a planned meal | `DELETE /api/meal-plans/{id}/recipes/{recipeId}` — **PARTIAL** | Exists, but addresses the recipe, not the entry, so it cannot remove one of two entries of the same recipe (which cannot exist yet). Needs an entry id. |
-| 3.5 | Edit / move a planned meal (day, servings, label) | **MISSING** | No PUT / PATCH. |
-| 3.6 | Servings per planned meal | **MISSING** | No servings column on the plan entry; `?people=N` is only a parameter of the shopping-list generation, one value for the whole plan. |
-| 3.7 | Previous / next week | **MISSING** | Follows from 3.1: needs a week-by-date read. |
+| 3.3 | Add a meal to *any* day, *any number* of times | `POST /api/meal-plans/meals` — OK | `recipeId` + `date`, optional free `label`, `servings`, `note`, `position`; creates the week's plan on first use; the same recipe as often as wanted. The old `POST /api/meal-plans/{id}/recipes` stays until the PHP has moved. |
+| 3.4 | Remove a planned meal | `DELETE /api/meal-plans/meals/{entryId}` — OK | By the meal's own id. The old delete by (plan, recipe) stays and removes every entry of that recipe in the plan. |
+| 3.5 | Edit / move a planned meal (day, servings, label) | `PATCH /api/meal-plans/meals/{entryId}` — OK | Date (also into another week), position, label, note, servings, recipe. Past days are not refused yet (backlog). |
+| 3.6 | Servings per planned meal | **PARTIAL** | Stored and resolved per meal (meal, recipe preference, household, 2; `PUT /api/recipes/{id}/preferred-servings`). The shopping-list generation still takes one `?people=N` for the whole plan (backlog). |
+| 3.7 | Previous / next week | `GET /api/meal-plans/week?date=` — OK | Ask for the date a week earlier or later. |
 | 3.8 | Recipe picker (search, filter, page, thumbnails) | `GET /api/recipes/search` — OK | Covered since PR #93: `q`, `tags`, `minTime` / `maxTime`, `servings`, `sort`, `page` / `pageSize` and a `thumbnailUrl` on every card. See 4.1. The plain `GET /api/recipes` (every recipe, ~11,000) is unchanged and stays until the PHP has moved to `/search`. |
-| 3.9 | Planned meal with image and detail | **MISSING** | See 2.3. |
+| 3.9 | Planned meal with image and detail | **PARTIAL** | A planned meal carries `recipeThumbnailUrl`, name, date, label, servings and note; the full recipe is `GET /api/recipes/{id}`. |
 | 3.10 | Generate shopping needs from the week | `POST /api/meal-plans/{id}/shopping-list` — OK | One `people` for the whole plan; see 3.6. Persisted list problems: see 5.x. |
 | 3.11 | Plan is shared household state | **MISSING** | `meal_plan` has no household column (docs/DATABASE.md: one shared household today). Backlog "Household isolation". |
 

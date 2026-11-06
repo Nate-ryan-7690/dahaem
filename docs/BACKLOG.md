@@ -320,14 +320,18 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   ("this meal is always for X"), then `household.household_people`, then 2; meals that have not happened yet follow
   the household number, a hand-set number stays. Opening a week with no plan returns seven empty days, adding the
   first meal creates the plan. The old endpoints stay until the PHP has moved (a meal added the old way lands on the
-  week's Monday with its text as the label). **Still to build (Java, API):** one week by date; add / edit / move /
-  remove a meal by id; servings resolution; the shopping list scaling each meal by its own servings (today it takes
-  one `people` and the distinct recipe ids); a nightly job at 00:01 that writes the resolved servings onto yesterday's
-  rows and a service rule that refuses edits to a past day; each planned meal carrying its recipe thumbnail
-  (audit); the setter for `recipe_preferred_servings`. **Built:** reading and setting the household head count
-  (`GET /api/households/{id}`, `PUT /api/households/{id}/people`); the PHP decides who may call it, because the API
-  cannot tell which account is acting yet (see "Auth and session review"). **Blocked:** the household column on
-  plans (the user / household decision).
+  week's Monday with its text as the label). **Still to build (Java, API):** the shopping list scaling each meal by its own
+  servings (today it takes one `people` and the distinct recipe ids; PR B); a nightly job at 00:01 that writes the
+  resolved servings onto yesterday's rows and a service rule that refuses edits to a past day (PR C). **Built:**
+  reading and setting the household head count (`GET /api/households/{id}`, `PUT /api/households/{id}/people`); the
+  PHP decides who may call it, because the API cannot tell which account is acting yet (see "Auth and session
+  review"). **Built in PR A (meal planner by date):** one week by date (`GET /api/meal-plans/week`), plan / edit /
+  move / remove a meal by its entry id (`POST` / `PATCH` / `DELETE /api/meal-plans/meals`), servings resolution
+  (`MealServings`: meal, recipe preference, household, 2), each planned meal with its recipe thumbnail, and the
+  setter for `recipe_preferred_servings` (`PUT /api/recipes/{id}/preferred-servings`); contract in the README
+  ("Meal planner by date"). The meal endpoints take an optional `householdId` so servings can follow the head count;
+  until the auth question is settled the PHP chooses it. **Blocked:** the household column on plans (the user /
+  household decision).
 - **Retire `recipe_servings_max`** — `later`. Nate wants to drop the range column once ranges are unwanted (stored
   amounts are always for `recipe_servings`, 2 as the standard, and scaled in the logic). It is its own clean-up, not
   part of the meal plan: clear the ~77 values (the range is in the title), drop the CHECK

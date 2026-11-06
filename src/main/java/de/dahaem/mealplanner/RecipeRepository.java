@@ -319,4 +319,26 @@ public class RecipeRepository {
         );
 
     }
+
+    /**
+     * Sets the recipe's permanent preferred servings ("this meal is always for X people"); null clears it.
+     * It never touches recipe_servings, the number the stored amounts are written for. Returns false when
+     * there is no such recipe.
+     */
+    public boolean setPreferredServings(int recipeId, Integer servings) {
+        String sql = "UPDATE recipe SET recipe_preferred_servings = ? WHERE recipe_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            if (servings == null) {
+                ps.setNull(1, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(1, servings);
+            }
+            ps.setInt(2, recipeId);
+            // Count matched rows, not changed rows: setting the same number again must not look like "not found".
+            return ps.executeUpdate() > 0 || findById(recipeId).isPresent();
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not set the preferred servings of recipe " + recipeId, e);
+        }
+    }
 }
