@@ -1164,16 +1164,18 @@ classDiagram
         -MealPlanService mealPlanService
         -RecipeService recipeService
         -ShoppingListService shoppingListService
-        +MealPlanController(MealPlanService mealPlanService, RecipeService recipeService, ShoppingListService shoppingListService)
+        -AccountService accountService
+        +MealPlanController(MealPlanService mealPlanService, RecipeService recipeService, ShoppingListService shoppingListService, AccountService accountService)
         +all() List~MealPlanDto~
         +create(CreateMealPlanRequest request) MealPlanDto
         +addRecipe(int id, AddPlannedRecipeRequest request) MealPlanDto
         +removeRecipe(int id, int recipeId) MealPlanDto
-        +generateShoppingList(int id, Integer people) GeneratedShoppingListDto
+        +generateShoppingList(int id, Integer people, Integer householdId) GeneratedShoppingListDto
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class mealplanner_RecipeService["RecipeService"]
     class shopping_ShoppingListService["ShoppingListService"]
+    class auth_AccountService["AccountService"]
     class api_MealPlanDto["MealPlanDto"] {
         <<record>>
     }
@@ -1189,6 +1191,7 @@ classDiagram
     api_MealPlanController --> mealplanner_MealPlanService
     api_MealPlanController --> mealplanner_RecipeService
     api_MealPlanController --> shopping_ShoppingListService
+    api_MealPlanController --> auth_AccountService
     api_MealPlanController ..> api_MealPlanDto
     api_MealPlanController ..> api_CreateMealPlanRequest
     api_MealPlanController ..> api_AddPlannedRecipeRequest
@@ -1200,15 +1203,16 @@ classDiagram
 | `mealPlanService` | `MealPlanService` |
 | `recipeService` | `RecipeService` |
 | `shoppingListService` | `ShoppingListService` |
+| `accountService` | `AccountService` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `MealPlanController(MealPlanService mealPlanService, RecipeService recipeService, ShoppingListService shoppingListService)` | public |  |
+| `MealPlanController(MealPlanService mealPlanService, RecipeService recipeService, ShoppingListService shoppingListService, AccountService accountService)` | public |  |
 | `List<MealPlanDto> all()` | public |  |
 | `MealPlanDto create(CreateMealPlanRequest request)` | public | Creates an empty plan for the week. |
 | `MealPlanDto addRecipe(int id, AddPlannedRecipeRequest request)` | public | Adds a recipe to a plan and returns the updated plan. |
 | `MealPlanDto removeRecipe(int id, int recipeId)` | public | Removes a recipe from a plan and returns the updated plan. |
-| `GeneratedShoppingListDto generateShoppingList(int id, Integer people)` | public | Builds and persists a shopping list from a plan's recipes (see ShoppingListService.generateFromMealPlan(int)): one line per item still missing after subtracting inventory, no store item pre-chosen. |
+| `GeneratedShoppingListDto generateShoppingList(int id, Integer people, Integer householdId)` | public | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
 
 ## MealPlanDto
 

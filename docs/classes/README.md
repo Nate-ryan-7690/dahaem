@@ -20,7 +20,7 @@ flowchart TD
     stores["stores (47)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
-    api -->|10| auth
+    api -->|11| auth
     api -->|9| diet
     api -->|4| finance
     api -->|4| inventory
@@ -36,7 +36,7 @@ flowchart TD
     mealplanner -->|1| tags
     receipts -->|8| stores
     shopping -->|2| inventory
-    shopping -->|2| mealplanner
+    shopping -->|4| mealplanner
 ```
 
 Arrows point from the importing package to the imported one; the number is how many import lines. `shared` is left out of the drawing: 11 of the other packages import it, and it imports none of them. A package that imports nothing else here is a leaf.

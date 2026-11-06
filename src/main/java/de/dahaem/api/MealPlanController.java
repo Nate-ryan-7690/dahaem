@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import de.dahaem.auth.AccountService;
 import de.dahaem.mealplanner.MealPlan;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.RecipeService;
@@ -26,12 +27,14 @@ public class MealPlanController {
     private final MealPlanService mealPlanService;
     private final RecipeService recipeService;
     private final ShoppingListService shoppingListService;
+    private final AccountService accountService;
 
     public MealPlanController(MealPlanService mealPlanService, RecipeService recipeService,
-                               ShoppingListService shoppingListService) {
+                               ShoppingListService shoppingListService, AccountService accountService) {
         this.mealPlanService = mealPlanService;
         this.recipeService = recipeService;
         this.shoppingListService = shoppingListService;
+        this.accountService = accountService;
     }
 
     @GetMapping
@@ -85,16 +88,20 @@ public class MealPlanController {
     }
 
     /**
-     * Builds and persists a shopping list from a plan's recipes (see
-     * {@link ShoppingListService#generateFromMealPlan(int)}): one line per item still missing after
-     * subtracting inventory, no store item pre-chosen. Returns the new list's id. An optional
-     * {@code ?people=N} scales each recipe's ingredient quantities by {@code people / recipe_servings}
-     * before summing; omitted, the raw per-recipe quantities are summed.
+     * Builds and persists a shopping list from a plan's meals: one line per item still missing after
+     * subtracting inventory, no store item pre-chosen. Returns the new list's id.
+     *
+     * <p>By default every planned meal is scaled by its own servings (the meal's own number, then its recipe's
+     * preferred servings, then the household head count, then 2; see
+     * {@link ShoppingListService#generateFromMealPlanByServings}), so a recipe planned twice counts twice. The
+     * optional {@code ?householdId=N} lets the head count apply. An explicit {@code ?people=N} overrides all of
+     * that: every recipe is scaled to N people, as before.
      */
     @PostMapping("/{id}/shopping-list")
     @ResponseStatus(HttpStatus.CREATED)
     public GeneratedShoppingListDto generateShoppingList(@PathVariable("id") int id,
-                                                          @RequestParam(name = "people", required = false) Integer people) {
+                                                          @RequestParam(name = "people", required = false) Integer people,
+                                                          @RequestParam(name = "householdId", required = false) Integer householdId) {
         mealPlanService.allPlans().stream()
                 .filter(p -> p.getId() == id)
                 .findFirst()
@@ -102,9 +109,15 @@ public class MealPlanController {
         if (people != null && !Portions.isValidPeople(people)) {
             throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
         }
-        int shoppingListId = people == null
-                ? shoppingListService.generateFromMealPlan(id)
-                : shoppingListService.generateFromMealPlan(id, LocalDate.now(), people);
+        int shoppingListId;
+        if (people != null) {
+            shoppingListId = shoppingListService.generateFromMealPlan(id, LocalDate.now(), people);
+        } else {
+            Integer householdPeople = householdId == null ? null : accountService.findHousehold(householdId)
+                    .orElseThrow(() -> new NotFoundException("No household with id " + householdId))
+                    .getPeople();
+            shoppingListId = shoppingListService.generateFromMealPlanByServings(id, LocalDate.now(), householdPeople);
+        }
         return new GeneratedShoppingListDto(shoppingListId);
     }
 }

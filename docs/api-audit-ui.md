@@ -65,11 +65,11 @@ Legend: **OK** = exists and fits · **PARTIAL** = exists but inadequate (what is
 | 3.3 | Add a meal to *any* day, *any number* of times | `POST /api/meal-plans/meals` — OK | `recipeId` + `date`, optional free `label`, `servings`, `note`, `position`; creates the week's plan on first use; the same recipe as often as wanted. The old `POST /api/meal-plans/{id}/recipes` stays until the PHP has moved. |
 | 3.4 | Remove a planned meal | `DELETE /api/meal-plans/meals/{entryId}` — OK | By the meal's own id. The old delete by (plan, recipe) stays and removes every entry of that recipe in the plan. |
 | 3.5 | Edit / move a planned meal (day, servings, label) | `PATCH /api/meal-plans/meals/{entryId}` — OK | Date (also into another week), position, label, note, servings, recipe. Past days are not refused yet (backlog). |
-| 3.6 | Servings per planned meal | **PARTIAL** | Stored and resolved per meal (meal, recipe preference, household, 2; `PUT /api/recipes/{id}/preferred-servings`). The shopping-list generation still takes one `?people=N` for the whole plan (backlog). |
+| 3.6 | Servings per planned meal | OK | Stored and resolved per meal (meal, recipe preference, household, 2; `PUT /api/recipes/{id}/preferred-servings`), and the shopping-list generation scales each meal by its own servings (`?people=N` still overrides). |
 | 3.7 | Previous / next week | `GET /api/meal-plans/week?date=` — OK | Ask for the date a week earlier or later. |
 | 3.8 | Recipe picker (search, filter, page, thumbnails) | `GET /api/recipes/search` — OK | Covered since PR #93: `q`, `tags`, `minTime` / `maxTime`, `servings`, `sort`, `page` / `pageSize` and a `thumbnailUrl` on every card. See 4.1. The plain `GET /api/recipes` (every recipe, ~11,000) is unchanged and stays until the PHP has moved to `/search`. |
 | 3.9 | Planned meal with image and detail | **PARTIAL** | A planned meal carries `recipeThumbnailUrl`, name, date, label, servings and note; the full recipe is `GET /api/recipes/{id}`. |
-| 3.10 | Generate shopping needs from the week | `POST /api/meal-plans/{id}/shopping-list` — OK | One `people` for the whole plan; see 3.6. Persisted list problems: see 5.x. |
+| 3.10 | Generate shopping needs from the week | `POST /api/meal-plans/{id}/shopping-list` — OK | Each meal scaled by its own servings (see 3.6), `?people=N` overrides. Persisted list problems: see 5.x. |
 | 3.11 | Plan is shared household state | **MISSING** | `meal_plan` has no household column (docs/DATABASE.md: one shared household today). Backlog "Household isolation". |
 
 ## 4. Recipes (spec §5.4)

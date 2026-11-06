@@ -85,17 +85,65 @@ public class ShoppingListRepository {
         return runAggregateQuery(sql, recipeIds, Optional.of(people));
     }
 
+    /**
+     * Same as {@link #aggregateIngredients(List, int)}, but every recipe has its own head count: the map gives,
+     * per recipe id, the total number of servings planned across all its meals (a recipe planned twice, for 2 and
+     * for 4, is 6). Each recipe's quantities are scaled by {@code servings / recipe_servings} before summing
+     * across recipes. A recipe with a servings count of 0 or less is skipped, and to-taste rows are left out, as
+     * above. An empty map gives an empty result.
+     */
+    public List<AggregatedIngredient> aggregateIngredientsByServings(java.util.Map<Integer, Integer> servingsPerRecipe) {
+        for (int servings : servingsPerRecipe.values()) {
+            if (!Portions.isValidPeople(servings)) {
+                throw new IllegalArgumentException(Portions.INVALID_PEOPLE_MESSAGE);
+            }
+        }
+        if (servingsPerRecipe.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Integer> recipeIds = new ArrayList<>(servingsPerRecipe.keySet());
+        String whens = recipeIds.stream().map(id -> "WHEN ? THEN ?").collect(Collectors.joining(" "));
+        String placeholders = recipeIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        String sql = "SELECT ri.recipe_ingredient_item_id AS item_id, "
+                + "ii.inventory_item_name_deutsch AS name_deutsch, "
+                + "ri.recipe_ingredient_unit AS unit, "
+                + "SUM(ri.recipe_ingredient_quantity_needed * (CASE ri.recipe_ingredient_recipe_id " + whens
+                + " END) / CAST(r.recipe_servings AS DOUBLE)) AS total_quantity, "
+                + "GROUP_CONCAT(DISTINCT ri.recipe_ingredient_recipe_id) AS recipe_ids "
+                + "FROM recipe_ingredient ri "
+                + "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id "
+                + "JOIN recipe r ON r.recipe_id = ri.recipe_ingredient_recipe_id "
+                + "WHERE ri.recipe_ingredient_recipe_id IN (" + placeholders + ") "
+                + "AND r.recipe_servings > 0 "
+                + "AND ri.recipe_ingredient_to_taste = FALSE "
+                + "GROUP BY ri.recipe_ingredient_item_id, ri.recipe_ingredient_unit "
+                + "ORDER BY ii.inventory_item_name_deutsch";
+
+        List<Integer> params = new ArrayList<>();
+        for (int recipeId : recipeIds) {
+            params.add(recipeId);
+            params.add(servingsPerRecipe.get(recipeId));
+        }
+        params.addAll(recipeIds);
+        return runAggregateQuery(sql, params, "recipes " + recipeIds);
+    }
+
     private List<AggregatedIngredient> runAggregateQuery(String sql, List<Integer> recipeIds,
                                                            Optional<Integer> people) {
+        List<Integer> params = new ArrayList<>();
+        people.ifPresent(params::add);
+        params.addAll(recipeIds);
+        return runAggregateQuery(sql, params, "recipes " + recipeIds);
+    }
+
+    // params are bound in order, all integers (head counts and recipe ids)
+    private List<AggregatedIngredient> runAggregateQuery(String sql, List<Integer> params, String what) {
         List<AggregatedIngredient> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             int i = 1;
-            if (people.isPresent()) {
-                ps.setInt(i++, people.get());
-            }
-            for (int recipeId : recipeIds) {
-                ps.setInt(i++, recipeId);
+            for (int param : params) {
+                ps.setInt(i++, param);
             }
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -111,7 +159,7 @@ public class ShoppingListRepository {
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Could not aggregate ingredients for recipes " + recipeIds, e);
+            throw new RuntimeException("Could not aggregate ingredients for " + what, e);
         }
         return out;
     }
