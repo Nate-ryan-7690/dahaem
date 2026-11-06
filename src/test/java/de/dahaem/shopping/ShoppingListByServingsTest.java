@@ -5,6 +5,7 @@ import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.PlannedMeal;
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.TestClock;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +36,7 @@ class ShoppingListByServingsTest {
     @BeforeEach
     void setUp() throws SQLException {
         TestDatabase.reset();
-        plans = new MealPlanService(new MealPlanRepository());
+        plans = new MealPlanService(new MealPlanRepository(), new TestClock(TODAY));   // the week of MON is still ahead
         service = new ShoppingListService(new ShoppingListRepository(), new MealPlanRepository(),
                 new InventoryRepository());
         // one item (onion, none in stock) that a store sells, so it lands on the persisted list

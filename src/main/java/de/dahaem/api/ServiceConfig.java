@@ -59,8 +59,10 @@ public class ServiceConfig {
     }
 
     @Bean
-    public MealPlanService mealPlanService(MealPlanRepository mealPlanRepository) {
-        return new MealPlanService(mealPlanRepository);
+    public MealPlanService mealPlanService(MealPlanRepository mealPlanRepository,
+                                           @org.springframework.beans.factory.annotation.Value("${dahaem.mealplan.zone:Europe/Berlin}") String zone) {
+        // "today" (which days are past) is the date in the household's time zone, not the server's
+        return new MealPlanService(mealPlanRepository, java.time.Clock.system(java.time.ZoneId.of(zone)));
     }
 
     @Bean

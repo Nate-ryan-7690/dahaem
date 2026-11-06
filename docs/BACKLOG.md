@@ -320,9 +320,12 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   ("this meal is always for X"), then `household.household_people`, then 2; meals that have not happened yet follow
   the household number, a hand-set number stays. Opening a week with no plan returns seven empty days, adding the
   first meal creates the plan. The old endpoints stay until the PHP has moved (a meal added the old way lands on the
-  week's Monday with its text as the label). **Still to build (Java, API):** a nightly job at 00:01 that writes the
-  resolved servings onto yesterday's rows and a service rule that refuses edits to a past day (PR C). **Built in
-  PR B:** the shopping list from a plan scales each meal by its own resolved servings
+  week's Monday with its text as the label). **The Java API for it is complete after PR C; what is left is the PHP page.**
+  **Built in PR C:** meals of a past day (household time zone, `dahaem.mealplan.zone`) cannot be added, edited, moved
+  or removed (409), and a nightly job at 00:01 (`ScheduledMealServings`) writes the resolved servings onto every past
+  meal that still followed the default, catching up on missed nights; it uses the head count of the first (shared)
+  household, because plans have no household column yet, and the first run also freezes the old rows of the live
+  database. The old endpoints do not check the day and stay until the PHP has moved. **Built in PR B:** the shopping list from a plan scales each meal by its own resolved servings
   (`ShoppingListService.generateFromMealPlanByServings`; a recipe planned twice counts twice; `?people=N` still
   overrides; optional `?householdId=`). **Built:**
   reading and setting the household head count (`GET /api/households/{id}`, `PUT /api/households/{id}/people`); the
