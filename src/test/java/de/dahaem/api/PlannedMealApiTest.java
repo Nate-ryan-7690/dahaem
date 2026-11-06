@@ -57,6 +57,8 @@ class PlannedMealApiTest {
 
     @BeforeEach
     void clearPlans() throws SQLException {
+        exec("DELETE FROM shopping_list_item");
+        exec("DELETE FROM shopping_list");
         exec("DELETE FROM meal_plan_recipe");
         exec("DELETE FROM meal_plan");
         exec("UPDATE recipe SET recipe_preferred_servings = NULL");
@@ -213,6 +215,23 @@ class PlannedMealApiTest {
                 .andExpect(status().isBadRequest());
         mvc.perform(put("/api/recipes/{id}/preferred-servings", 999999).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"servings\": 4}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void theShoppingListEndpointTakesAHouseholdAndStillValidatesPeople() throws Exception {
+        addMeal("2026-11-04", null);
+        int planId = id("SELECT MAX(meal_plan_id) FROM meal_plan");
+
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf())
+                        .param("householdId", "" + household))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shoppingListId").isNumber());
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()).param("householdId", "999999"))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()).param("people", "0"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999999).with(csrf()))
                 .andExpect(status().isNotFound());
     }
 

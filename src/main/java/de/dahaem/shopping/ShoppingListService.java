@@ -4,6 +4,8 @@ import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.Item;
 import de.dahaem.mealplanner.MealPlanRecipe;
 import de.dahaem.mealplanner.MealPlanRepository;
+import de.dahaem.mealplanner.MealServings;
+import de.dahaem.mealplanner.PlannedMeal;
 import de.dahaem.shared.Units;
 
 import java.sql.Connection;
@@ -99,6 +101,29 @@ public class ShoppingListService {
     public int generateFromMealPlan(int mealPlanId, LocalDate today, int people) {
         List<Integer> recipeIds = recipeIdsForPlan(mealPlanId);
         return persistGeneratedList(mealPlanId, today, buildFromRecipes(recipeIds, today, people));
+    }
+
+    /**
+     * Builds and persists a shopping list in which every planned meal is scaled by its OWN servings: the meal's
+     * own number, then its recipe's preferred servings, then {@code householdPeople}, then 2 (see
+     * {@link MealServings}). Each meal adds {@code servings / recipe_servings} of its recipe's quantities, so a
+     * recipe planned twice counts twice, and a recipe stored for 2 and planned for 2 is taken as written.
+     * Otherwise identical to {@link #generateFromMealPlan(int, LocalDate)}. {@code householdPeople} may be null.
+     */
+    public int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople) {
+        Map<Integer, Integer> servingsPerRecipe = servingsPerRecipe(mealPlanId, householdPeople);
+        return persistGeneratedList(mealPlanId, today,
+                buildFromRecipes(today, repository.aggregateIngredientsByServings(servingsPerRecipe)));
+    }
+
+    /** Per recipe on the plan, the servings of all its meals added up (a recipe planned for 2 and for 4 is 6). */
+    Map<Integer, Integer> servingsPerRecipe(int mealPlanId, Integer householdPeople) {
+        Map<Integer, Integer> servingsPerRecipe = new LinkedHashMap<>();
+        for (PlannedMeal meal : mealPlanRepository.findMeals(mealPlanId)) {
+            servingsPerRecipe.merge(meal.getRecipeId(), MealServings.resolve(meal, householdPeople).servings(),
+                    Integer::sum);
+        }
+        return servingsPerRecipe;
     }
 
     private List<Integer> recipeIdsForPlan(int mealPlanId) {

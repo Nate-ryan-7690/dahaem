@@ -357,8 +357,13 @@ A planned meal looks like this (`PlannedMealDto`):
   the old endpoint (no date) appear on the Monday of their week with their `mealTime` as the label.
 - Within a day, meals are ordered by `position`, then by `entryId`. Moving a meal to another day without a
   `position` puts it last on the new day.
-- Not built yet (backlog): the shopping list still takes one `people` for the whole plan; yesterday's servings are not
-  frozen yet and a past day can still be edited.
+- **Shopping list from a plan** (`POST /api/meal-plans/{id}/shopping-list[?householdId=N][&people=N]`): by default every
+  meal is scaled by its OWN resolved `servings`: each meal adds `servings / recipe_servings` of its recipe's
+  quantities, so a recipe planned twice counts twice and a recipe stored for 2 and cooked for 2 is taken as written
+  (with no head count set that is the default 2). A recipe stored for 4 and cooked for 2 halves. `householdId` lets the
+  head count apply; an explicit `people=N` overrides everything and scales every recipe to N people, as before. The
+  rest of the list behaves as before (inventory subtracted, items nobody sells left out, no store item pre-chosen).
+- Not built yet (backlog): yesterday's servings are not frozen yet and a past day can still be edited.
 
 The database lives in MariaDB and is not part of the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
 
