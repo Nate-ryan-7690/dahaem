@@ -8,23 +8,23 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (55)"]
+    api["api (61)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (3)"]
     inventory["inventory (3)"]
-    mealplanner["mealplanner (18)"]
+    mealplanner["mealplanner (24)"]
     receipts["receipts (30)"]
     shared["shared (7)"]
     shopping["shopping (11)"]
     stores["stores (47)"]
     suggestions["suggestions (3)"]
     tags["tags (29)"]
-    api -->|9| auth
+    api -->|10| auth
     api -->|9| diet
     api -->|4| finance
     api -->|4| inventory
-    api -->|21| mealplanner
+    api -->|28| mealplanner
     api -->|11| shopping
     api -->|2| stores
     api -->|4| suggestions
@@ -45,12 +45,12 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 55 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 61 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 3 | The item catalogue and the pantry. |
-| [`mealplanner`](mealplanner.md) | 18 | Recipes, ingredients, instructions, scaling and meal plans. |
+| [`mealplanner`](mealplanner.md) | 24 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
 | [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
@@ -64,6 +64,7 @@ Arrows point from the importing package to the imported one; the number is how m
 |---|---|---|---|
 | [`AccountRepository`](auth.md#accountrepository) | auth | class | All SQL for the household, app_user and household_member tables lives here. |
 | [`AccountService`](auth.md#accountservice) | auth | class | Business logic for user accounts and households. |
+| [`AddMealRequest`](api.md#addmealrequest) | api | record | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](api.md#addplannedreciperequest) | api | record | Body of POST /api/meal-plans/{id}/recipes, e.g. |
 | [`AddTagRequest`](api.md#addtagrequest) | api | record | Body of POST /api/recipes/{id}/tags. |
 | [`AdjustmentType`](receipts.md#adjustmenttype) | receipts | enum | What kind of price change or deposit movement a receipt line is. |
@@ -140,6 +141,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`MatchGate`](stores.md#matchgate) | stores | class | Plausibility gate between "the name matched an inventory_item" and "create a store_item + discount". |
 | [`MatchGate.References`](stores.md#matchgatereferences) | stores | class | Reference prices per base unit, by inventory_item id and unit family. |
 | [`MatchGate.Verdict`](stores.md#matchgateverdict) | stores | record |  |
+| [`MealChange`](mealplanner.md#mealchange) | mealplanner | class | What to change on a planned meal. |
 | [`MealPlan`](mealplanner.md#mealplan) | mealplanner | class | Plain data holder for one row of the meal_plan table. |
 | [`MealPlanController`](api.md#mealplancontroller) | api | class |  |
 | [`MealPlanDto`](api.md#mealplandto) | api | record | One weekly meal plan with the recipes slotted into it. |
@@ -147,6 +149,12 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`MealPlanRecipe`](mealplanner.md#mealplanrecipe) | mealplanner | class | Plain data holder for one row of the meal_plan_recipe table, joined to the recipe's name. |
 | [`MealPlanRepository`](mealplanner.md#mealplanrepository) | mealplanner | class | All SQL for the meal_plan and meal_plan_recipe tables lives here. |
 | [`MealPlanService`](mealplanner.md#mealplanservice) | mealplanner | class | Business logic for meal plans. |
+| [`MealPlanService.Day`](mealplanner.md#mealplanserviceday) | mealplanner | record | One day of a week with its meals in order. |
+| [`MealPlanService.Week`](mealplanner.md#mealplanserviceweek) | mealplanner | record | One Monday-to-Sunday week. |
+| [`MealPlanWeekDto`](api.md#mealplanweekdto) | api | record | One Monday-to-Sunday week: always seven days, each with its meals in order. |
+| [`MealPlanWeekDto.DayDto`](api.md#mealplanweekdtodaydto) | api | record |  |
+| [`MealServings`](mealplanner.md#mealservings) | mealplanner | class | The single definition of how many people a planned meal is cooked for. |
+| [`MealServings.Resolved`](mealplanner.md#mealservingsresolved) | mealplanner | record | The resolved number and where it came from (meal, recipe, household, default). |
 | [`Normalizer`](stores.md#normalizer) | stores | class | Turns a German product or ingredient name into a comparable key: lowercase, umlauts to ae/oe/ue/ss, allergen markers and leading ALL-CAPS brand words removed, punctuation to spaces. |
 | [`NotFoundException`](api.md#notfoundexception) | api | class | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`OfferPull`](stores.md#offerpull) | stores | record | Offers pulled from one chain, plus the requests that failed (so a run can be marked PARTIAL). |
@@ -165,7 +173,11 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PersistedShoppingListDto`](api.md#persistedshoppinglistdto) | api | record | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
 | [`PersistedShoppingListDto.Line`](api.md#persistedshoppinglistdtoline) | api | record |  |
 | [`PersistedShoppingListItem`](shopping.md#persistedshoppinglistitem) | shopping | record | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed, every current store option for it (the same options a freshly |
+| [`PlannedMeal`](mealplanner.md#plannedmeal) | mealplanner | class | Plain data holder for one planned meal: a row of meal_plan_recipe joined to its recipe and its plan. |
+| [`PlannedMealController`](api.md#plannedmealcontroller) | api | class | The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal, remove it, and set a recipe's preferred servings. |
+| [`PlannedMealDto`](api.md#plannedmealdto) | api | record | One planned meal. |
 | [`Portions`](shared.md#portions) | shared | class | The single definition of portion scaling: a recipe written for servings people is scaled to people by the factor people / servings. |
+| [`PreferredServingsDto`](api.md#preferredservingsdto) | api | record | A recipe's permanent preferred servings ("this meal is always for X people"); null = no preference. |
 | [`ProductVariant`](stores.md#productvariant) | stores | record | One flavour/size of a store product, e.g. |
 | [`PromotableProduct`](stores.md#promotableproduct) | stores | record | A matched store_product considered for promotion into the verified store_item layer. |
 | [`Purchase`](finance.md#purchase) | finance | class | Plain data holder for one row of the purchase_history table. |

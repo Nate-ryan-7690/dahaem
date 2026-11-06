@@ -4,17 +4,29 @@
 
 Recipes, ingredients, instructions, scaling and meal plans.
 
-18 types in 13 source files (`src/main/java/de/dahaem/mealplanner`). Back to the [class index](README.md).
+24 types in 16 source files (`src/main/java/de/dahaem/mealplanner`). Back to the [class index](README.md).
 
 ## Overview
 
 ```mermaid
 classDiagram
     direction LR
+    class mealplanner_MealChange["MealChange"]
     class mealplanner_MealPlan["MealPlan"]
     class mealplanner_MealPlanRecipe["MealPlanRecipe"]
     class mealplanner_MealPlanRepository["MealPlanRepository"]
     class mealplanner_MealPlanService["MealPlanService"]
+    class mealplanner_MealPlanService_Day["MealPlanService.Day"] {
+        <<record>>
+    }
+    class mealplanner_MealPlanService_Week["MealPlanService.Week"] {
+        <<record>>
+    }
+    class mealplanner_MealServings["MealServings"]
+    class mealplanner_MealServings_Resolved["MealServings.Resolved"] {
+        <<record>>
+    }
+    class mealplanner_PlannedMeal["PlannedMeal"]
     class mealplanner_Recipe["Recipe"]
     class mealplanner_RecipeIngredient["RecipeIngredient"]
     class mealplanner_RecipeInstruction["RecipeInstruction"]
@@ -45,9 +57,18 @@ classDiagram
     }
     mealplanner_MealPlanRepository ..> mealplanner_MealPlan
     mealplanner_MealPlanRepository ..> mealplanner_MealPlanRecipe
+    mealplanner_MealPlanRepository ..> mealplanner_PlannedMeal
+    mealplanner_MealPlanService *-- mealplanner_MealPlanService_Day
+    mealplanner_MealPlanService *-- mealplanner_MealPlanService_Week
     mealplanner_MealPlanService --> mealplanner_MealPlanRepository
     mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_MealPlan
+    mealplanner_MealPlanService ..> mealplanner_PlannedMeal
+    mealplanner_MealPlanService ..> mealplanner_MealChange
+    mealplanner_MealPlanService_Day --> mealplanner_PlannedMeal
+    mealplanner_MealPlanService_Week --> mealplanner_MealPlanService_Day
+    mealplanner_MealServings *-- mealplanner_MealServings_Resolved
+    mealplanner_MealServings ..> mealplanner_PlannedMeal
     mealplanner_RecipeQuery --> mealplanner_RecipeSort
     mealplanner_RecipeRepository ..> mealplanner_Recipe
     mealplanner_RecipeRepository ..> mealplanner_RecipeIngredient
@@ -72,10 +93,16 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
+| [`MealChange`](#mealchange) | class |  | What to change on a planned meal. |
 | [`MealPlan`](#mealplan) | class |  | Plain data holder for one row of the meal_plan table. |
 | [`MealPlanRecipe`](#mealplanrecipe) | class |  | Plain data holder for one row of the meal_plan_recipe table, joined to the recipe's name. |
 | [`MealPlanRepository`](#mealplanrepository) | class |  | All SQL for the meal_plan and meal_plan_recipe tables lives here. |
 | [`MealPlanService`](#mealplanservice) | class |  | Business logic for meal plans. |
+| [`MealPlanService.Day`](#mealplanserviceday) | record |  | One day of a week with its meals in order. |
+| [`MealPlanService.Week`](#mealplanserviceweek) | record |  | One Monday-to-Sunday week. |
+| [`MealServings`](#mealservings) | class |  | The single definition of how many people a planned meal is cooked for. |
+| [`MealServings.Resolved`](#mealservingsresolved) | record |  | The resolved number and where it came from (meal, recipe, household, default). |
+| [`PlannedMeal`](#plannedmeal) | class |  | Plain data holder for one planned meal: a row of meal_plan_recipe joined to its recipe and its plan. |
 | [`Recipe`](#recipe) | class |  | Plain data holder for one row of the Recipe table. |
 | [`RecipeIngredient`](#recipeingredient) | class |  |  |
 | [`RecipeInstruction`](#recipeinstruction) | class |  |  |
@@ -90,6 +117,81 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`StepAmounts.Context`](#stepamountscontext) | record |  |  |
 | [`StepAmounts.Replacement`](#stepamountsreplacement) | record |  | What replaces before[replaceFrom..] + bracket. |
 | [`StepAmounts.Amount`](#stepamountsamount) | record |  | A parsed amount: one value or a range, and its unit (null when none). |
+
+## MealChange
+
+*class*
+
+What to change on a planned meal. A field that was not sent keeps the meal's value. The three that can
+be cleared (servings: back to the default, label, note) carry a flag, because "not sent" and "sent as
+null" mean different things. Build it with the with... methods.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_MealChange["MealChange"] {
+        -Integer recipeId
+        -LocalDate date
+        -Integer position
+        -boolean setServings
+        -Integer servings
+        -boolean setLabel
+        -String label
+        -boolean setNote
+        -String note
+        +withRecipeId(int recipeId) MealChange
+        +withDate(LocalDate date) MealChange
+        +withPosition(int position) MealChange
+        +withServings(Integer servings) MealChange
+        +withLabel(String label) MealChange
+        +withNote(String note) MealChange
+        +recipeId() Integer
+        +date() LocalDate
+        +position() Integer
+        +setServings() boolean
+        +servings() Integer
+        +setLabel() boolean
+        +label() String
+        +setNote() boolean
+        +note() String
+        +isEmpty() boolean
+    }
+    class mealplanner_MealPlanService["MealPlanService"]
+    mealplanner_MealPlanService ..> mealplanner_MealChange
+```
+
+| Field | Type |
+|---|---|
+| `recipeId` | `Integer` |
+| `date` | `LocalDate` |
+| `position` | `Integer` |
+| `setServings` | `boolean` |
+| `servings` | `Integer` |
+| `setLabel` | `boolean` |
+| `label` | `String` |
+| `setNote` | `boolean` |
+| `note` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `MealChange withRecipeId(int recipeId)` | public |  |
+| `MealChange withDate(LocalDate date)` | public |  |
+| `MealChange withPosition(int position)` | public |  |
+| `MealChange withServings(Integer servings)` | public | null clears the meal's own number, so it follows the default again. |
+| `MealChange withLabel(String label)` | public |  |
+| `MealChange withNote(String note)` | public |  |
+| `Integer recipeId()` | public |  |
+| `LocalDate date()` | public |  |
+| `Integer position()` | public |  |
+| `boolean setServings()` | public |  |
+| `Integer servings()` | public |  |
+| `boolean setLabel()` | public |  |
+| `String label()` | public |  |
+| `boolean setNote()` | public |  |
+| `String note()` | public |  |
+| `boolean isEmpty()` | public |  |
+
+**Referenced by:** `MealPlanService`
 
 ## MealPlan
 
@@ -203,20 +305,34 @@ classDiagram
         +removeRecipe(int planId, int recipeId) boolean
         +findAll() List~MealPlan~
         +findRecipesForPlan(int planId) List~MealPlanRecipe~
+        -String MEAL_SELECT$
+        +findPlanByWeekStart(LocalDate weekStart) Optional~MealPlan~
+        +findMeals(int planId) List~PlannedMeal~
+        +findMeal(int entryId) Optional~PlannedMeal~
+        +nextPosition(int planId, LocalDate date) int
+        +insertMeal(int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) int
+        +updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) boolean
+        +deleteMeal(int entryId) boolean
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class shopping_ShoppingListService["ShoppingListService"]
     class mealplanner_MealPlan["MealPlan"]
     class mealplanner_MealPlanRecipe["MealPlanRecipe"]
+    class mealplanner_PlannedMeal["PlannedMeal"]
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
     mealplanner_MealPlanRepository ..> mealplanner_MealPlan
     mealplanner_MealPlanRepository ..> mealplanner_MealPlanRecipe
+    mealplanner_MealPlanRepository ..> mealplanner_PlannedMeal
     api_ServiceConfig ..> mealplanner_MealPlanRepository
     mealplanner_MealPlanService --> mealplanner_MealPlanRepository
     shopping_ShoppingListService --> mealplanner_MealPlanRepository
 ```
+
+| Field | Type |
+|---|---|
+| `MEAL_SELECT` | `String` |
 
 | Member | Visibility | What it does |
 |---|---|---|
@@ -225,6 +341,13 @@ classDiagram
 | `boolean removeRecipe(int planId, int recipeId)` | public | Removes a recipe from a plan. |
 | `List<MealPlan> findAll()` | public |  |
 | `List<MealPlanRecipe> findRecipesForPlan(int planId)` | public |  |
+| `Optional<MealPlan> findPlanByWeekStart(LocalDate weekStart)` | public | The plan of the week that starts on this Monday, if there is one. |
+| `List<PlannedMeal> findMeals(int planId)` | public | Every meal of a plan, ordered by day, then position, then entry id. |
+| `Optional<PlannedMeal> findMeal(int entryId)` | public |  |
+| `int nextPosition(int planId, LocalDate date)` | public | The next free position on a day of a plan (0 for an empty day). |
+| `int insertMeal(int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Adds one planned meal and returns its entry id. |
+| `boolean updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Writes every editable column of one meal. |
+| `boolean deleteMeal(int entryId)` | public | Removes one planned meal by its own id. |
 
 **Referenced by:** `MealPlanService`, `ServiceConfig`, `ShoppingListService`
 
@@ -247,20 +370,46 @@ classDiagram
         +removeRecipe(int planId, int recipeId) boolean
         +recipesForPlan(int planId) List~MealPlanRecipe~
         +allPlans() List~MealPlan~
+        +mondayOf(LocalDate day) LocalDate$
+        +week(LocalDate anyDay) Week
+        +addMeal(int recipeId, LocalDate date, String label, Integer servings, String note, Integer position) PlannedMeal
+        +updateMeal(int entryId, MealChange change) Optional~PlannedMeal~
+        +removeMeal(int entryId) boolean
+        +findMeal(int entryId) Optional~PlannedMeal~
+    }
+    class mealplanner_MealPlanService_Day["MealPlanService.Day"] {
+        <<record>>
+    }
+    class mealplanner_MealPlanService_Week["MealPlanService.Week"] {
+        <<record>>
     }
     class mealplanner_MealPlanRepository["MealPlanRepository"]
     class api_MealPlanController["MealPlanController"] {
         <<controller>>
     }
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
     class mealplanner_MealPlanRecipe["MealPlanRecipe"]
     class mealplanner_MealPlan["MealPlan"]
+    class mealplanner_PlannedMeal["PlannedMeal"]
+    class mealplanner_MealChange["MealChange"]
+    class api_MealPlanWeekDto["MealPlanWeekDto"] {
+        <<record>>
+    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
+    mealplanner_MealPlanService *-- mealplanner_MealPlanService_Day
+    mealplanner_MealPlanService *-- mealplanner_MealPlanService_Week
     mealplanner_MealPlanService --> mealplanner_MealPlanRepository
     mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_MealPlan
+    mealplanner_MealPlanService ..> mealplanner_PlannedMeal
+    mealplanner_MealPlanService ..> mealplanner_MealChange
     api_MealPlanController --> mealplanner_MealPlanService
+    api_MealPlanWeekDto ..> mealplanner_MealPlanService
+    api_PlannedMealController --> mealplanner_MealPlanService
     api_ServiceConfig ..> mealplanner_MealPlanService
 ```
 
@@ -276,8 +425,230 @@ classDiagram
 | `boolean removeRecipe(int planId, int recipeId)` | public | Removes a recipe from a plan. |
 | `List<MealPlanRecipe> recipesForPlan(int planId)` | public |  |
 | `List<MealPlan> allPlans()` | public |  |
+| `LocalDate mondayOf(LocalDate day)` | public static | The Monday of the week a day belongs to. |
+| `Week week(LocalDate anyDay)` | public | The week that contains anyDay: seven days, each with its meals, whether or not a plan exists yet (a week with no plan is seven empty days; the first meal added creates the plan). |
+| `PlannedMeal addMeal(int recipeId, LocalDate date, String label, Integer servings, String note, Integer position)` | public | Plans a recipe on a day. |
+| `Optional<PlannedMeal> updateMeal(int entryId, MealChange change)` | public | Edits or moves one planned meal. |
+| `boolean removeMeal(int entryId)` | public | Removes one planned meal by its own id. |
+| `Optional<PlannedMeal> findMeal(int entryId)` | public |  |
 
-**Referenced by:** `MealPlanController`, `ServiceConfig`
+**Referenced by:** `MealPlanController`, `MealPlanWeekDto`, `PlannedMealController`, `ServiceConfig`
+
+## MealPlanService.Day
+
+*record*
+
+One day of a week with its meals in order.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_MealPlanService_Day["MealPlanService.Day"] {
+        <<record>>
+        +LocalDate date
+        +List~PlannedMeal~ meals
+    }
+    class mealplanner_MealPlanService["MealPlanService"]
+    class mealplanner_PlannedMeal["PlannedMeal"]
+    class mealplanner_MealPlanService_Week["MealPlanService.Week"] {
+        <<record>>
+    }
+    mealplanner_MealPlanService_Day --> mealplanner_PlannedMeal
+    mealplanner_MealPlanService *-- mealplanner_MealPlanService_Day
+    mealplanner_MealPlanService_Week --> mealplanner_MealPlanService_Day
+```
+
+| Component | Type |
+|---|---|
+| `date` | `LocalDate` |
+| `meals` | `List<PlannedMeal>` |
+
+**Referenced by:** `MealPlanService`
+
+## MealPlanService.Week
+
+*record*
+
+One Monday-to-Sunday week. planId is null while nothing has been planned for it yet.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_MealPlanService_Week["MealPlanService.Week"] {
+        <<record>>
+        +LocalDate weekStart
+        +Integer planId
+        +List~Day~ days
+    }
+    class mealplanner_MealPlanService["MealPlanService"]
+    class mealplanner_MealPlanService_Day["MealPlanService.Day"] {
+        <<record>>
+    }
+    mealplanner_MealPlanService_Week --> mealplanner_MealPlanService_Day
+    mealplanner_MealPlanService *-- mealplanner_MealPlanService_Week
+```
+
+| Component | Type |
+|---|---|
+| `weekStart` | `LocalDate` |
+| `planId` | `Integer` |
+| `days` | `List<Day>` |
+
+**Referenced by:** `MealPlanService`
+
+## MealServings
+
+*class*
+
+The single definition of how many people a planned meal is cooked for. Most specific first:
+the number set on the meal itself, then the recipe's permanent preference
+(recipe_preferred_servings: "this meal is always for X"), then the household's head count,
+then #DEFAULT_SERVINGS. No SQL here.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_MealServings["MealServings"] {
+        +int DEFAULT_SERVINGS$
+        +String SOURCE_MEAL$
+        +String SOURCE_RECIPE$
+        +String SOURCE_HOUSEHOLD$
+        +String SOURCE_DEFAULT$
+        +resolve(Integer own, Integer recipePreferred, Integer householdPeople) Resolved$
+        +resolve(PlannedMeal meal, Integer householdPeople) Resolved$
+    }
+    class mealplanner_MealServings_Resolved["MealServings.Resolved"] {
+        <<record>>
+    }
+    class mealplanner_PlannedMeal["PlannedMeal"]
+    mealplanner_MealServings *-- mealplanner_MealServings_Resolved
+    mealplanner_MealServings ..> mealplanner_PlannedMeal
+```
+
+| Field | Type |
+|---|---|
+| `DEFAULT_SERVINGS` | `int` |
+| `SOURCE_MEAL` | `String` |
+| `SOURCE_RECIPE` | `String` |
+| `SOURCE_HOUSEHOLD` | `String` |
+| `SOURCE_DEFAULT` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `Resolved resolve(Integer own, Integer recipePreferred, Integer householdPeople)` | public static | Each argument may be null (not set); a value below 1 counts as not set, as the database refuses it anyway. |
+| `Resolved resolve(PlannedMeal meal, Integer householdPeople)` | public static |  |
+
+## MealServings.Resolved
+
+*record*
+
+The resolved number and where it came from (meal, recipe, household, default).
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_MealServings_Resolved["MealServings.Resolved"] {
+        <<record>>
+        +int servings
+        +String source
+    }
+    class mealplanner_MealServings["MealServings"]
+    mealplanner_MealServings *-- mealplanner_MealServings_Resolved
+```
+
+| Component | Type |
+|---|---|
+| `servings` | `int` |
+| `source` | `String` |
+
+**Referenced by:** `MealServings`
+
+## PlannedMeal
+
+*class*
+
+Plain data holder for one planned meal: a row of meal_plan_recipe joined to its recipe and its plan.
+date is never null: a row made by the old endpoint (no date stored) lands on the Monday of
+its week. ownServings is what was set on the meal itself (null = follow the default);
+recipePreferredServings is the recipe's permanent preference (null = none). The number the
+meal is actually cooked for is worked out by MealServings.
+
+```mermaid
+classDiagram
+    direction LR
+    class mealplanner_PlannedMeal["PlannedMeal"] {
+        -int entryId
+        -int planId
+        -int recipeId
+        -String recipeName
+        -String recipeThumbnailUrl
+        -LocalDate date
+        -String label
+        -Integer ownServings
+        -Integer recipePreferredServings
+        -int position
+        -String note
+        +PlannedMeal(int entryId, int planId, int recipeId, String recipeName, String recipeThumbnailUrl, LocalDate date, String label, Integer ownServings, Integer recipePreferredServings, int position, String note)
+        +getEntryId() int
+        +getPlanId() int
+        +getRecipeId() int
+        +getRecipeName() String
+        +getRecipeThumbnailUrl() String
+        +getDate() LocalDate
+        +getLabel() String
+        +getOwnServings() Integer
+        +getRecipePreferredServings() Integer
+        +getPosition() int
+        +getNote() String
+        +toString() String
+    }
+    class mealplanner_MealPlanService_Day["MealPlanService.Day"] {
+        <<record>>
+    }
+    class api_PlannedMealDto["PlannedMealDto"] {
+        <<record>>
+    }
+    class mealplanner_MealPlanRepository["MealPlanRepository"]
+    class mealplanner_MealPlanService["MealPlanService"]
+    class mealplanner_MealServings["MealServings"]
+    api_PlannedMealDto ..> mealplanner_PlannedMeal
+    mealplanner_MealPlanRepository ..> mealplanner_PlannedMeal
+    mealplanner_MealPlanService ..> mealplanner_PlannedMeal
+    mealplanner_MealPlanService_Day --> mealplanner_PlannedMeal
+    mealplanner_MealServings ..> mealplanner_PlannedMeal
+```
+
+| Field | Type |
+|---|---|
+| `entryId` | `int` |
+| `planId` | `int` |
+| `recipeId` | `int` |
+| `recipeName` | `String` |
+| `recipeThumbnailUrl` | `String` |
+| `date` | `LocalDate` |
+| `label` | `String` |
+| `ownServings` | `Integer` |
+| `recipePreferredServings` | `Integer` |
+| `position` | `int` |
+| `note` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PlannedMeal(int entryId, int planId, int recipeId, String recipeName, String recipeThumbnailUrl, LocalDate date, String label, Integer ownServings, Integer recipePreferredServings, int position, String note)` | public |  |
+| `int getEntryId()` | public |  |
+| `int getPlanId()` | public |  |
+| `int getRecipeId()` | public |  |
+| `String getRecipeName()` | public |  |
+| `String getRecipeThumbnailUrl()` | public |  |
+| `LocalDate getDate()` | public |  |
+| `String getLabel()` | public |  |
+| `Integer getOwnServings()` | public |  |
+| `Integer getRecipePreferredServings()` | public |  |
+| `int getPosition()` | public |  |
+| `String getNote()` | public |  |
+| `String toString()` | public |  |
+
+**Referenced by:** `MealPlanRepository`, `MealPlanService`, `MealServings`, `PlannedMealDto`
 
 ## Recipe
 
@@ -622,6 +993,7 @@ classDiagram
         +findMatchingIds(RecipeQuery q) List~Integer~
         +findByIds(List~Integer~ ids) List~Recipe~
         +findById(int id) Optional~Recipe~
+        +setPreferredServings(int recipeId, Integer servings) boolean
     }
     class mealplanner_RecipeSearchService["RecipeSearchService"]
     class mealplanner_RecipeService["RecipeService"]
@@ -659,6 +1031,7 @@ classDiagram
 | `List<Integer> findMatchingIds(RecipeQuery q)` | public | The ids of every recipe matching the query, in the query's sort order (for paging after the diet filter). |
 | `List<Recipe> findByIds(List<Integer> ids)` | public | The recipes with these ids, in the order of ids; an id without a recipe is skipped. |
 | `Optional<Recipe> findById(int id)` | public |  |
+| `boolean setPreferredServings(int recipeId, Integer servings)` | public | Sets the recipe's permanent preferred servings ("this meal is always for X people"); null clears it. |
 
 **Referenced by:** `RecipeSearchService`, `RecipeService`, `ServiceConfig`
 
@@ -840,9 +1213,13 @@ classDiagram
         +findById(int id) java.util.Optional~Recipe~
         +findAllIngredients(int recipeId) List~RecipeIngredient~
         +findAllInstructions(int recipeId) List~RecipeInstruction~
+        +setPreferredServings(int recipeId, Integer servings) boolean
     }
     class mealplanner_RecipeRepository["RecipeRepository"]
     class api_MealPlanController["MealPlanController"] {
+        <<controller>>
+    }
+    class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
     class api_RecipeController["RecipeController"] {
@@ -862,6 +1239,7 @@ classDiagram
     mealplanner_RecipeService ..> mealplanner_RecipeIngredient
     mealplanner_RecipeService ..> mealplanner_RecipeInstruction
     api_MealPlanController --> mealplanner_RecipeService
+    api_PlannedMealController --> mealplanner_RecipeService
     api_RecipeController --> mealplanner_RecipeService
     api_ServiceConfig ..> mealplanner_RecipeService
     api_ShoppingListController --> mealplanner_RecipeService
@@ -879,8 +1257,9 @@ classDiagram
 | `java.util.Optional<Recipe> findById(int id)` | public | One recipe by id, or empty when there is none (a single-row query, not the whole table). |
 | `List<RecipeIngredient> findAllIngredients(int recipeId)` | public |  |
 | `List<RecipeInstruction> findAllInstructions(int recipeId)` | public |  |
+| `boolean setPreferredServings(int recipeId, Integer servings)` | public | Sets the recipe's permanent preferred servings; null clears it. |
 
-**Referenced by:** `MealPlanController`, `RecipeController`, `ServiceConfig`, `ShoppingListController`
+**Referenced by:** `MealPlanController`, `PlannedMealController`, `RecipeController`, `ServiceConfig`, `ShoppingListController`
 
 ## RecipeSort
 

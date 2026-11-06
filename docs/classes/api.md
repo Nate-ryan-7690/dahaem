@@ -4,13 +4,16 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-55 types in 42 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+61 types in 47 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
 ```mermaid
 classDiagram
     direction LR
+    class api_AddMealRequest["AddMealRequest"] {
+        <<record>>
+    }
     class api_AddPlannedRecipeRequest["AddPlannedRecipeRequest"] {
         <<record>>
     }
@@ -83,11 +86,26 @@ classDiagram
     class api_MealPlanDto_PlannedRecipe["MealPlanDto.PlannedRecipe"] {
         <<record>>
     }
+    class api_MealPlanWeekDto["MealPlanWeekDto"] {
+        <<record>>
+    }
+    class api_MealPlanWeekDto_DayDto["MealPlanWeekDto.DayDto"] {
+        <<record>>
+    }
     class api_NotFoundException["NotFoundException"]
     class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
         <<record>>
     }
     class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
+        <<record>>
+    }
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
+    class api_PlannedMealDto["PlannedMealDto"] {
+        <<record>>
+    }
+    class api_PreferredServingsDto["PreferredServingsDto"] {
         <<record>>
     }
     class api_PurchaseController["PurchaseController"] {
@@ -186,8 +204,14 @@ classDiagram
     api_MealPlanController ..> api_AddPlannedRecipeRequest
     api_MealPlanController ..> api_GeneratedShoppingListDto
     api_MealPlanDto *-- api_MealPlanDto_PlannedRecipe
+    api_MealPlanWeekDto *-- api_MealPlanWeekDto_DayDto
+    api_MealPlanWeekDto_DayDto --> api_PlannedMealDto
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
     api_PersistedShoppingListDto_Line --> api_ShoppingListDto
+    api_PlannedMealController ..> api_MealPlanWeekDto
+    api_PlannedMealController ..> api_AddMealRequest
+    api_PlannedMealController ..> api_PlannedMealDto
+    api_PlannedMealController ..> api_PreferredServingsDto
     api_PurchaseController ..> api_PurchaseDto
     api_PurchaseController ..> api_CreatePurchaseRequest
     api_PurchaseController ..> api_SpendingDto
@@ -219,6 +243,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
+| [`AddMealRequest`](#addmealrequest) | record |  | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](#addplannedreciperequest) | record |  | Body of POST /api/meal-plans/{id}/recipes, e.g. |
 | [`AddTagRequest`](#addtagrequest) | record |  | Body of POST /api/recipes/{id}/tags. |
 | [`ApiExceptionHandler`](#apiexceptionhandler) | class | error handler | Turns exceptions into JSON error responses with sensible status codes. |
@@ -245,9 +270,14 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`MealPlanController`](#mealplancontroller) | class | REST controller |  |
 | [`MealPlanDto`](#mealplandto) | record |  | One weekly meal plan with the recipes slotted into it. |
 | [`MealPlanDto.PlannedRecipe`](#mealplandtoplannedrecipe) | record |  |  |
+| [`MealPlanWeekDto`](#mealplanweekdto) | record |  | One Monday-to-Sunday week: always seven days, each with its meals in order. |
+| [`MealPlanWeekDto.DayDto`](#mealplanweekdtodaydto) | record |  |  |
 | [`NotFoundException`](#notfoundexception) | class |  | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`PersistedShoppingListDto`](#persistedshoppinglistdto) | record |  | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
 | [`PersistedShoppingListDto.Line`](#persistedshoppinglistdtoline) | record |  |  |
+| [`PlannedMealController`](#plannedmealcontroller) | class | REST controller | The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal, remove it, and set a recipe's preferred servings. |
+| [`PlannedMealDto`](#plannedmealdto) | record |  | One planned meal. |
+| [`PreferredServingsDto`](#preferredservingsdto) | record |  | A recipe's permanent preferred servings ("this meal is always for X people"); null = no preference. |
 | [`PurchaseController`](#purchasecontroller) | class | REST controller |  |
 | [`PurchaseDto`](#purchasedto) | record |  |  |
 | [`RecipeCardDto`](#recipecarddto) | record |  | A recipe as a card in the list: what a card shows, nothing more (GET /api/recipes/{id} has the rest: description, nutrition, image source, publish date, ingredients, instructions). |
@@ -274,6 +304,43 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`SuggestionController`](#suggestioncontroller) | class | REST controller | Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf, it only ranks and presents (see SuggestionService). |
 | [`TagDto`](#tagdto) | record |  |  |
 | [`UnauthorizedException`](#unauthorizedexception) | class |  | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
+
+## AddMealRequest
+
+*record*
+
+Body of POST /api/meal-plans/meals, e.g.
+{"recipeId": 3, "date": "2026-11-09", "label": "Abendessen", "servings": 4, "note": "Reste", "position": 0}.
+Only recipeId and date are required. servings null = follow the default; position null = last on its day.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_AddMealRequest["AddMealRequest"] {
+        <<record>>
+        +Integer recipeId
+        +LocalDate date
+        +String label
+        +Integer servings
+        +String note
+        +Integer position
+    }
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
+    api_PlannedMealController ..> api_AddMealRequest
+```
+
+| Component | Type |
+|---|---|
+| `recipeId` | `Integer` |
+| `date` | `LocalDate` |
+| `label` | `String` |
+| `servings` | `Integer` |
+| `note` | `String` |
+| `position` | `Integer` |
+
+**Referenced by:** `PlannedMealController`
 
 ## AddPlannedRecipeRequest
 
@@ -1219,6 +1286,79 @@ classDiagram
 
 **Referenced by:** `MealPlanDto`
 
+## MealPlanWeekDto
+
+*record*
+
+One Monday-to-Sunday week: always seven days, each with its meals in order. planId is null while
+nothing has been planned for the week (the first meal added creates the plan). householdPeople is the
+household head count that was used to resolve the servings (null when no household was named or none is set).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_MealPlanWeekDto["MealPlanWeekDto"] {
+        <<record>>
+        +LocalDate weekStart
+        +Integer planId
+        +Integer householdPeople
+        +List~DayDto~ days
+        ~from(MealPlanService.Week week, Integer householdPeople) MealPlanWeekDto$
+    }
+    class api_MealPlanWeekDto_DayDto["MealPlanWeekDto.DayDto"] {
+        <<record>>
+    }
+    class mealplanner_MealPlanService["MealPlanService"]
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
+    api_MealPlanWeekDto *-- api_MealPlanWeekDto_DayDto
+    api_MealPlanWeekDto ..> mealplanner_MealPlanService
+    api_PlannedMealController ..> api_MealPlanWeekDto
+```
+
+| Component | Type |
+|---|---|
+| `weekStart` | `LocalDate` |
+| `planId` | `Integer` |
+| `householdPeople` | `Integer` |
+| `days` | `List<DayDto>` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `MealPlanWeekDto from(MealPlanService.Week week, Integer householdPeople)` | package static |  |
+
+**Referenced by:** `PlannedMealController`
+
+## MealPlanWeekDto.DayDto
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class api_MealPlanWeekDto_DayDto["MealPlanWeekDto.DayDto"] {
+        <<record>>
+        +LocalDate date
+        +List~PlannedMealDto~ meals
+    }
+    class api_MealPlanWeekDto["MealPlanWeekDto"] {
+        <<record>>
+    }
+    class api_PlannedMealDto["PlannedMealDto"] {
+        <<record>>
+    }
+    api_MealPlanWeekDto_DayDto --> api_PlannedMealDto
+    api_MealPlanWeekDto *-- api_MealPlanWeekDto_DayDto
+```
+
+| Component | Type |
+|---|---|
+| `date` | `LocalDate` |
+| `meals` | `List<PlannedMealDto>` |
+
+**Referenced by:** `MealPlanWeekDto`
+
 ## NotFoundException
 
 *class · extends RuntimeException*
@@ -1339,6 +1479,163 @@ classDiagram
 | `Line from(PersistedShoppingListItem item)` | package static |  |
 
 **Referenced by:** `PersistedShoppingListDto`
+
+## PlannedMealController
+
+*class · REST controller*
+
+The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal,
+remove it, and set a recipe's preferred servings. Every meal is addressed by its own entryId. A plan is
+one Monday-to-Sunday week; the first meal added to a week creates its plan, so a page never has to create one.
+
+The household is named with an optional householdId so the servings can follow its head count; the
+PHP decides which household an account may use (see the backlog item "Auth and session review"). Without it,
+a meal that has no number of its own and no recipe preference is cooked for 2.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+        -MealPlanService mealPlanService
+        -RecipeService recipeService
+        -AccountService accountService
+        +PlannedMealController(MealPlanService mealPlanService, RecipeService recipeService, AccountService accountService)
+        +week(LocalDate date, Integer householdId) MealPlanWeekDto
+        +addMeal(AddMealRequest request, Integer householdId) PlannedMealDto
+        +editMeal(int entryId, JsonNode body, Integer householdId) PlannedMealDto
+        +removeMeal(int entryId) void
+        +setPreferredServings(int id, JsonNode body) PreferredServingsDto
+    }
+    class mealplanner_MealPlanService["MealPlanService"]
+    class mealplanner_RecipeService["RecipeService"]
+    class auth_AccountService["AccountService"]
+    class api_MealPlanWeekDto["MealPlanWeekDto"] {
+        <<record>>
+    }
+    class api_AddMealRequest["AddMealRequest"] {
+        <<record>>
+    }
+    class api_PlannedMealDto["PlannedMealDto"] {
+        <<record>>
+    }
+    class api_PreferredServingsDto["PreferredServingsDto"] {
+        <<record>>
+    }
+    api_PlannedMealController --> mealplanner_MealPlanService
+    api_PlannedMealController --> mealplanner_RecipeService
+    api_PlannedMealController --> auth_AccountService
+    api_PlannedMealController ..> api_MealPlanWeekDto
+    api_PlannedMealController ..> api_AddMealRequest
+    api_PlannedMealController ..> api_PlannedMealDto
+    api_PlannedMealController ..> api_PreferredServingsDto
+```
+
+| Field | Type |
+|---|---|
+| `mealPlanService` | `MealPlanService` |
+| `recipeService` | `RecipeService` |
+| `accountService` | `AccountService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PlannedMealController(MealPlanService mealPlanService, RecipeService recipeService, AccountService accountService)` | public |  |
+| `MealPlanWeekDto week(LocalDate date, Integer householdId)` | public | The week that contains date (today when omitted): seven days with their meals. |
+| `PlannedMealDto addMeal(AddMealRequest request, Integer householdId)` | public | Plans a recipe on a day and returns the meal. |
+| `PlannedMealDto editMeal(int entryId, JsonNode body, Integer householdId)` | public | Edits or moves a meal. |
+| `void removeMeal(int entryId)` | public | Removes one planned meal by its own id. |
+| `PreferredServingsDto setPreferredServings(int id, JsonNode body)` | public | Sets how many people this recipe is always cooked for, e.g. |
+
+## PlannedMealDto
+
+*record*
+
+One planned meal. servings is the number the meal is cooked for (resolved, always at least 1) and
+servingsSource says where it came from: meal (set on the meal itself), recipe (the
+recipe's preferred servings), household (the household's head count) or default (2).
+ownServings is only what was set on the meal (null = follows the default), so a page can tell a
+hand-set number from a followed one. recipePreferredServings is the recipe's permanent preference.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PlannedMealDto["PlannedMealDto"] {
+        <<record>>
+        +int entryId
+        +int planId
+        +int recipeId
+        +String recipeName
+        +String recipeThumbnailUrl
+        +LocalDate date
+        +String label
+        +int position
+        +String note
+        +int servings
+        +String servingsSource
+        +Integer ownServings
+        +Integer recipePreferredServings
+        ~from(PlannedMeal meal, Integer householdPeople) PlannedMealDto$
+    }
+    class api_MealPlanWeekDto_DayDto["MealPlanWeekDto.DayDto"] {
+        <<record>>
+    }
+    class mealplanner_PlannedMeal["PlannedMeal"]
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
+    api_PlannedMealDto ..> mealplanner_PlannedMeal
+    api_MealPlanWeekDto_DayDto --> api_PlannedMealDto
+    api_PlannedMealController ..> api_PlannedMealDto
+```
+
+| Component | Type |
+|---|---|
+| `entryId` | `int` |
+| `planId` | `int` |
+| `recipeId` | `int` |
+| `recipeName` | `String` |
+| `recipeThumbnailUrl` | `String` |
+| `date` | `LocalDate` |
+| `label` | `String` |
+| `position` | `int` |
+| `note` | `String` |
+| `servings` | `int` |
+| `servingsSource` | `String` |
+| `ownServings` | `Integer` |
+| `recipePreferredServings` | `Integer` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PlannedMealDto from(PlannedMeal meal, Integer householdPeople)` | package static |  |
+
+**Referenced by:** `PlannedMealController`
+
+## PreferredServingsDto
+
+*record*
+
+A recipe's permanent preferred servings ("this meal is always for X people"); null = no preference.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PreferredServingsDto["PreferredServingsDto"] {
+        <<record>>
+        +int recipeId
+        +Integer preferredServings
+    }
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
+    api_PlannedMealController ..> api_PreferredServingsDto
+```
+
+| Component | Type |
+|---|---|
+| `recipeId` | `int` |
+| `preferredServings` | `Integer` |
+
+**Referenced by:** `PlannedMealController`
 
 ## PurchaseController
 

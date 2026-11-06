@@ -324,13 +324,41 @@ The API binds to `127.0.0.1` by default. To use it from phones on the network, p
 | GET | `/api/recipes/search[?q=…][&ingredient=…][&tags=…][&minTime=…][&maxTime=…][&servings=…][&sort=…][&page=…][&pageSize=…][&diet=…][&excludeTags=…][&excludeItems=…][&avoidTags=…][&avoidItems=…][&includeUnclear=true]` | **paged** recipe search (the PHP moves its list and the planner picker here): answers `{items, total, page, pageSize, totalPages}` (24 per page without paging parameters, max 100); each item is a small card (`id`, `name`, `imageUrl`, `thumbnailUrl`, `prepTime`, `cookTime`, `totalTime`, `servings`, `servingsMax`, `cuisine`, `ratingAvg`, `tags`, and `diet` when diet rules were passed); the rest (description, nutrition, image source, publish date) is in `GET /api/recipes/{id}`. Contract, defaults and an example: see "Recipe search and paging"; diet rules: see "Diet filter". || GET | `/api/recipes/{id}[?people=N][&basis=servings\|max][&diet=…]` | recipe with nutrition (per serving), ingredients, instructions, `servings` and `servingsMax`, and the same page data as the list (`description`, `imageUrl`, `thumbnailUrl`, `imageSource`, `cuisine`, `ratingAvg`, `ratingCount`, `publishedDate`; null when missing). Each ingredient has a decimal `quantity` (0.5 Stück, 2 EL) and `toTaste`; a to-taste ingredient ("Salz nach Geschmack") has `quantity` and `scaledQuantity` null and an empty unit. With `people` (>= 1, else 400) `scaledQuantity` = quantity × people / servings (2 decimals). `basis=max` scales a range recipe from `servingsMax` instead (people / servingsMax) and is ignored when `servingsMax` is null; `basis` in the response says which one was used (`"servings"` or `"max"`); any other `basis` is 400. `scalable` is false when the servings count used is 0. Each instruction keeps the stored `instruction` and has `scaledInstruction`: the step with its amounts for `people` (and `basis`) — a bracket always means 2 / 3 / 4 people in every recipe (`1 EL [1,5 EL \| 2 EL] Butter*` → `1½ EL Butter*` at 3, `2 EL` at 4; a single value is the 4-person one), any other head count scales the front (2-person) value;  plain number + measuring unit amounts (g, kg, ml, l, EL, TL, Prise, Msp.) scale too, °C / times / Stufe / cm / counts never; without `people` each bracket is resolved for the recipe's own head count (`servings`, or `servingsMax` with `basis=max`), so the steps match the ingredient list — a 2-serving recipe shows the front value as before; ⅛ is shown for spoons, pinches and counts; unreadable text stays as written (`StepAmounts`); 404 if unknown `tags` lists the recipe's tags as `{name, category, source}` (`source` is `"manual"` or `"derived"`). With the diet parameters of the list it also has `diet`: `status`, `hints` and `unmatchedIngredients` (`lineNo`, `rawText`, `reason`). |
 | GET / POST | `/api/recipes/{id}/tags` | list tags / add `{"name", "category"}` (a hand-added tag is `manual`; adding one the tagger derived makes it `manual`) |
 | GET / POST | `/api/meal-plans` | list plans with their recipes / create `{"weekStartDate"}` |
-| POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` |
+| POST | `/api/meal-plans/{id}/recipes` | add `{"recipeId", "mealTime"}` (the old way: no date, shown on the week's Monday with `mealTime` as its label; the same recipe twice adds a second meal) |
+| GET | `/api/meal-plans/week[?date=YYYY-MM-DD][&householdId=N]` | **one week by date** (any day of the week; today when omitted; the answer starts on its Monday): `{weekStart, planId, householdPeople, days: [{date, meals: [...]}]}`, always seven days. A week with no plan is seven empty days and `planId: null`; reading never creates a plan. See "Meal planner by date". |
+| POST | `/api/meal-plans/meals[?householdId=N]` | plan a recipe on a day: `{"recipeId", "date", "label"?, "servings"?, "note"?, "position"?}` → 201 with the meal. The plan of that day's week is created if needed; the same recipe may be planned many times; without `position` the meal goes last on its day. |
+| PATCH | `/api/meal-plans/meals/{entryId}[?householdId=N]` | edit or move one meal by its own id; send only what changes: `date` (also into another week), `position`, `label`, `note`, `servings`, `recipeId`. `servings: null` (or `label` / `note` null) clears it, so the meal follows the default again. 404 for an unknown id, 400 for an empty or invalid body. |
+| DELETE | `/api/meal-plans/meals/{entryId}` | remove one planned meal by its own id → 204; 404 for an unknown id |
+| PUT | `/api/recipes/{id}/preferred-servings` | `{"servings": 4}` = "this recipe is always cooked for 4"; `{"servings": null}` clears it. Never changes `recipe_servings`, the number the stored amounts are written for. Answers `{recipeId, preferredServings}`. |
 | GET | `/api/shopping-list?recipeIds=1,2[&people=N]` | build (not save) a shopping list; each line carries every current store option (cheapest till price first), never a pre-picked one; to-taste ingredients are left out; `people` scales each recipe from its `servings` (a range's lower bound) |
 | PUT | `/api/shopping-lists/{listId}/items/{itemId}/store-item` | set the store product the user picked for a persisted line, `{"storeItemId": 5}`; `null` clears it |
 | GET / POST | `/api/purchases` | list / record `{"storeItemId", "quantityPurchased", "pricePaid", "expirationDate", ...}` |
 | GET | `/api/analytics/spending[?from=&to=]` | total spent, optionally in a date range |
 
-Errors come back as `{"status", "error", "message"}`: 401 when not logged in, 403 for a missing CSRF token, 400 for invalid input, 404 for an unknown id, 409 when a write violates a database constraint (duplicate week, recipe already on the plan, unknown store item).
+Errors come back as `{"status", "error", "message"}`: 401 when not logged in, 403 for a missing CSRF token, 400 for invalid input, 404 for an unknown id, 409 when a write violates a database constraint (duplicate week, unknown store item).
+
+#### Meal planner by date
+
+A planned meal looks like this (`PlannedMealDto`):
+
+```json
+{"entryId": 12, "planId": 3, "recipeId": 4711, "recipeName": "Kürbissuppe", "recipeThumbnailUrl": "https://…",
+ "date": "2026-11-04", "label": "Abendessen", "position": 0, "note": null,
+ "servings": 3, "servingsSource": "household", "ownServings": null, "recipePreferredServings": null}
+```
+
+- `servings` is the number the meal is cooked for (always at least 1). Most specific first: the meal's own number
+  (`servingsSource: "meal"`), then the recipe's preferred servings (`"recipe"`), then the household head count
+  (`"household"`, needs `?householdId=`), then 2 (`"default"`). `ownServings` is only what was set on the meal, so a
+  page can tell a hand-set number from a followed one and offer "back to the default" (`PATCH {"servings": null}`).
+- `householdId` is optional on the week read and on the meal writes. The PHP decides which household an account may
+  use; without it a meal with no number of its own and no recipe preference is cooked for 2.
+- A plan is one Monday-to-Sunday week. `GET /api/meal-plans/week` normalises any date to its Monday. Meals made by
+  the old endpoint (no date) appear on the Monday of their week with their `mealTime` as the label.
+- Within a day, meals are ordered by `position`, then by `entryId`. Moving a meal to another day without a
+  `position` puts it last on the new day.
+- Not built yet (backlog): the shopping list still takes one `people` for the whole plan; yesterday's servings are not
+  frozen yet and a past day can still be edited.
 
 The database lives in MariaDB and is not part of the repo. Copy `config/stores.properties.example` to `config/stores.properties` and fill in your own store id and postal code.
 

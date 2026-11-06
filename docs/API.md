@@ -55,6 +55,10 @@ Every error has the same shape:
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
 | GET | [`/api/meal-plans`](#get-apimeal-plans) |  |
 | POST | [`/api/meal-plans`](#post-apimeal-plans) | Creates an empty plan for the week. |
+| POST | [`/api/meal-plans/meals`](#post-apimeal-plansmeals) | Plans a recipe on a day and returns the meal. |
+| DELETE | [`/api/meal-plans/meals/{entryId}`](#delete-apimeal-plansmealsentryid) | Removes one planned meal by its own id. |
+| PATCH | [`/api/meal-plans/meals/{entryId}`](#patch-apimeal-plansmealsentryid) | Edits or moves a meal. |
+| GET | [`/api/meal-plans/week`](#get-apimeal-plansweek) | The week that contains date (today when omitted): seven days with their meals. |
 | POST | [`/api/meal-plans/{id}/recipes`](#post-apimeal-plansidrecipes) | Adds a recipe to a plan and returns the updated plan. |
 | DELETE | [`/api/meal-plans/{id}/recipes/{recipeId}`](#delete-apimeal-plansidrecipesrecipeid) | Removes a recipe from a plan and returns the updated plan. |
 | POST | [`/api/meal-plans/{id}/shopping-list`](#post-apimeal-plansidshopping-list) | Builds and persists a shopping list from a plan's recipes (see ShoppingListService.generateFromMealPlan(int)): one line per item still missing after subtracting inventory, no store item pre-chosen. |
@@ -63,6 +67,7 @@ Every error has the same shape:
 | GET | [`/api/recipes`](#get-apirecipes) | All recipes by name. |
 | GET | [`/api/recipes/search`](#get-apirecipessearch) | GET /api/recipes/search: search the recipes, one page of cards plus the total. |
 | GET | [`/api/recipes/{id}`](#get-apirecipesid) | The recipe with its ingredients and instructions. |
+| PUT | [`/api/recipes/{id}/preferred-servings`](#put-apirecipesidpreferred-servings) | Sets how many people this recipe is always cooked for, e.g. |
 | GET | [`/api/recipes/{id}/tags`](#get-apirecipesidtags) |  |
 | POST | [`/api/recipes/{id}/tags`](#post-apirecipesidtags) | Tags the recipe, creating the tag first if no tag with that name exists. |
 | GET | [`/api/shopping-list`](#get-apishopping-list) | Builds (does not save) a shopping list for ?recipeIds=1,2,3 or ?recipeIds=1&recipeIds=2. |
@@ -464,6 +469,177 @@ before summing; omitted, the raw per-recipe quantities are summed.
 ```json
 {
   "shoppingListId": 0
+}
+```
+
+### PlannedMealController
+
+The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal,
+remove it, and set a recipe's preferred servings. Every meal is addressed by its own entryId. A plan is
+one Monday-to-Sunday week; the first meal added to a week creates its plan, so a page never has to create one.
+
+The household is named with an optional householdId so the servings can follow its head count; the
+PHP decides which household an account may use (see the backlog item "Auth and session review"). Without it,
+a meal that has no number of its own and no recipe preference is cooked for 2.
+
+
+#### POST /api/meal-plans/meals
+
+Plans a recipe on a day and returns the meal. The same recipe may be planned many times.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `householdId` | `Integer` | no |  |
+
+
+
+**Request body** `AddMealRequest`
+
+```json
+{
+  "recipeId": 0,
+  "date": "2026-10-14",
+  "label": "…",
+  "servings": 0,
+  "note": "…",
+  "position": 0
+}
+```
+
+**Answer** 201 `PlannedMealDto`
+
+```json
+{
+  "entryId": 0,
+  "planId": 0,
+  "recipeId": 0,
+  "recipeName": "…",
+  "recipeThumbnailUrl": "…",
+  "date": "2026-10-14",
+  "label": "…",
+  "position": 0,
+  "note": "…",
+  "servings": 0,
+  "servingsSource": "…",
+  "ownServings": 0,
+  "recipePreferredServings": 0
+}
+```
+
+#### DELETE /api/meal-plans/meals/{entryId}
+
+Removes one planned meal by its own id. 404 when there is none.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `entryId` | `int` |
+
+**Answer** 204 `void`
+
+
+#### PATCH /api/meal-plans/meals/{entryId}
+
+Edits or moves a meal. Send only what changes: date (moves it, also into another week),
+position, label, note, servings, recipeId. servings: null
+(or label / note: null) clears it, so the meal follows the default again.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `entryId` | `int` |
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `householdId` | `Integer` | no |  |
+
+
+
+**Request body** `JsonNode`
+
+```json
+"…"
+```
+
+**Answer** 200 `PlannedMealDto`
+
+```json
+{
+  "entryId": 0,
+  "planId": 0,
+  "recipeId": 0,
+  "recipeName": "…",
+  "recipeThumbnailUrl": "…",
+  "date": "2026-10-14",
+  "label": "…",
+  "position": 0,
+  "note": "…",
+  "servings": 0,
+  "servingsSource": "…",
+  "ownServings": 0,
+  "recipePreferredServings": 0
+}
+```
+
+#### GET /api/meal-plans/week
+
+The week that contains date (today when omitted): seven days with their meals. A week with no plan
+is seven empty days and planId: null. Any day of the week works; the answer starts on its Monday.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `date` | `LocalDate` | no |  |
+| `householdId` | `Integer` | no |  |
+
+
+
+**Answer** 200 `MealPlanWeekDto`
+
+```json
+{
+  "weekStart": "2026-10-14",
+  "planId": 0,
+  "householdPeople": 0,
+  "days": [
+    {
+      "date": "2026-10-14",
+      "meals": [{ … }]
+    }
+  ]
+}
+```
+
+#### PUT /api/recipes/{id}/preferred-servings
+
+Sets how many people this recipe is always cooked for, e.g. {"servings": 4}. {"servings": null}
+clears it. It never changes the number the stored amounts are written for.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `id` | `int` |
+
+**Request body** `JsonNode`
+
+```json
+"…"
+```
+
+**Answer** 200 `PreferredServingsDto`
+
+```json
+{
+  "recipeId": 0,
+  "preferredServings": 0
 }
 ```
 
@@ -949,6 +1125,25 @@ Recipes ranked by how many ingredients are currently on sale.
 
 The records the endpoints above send or receive. Field names are the JSON property names; `null` is possible for boxed types (`Integer`, `Double` ...) and for objects that are optional.
 
+### AddMealRequest
+
+Body of POST /api/meal-plans/meals, e.g.
+{"recipeId": 3, "date": "2026-11-09", "label": "Abendessen", "servings": 4, "note": "Reste", "position": 0}.
+Only recipeId and date are required. servings null = follow the default; position null = last on its day.
+
+| Property | Type |
+|---|---|
+| `recipeId` | `Integer` |
+| `date` | `LocalDate` |
+| `label` | `String` |
+| `servings` | `Integer` |
+| `note` | `String` |
+| `position` | `Integer` |
+
+```json
+{ … }
+```
+
 ### AddPlannedRecipeRequest
 
 Body of POST /api/meal-plans/{id}/recipes, e.g. {"recipeId": 3, "mealTime": "Abendessen"}.
@@ -1189,6 +1384,34 @@ One weekly meal plan with the recipes slotted into it.
 { … }
 ```
 
+### MealPlanWeekDto
+
+One Monday-to-Sunday week: always seven days, each with its meals in order. planId is null while
+nothing has been planned for the week (the first meal added creates the plan). householdPeople is the
+household head count that was used to resolve the servings (null when no household was named or none is set).
+
+| Property | Type |
+|---|---|
+| `weekStart` | `LocalDate` |
+| `planId` | `Integer` |
+| `householdPeople` | `Integer` |
+| `days` | `List<DayDto>` |
+
+```json
+{ … }
+```
+
+### MealPlanWeekDto.DayDto
+
+| Property | Type |
+|---|---|
+| `date` | `LocalDate` |
+| `meals` | `List<PlannedMealDto>` |
+
+```json
+{ … }
+```
+
 ### PersistedShoppingListDto
 
 A previously generated shopping list as it was persisted: its items with names, quantity still
@@ -1220,6 +1443,47 @@ one for the user.
 | `isManual` | `boolean` |
 | `storeOptions` | `List<ShoppingListDto.StoreOptionDto>` |
 | `selectedStoreItemId` | `Integer` |
+
+```json
+{ … }
+```
+
+### PlannedMealDto
+
+One planned meal. servings is the number the meal is cooked for (resolved, always at least 1) and
+servingsSource says where it came from: meal (set on the meal itself), recipe (the
+recipe's preferred servings), household (the household's head count) or default (2).
+ownServings is only what was set on the meal (null = follows the default), so a page can tell a
+hand-set number from a followed one. recipePreferredServings is the recipe's permanent preference.
+
+| Property | Type |
+|---|---|
+| `entryId` | `int` |
+| `planId` | `int` |
+| `recipeId` | `int` |
+| `recipeName` | `String` |
+| `recipeThumbnailUrl` | `String` |
+| `date` | `LocalDate` |
+| `label` | `String` |
+| `position` | `int` |
+| `note` | `String` |
+| `servings` | `int` |
+| `servingsSource` | `String` |
+| `ownServings` | `Integer` |
+| `recipePreferredServings` | `Integer` |
+
+```json
+{ … }
+```
+
+### PreferredServingsDto
+
+A recipe's permanent preferred servings ("this meal is always for X people"); null = no preference.
+
+| Property | Type |
+|---|---|
+| `recipeId` | `int` |
+| `preferredServings` | `Integer` |
 
 ```json
 { … }

@@ -29,28 +29,35 @@ flowchart LR
         u11(["DELETE /api/meal-plans/{id}/recipes/{recipeId}"])
         u12(["POST /api/meal-plans/{id}/shopping-list"])
     end
+    subgraph g_PlannedMeal["PlannedMeal"]
+        u13(["POST /api/meal-plans/meals"])
+        u14(["DELETE /api/meal-plans/meals/{entryId}"])
+        u15(["PATCH /api/meal-plans/meals/{entryId}"])
+        u16(["GET /api/meal-plans/week"])
+        u17(["PUT /api/recipes/{id}/preferred-servings"])
+    end
     subgraph g_Purchase["Purchase"]
-        u13(["GET /api/analytics/spending"])
-        u14(["GET /api/purchases"])
-        u15(["POST /api/purchases"])
+        u18(["GET /api/analytics/spending"])
+        u19(["GET /api/purchases"])
+        u20(["POST /api/purchases"])
     end
     subgraph g_Recipe["Recipe"]
-        u16(["GET /api/recipes"])
-        u17(["GET /api/recipes/search"])
-        u18(["GET /api/recipes/{id}"])
-        u19(["GET /api/recipes/{id}/tags"])
-        u20(["POST /api/recipes/{id}/tags"])
+        u21(["GET /api/recipes"])
+        u22(["GET /api/recipes/search"])
+        u23(["GET /api/recipes/{id}"])
+        u24(["GET /api/recipes/{id}/tags"])
+        u25(["POST /api/recipes/{id}/tags"])
     end
     subgraph g_ShoppingList["ShoppingList"]
-        u21(["GET /api/shopping-list"])
+        u26(["GET /api/shopping-list"])
     end
     subgraph g_ShoppingListItem["ShoppingListItem"]
-        u22(["GET /api/shopping-lists/{listId}"])
-        u23(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
+        u27(["GET /api/shopping-lists/{listId}"])
+        u28(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
     end
     subgraph g_Suggestion["Suggestion"]
-        u24(["GET /api/suggestions/by-expiring"])
-        u25(["GET /api/suggestions/by-savings"])
+        u29(["GET /api/suggestions/by-expiring"])
+        u30(["GET /api/suggestions/by-savings"])
     end
     member --> u1
     member --> u2
@@ -77,6 +84,11 @@ flowchart LR
     member --> u23
     member --> u24
     member --> u25
+    member --> u26
+    member --> u27
+    member --> u28
+    member --> u29
+    member --> u30
 ```
 
 Each use case is one endpoint; the parameters, bodies and answers are in [API.md](API.md). What a member actually does with them:
