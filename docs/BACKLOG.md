@@ -320,7 +320,8 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   ("this meal is always for X"), then `household.household_people`, then 2; meals that have not happened yet follow
   the household number, a hand-set number stays. Opening a week with no plan returns seven empty days, adding the
   first meal creates the plan. The old endpoints stay until the PHP has moved (a meal added the old way lands on the
-  week's Monday with its text as the label). **The Java API for it is complete after PR C; what is left is the PHP page.**
+  week's Monday with its text as the label). **The Java API for it is complete after PR C and live since 2026-11-06 (see "Live deployment state"); what is left
+  is the PHP page.**
   **Built in PR C:** meals of a past day (household time zone, `dahaem.mealplan.zone`) cannot be added, edited, moved
   or removed (409), and a nightly job at 00:01 (`ScheduledMealServings`) writes the resolved servings onto every past
   meal that still followed the default, catching up on missed nights; it uses the head count of the first (shared)
@@ -449,7 +450,19 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 
 ## Platform
 
-- **Live deployment state (checked 2026-11-06)** — `done` except the schema_migrations idea. **Update, same day:** the
+- **Live deployment state (checked 2026-11-06)** — `done` except the schema_migrations idea. **Second rebuild, same
+  day (09:36 UTC):** snapshot `dahaem-20261106-093619.sql`, main e7b0e22 (#104) pulled, `dahaem-api` rebuilt alone
+  (image 1780acc8b097, jar dated 2026-11-06 09:36), so the live API now has the meal planner by date (#101), the
+  per-meal shopping list (#102) and the past-day rules with the nightly freeze (#104). db, web, phpmyadmin and both
+  volumes untouched; GET smoke tests passed (`/api/meal-plans/week` with seven days, with and without `householdId`,
+  `/api/households/1`, `/api/recipes/search`, `/api/recipes`, `/api/meal-plans`; PHP site 200). Snapshots kept:
+  1022, 1106-0838, 1106-0936. Rollback images: `dahaem-api:rollback-20261106` (the #98 / #99 build) and
+  `dahaem-api:rollback-20261022`; Nate removes them once the new build has proven stable. The nightly job runs at 00:01
+  Europe/Berlin with the defaults (no `MEALPLAN_*` variable set); **its first run writes the resolved servings onto the
+  3 legacy meal rows by design, so look for "meal servings freeze: N meal(s) of past days frozen" in the `dahaem-api`
+  log after the first 00:01.** The household head count is still `null`: planned meals and the shopping list use the
+  default 2 until Nate sets it (`PUT /api/households/1/people`), which he wants to do after the meal plan and shopping
+  list are done. **Earlier update, same day:** the
   snapshot `dahaem-20261106-083838.sql` was taken, main (0d21dd7, #99) was pulled and `dahaem-api` rebuilt and
   restarted alone (new image 9ecbadb4bb8d, jar dated 2026-11-06; db, web, phpmyadmin and both volumes untouched);
   read-only smoke tests passed (`/api/recipes/search`: 11,070 recipes; `/api/households/1`; `/api/recipes`; the PHP site
