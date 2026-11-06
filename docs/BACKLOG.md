@@ -440,7 +440,15 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 
 ## Platform
 
-- **Live deployment state (checked 2026-11-06)** — `next`, Nate. Read-only check on llmbox against the live `sandbox`
+- **Live deployment state (checked 2026-11-06)** — `done` except the schema_migrations idea. **Update, same day:** the
+  snapshot `dahaem-20261106-083838.sql` was taken, main (0d21dd7, #99) was pulled and `dahaem-api` rebuilt and
+  restarted alone (new image 9ecbadb4bb8d, jar dated 2026-11-06; db, web, phpmyadmin and both volumes untouched);
+  read-only smoke tests passed (`/api/recipes/search`: 11,070 recipes; `/api/households/1`; `/api/recipes`; the PHP site
+  answers 200). The old image is kept as `dahaem-api:rollback-20261022`; Nate removes it once the new API has proven
+  stable. The household head count is still `null` (set it with `PUT /api/households/1/people`). The store refresh is
+  armed (`REFRESH_ENABLED=true`) with the code defaults, daily 06:00 and the 1st of the month 05:00 (see
+  `docs/refresh.md`). The first read-only check follows; its points (1) and (2) are now done.
+  Read-only check on llmbox against the live `sandbox`
   database: migrations 0001–0016 are all applied (objects and sample rows checked, not every row; the 0015
   animal-link rows were not checked one by one). There is no migration-tracking table, since migrations are run by hand
   in phpMyAdmin. Gaps 1713, 1715 and 1719 in the 0004 id range are gaps in `seed/inventory_catalog.sql` itself. Three
