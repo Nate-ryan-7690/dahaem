@@ -137,13 +137,17 @@ public class MealPlanController {
         return new GeneratedShoppingListDto(shoppingListId);
     }
 
-    /** The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). */
+    /**
+     * The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten).
+     * Archived lists are left out; {@code ?archived=true} shows only the archived ones.
+     */
     @GetMapping("/{id}/shopping-lists")
-    public List<PersistedShoppingListDto.Summary> shoppingLists(@PathVariable("id") int id) {
+    public List<PersistedShoppingListDto.Summary> shoppingLists(@PathVariable("id") int id,
+            @RequestParam(name = "archived", defaultValue = "false") boolean archived) {
         mealPlanService.allPlans().stream()
                 .filter(p -> p.getId() == id)
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("No meal plan with id " + id));
-        return shoppingListService.listsForPlan(id).stream().map(PersistedShoppingListDto.Summary::from).toList();
+        return shoppingListService.listsForPlan(id, archived).stream().map(PersistedShoppingListDto.Summary::from).toList();
     }
 }

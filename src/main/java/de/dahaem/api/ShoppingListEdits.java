@@ -14,8 +14,18 @@ public final class ShoppingListEdits {
     public record QuantityRequest(Double quantity) {
     }
 
-    /** POST .../items: a line added by hand for a catalogue item; {@code unit} defaults to the item's own unit. */
-    public record AddLineRequest(Integer inventoryItemId, Double quantity, String unit) {
+    /**
+     * POST .../items: a line added by hand, either for a catalogue item ({@code inventoryItemId}; {@code unit} defaults to
+     * the item's own unit) or as free text ({@code name}, for things like "Backpapier"). Exactly one of the two.
+     */
+    public record AddLineRequest(Integer inventoryItemId, String name, Double quantity, String unit) {
+    }
+
+    /** PUT .../archived: {@code {"archived": true}} hides the list from the overview (nothing is deleted), false brings it back. */
+    public record ArchivedRequest(Boolean archived) {
+    }
+
+    public record ArchivedDto(int id, boolean archived) {
     }
 
     /** PUT .../status: {@code {"completed": true}} makes the list read-only, false reopens it. */

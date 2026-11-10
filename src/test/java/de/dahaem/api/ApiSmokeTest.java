@@ -119,6 +119,60 @@ class ApiSmokeTest {
     }
 
     @Test
+    void aListCanHoldFreeTextLinesAndBeArchivedAndBroughtBack() throws Exception {
+        String created = mvc.perform(post("/api/shopping-lists").with(csrf()))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        int listId = Integer.parseInt(created.replaceAll(".*\"shoppingListId\":(\\d+).*", "$1"));
+        String items = "/api/shopping-lists/{id}/items";
+
+        String added = mvc.perform(post(items, listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"Backpapier\", \"quantity\": 2, \"unit\": \"Rollen\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        int lineId = Integer.parseInt(added.replaceAll(".*\"shoppingListItemId\":(\\d+).*", "$1"));
+        mvc.perform(get("/api/shopping-lists/{id}", listId))
+                .andExpect(jsonPath("$.archived").value(false))
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + lineId + ")].nameDeutsch", contains("Backpapier")))
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + lineId + ")].inventoryItemId", contains(nullValue())))
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + lineId + ")].unit", contains("Rollen")))
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + lineId + ")].isManual", contains(true)));
+
+        // exactly one of name / inventoryItemId
+        mvc.perform(post(items, listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\": 1}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(items, listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\": \"x\", \"inventoryItemId\": 1, \"quantity\": 1}"))
+                .andExpect(status().isBadRequest());
+
+        // archive: gone from the overview, listed under archived=true, still readable, nothing deleted; then back
+        mvc.perform(put("/api/shopping-lists/{id}/archived", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"archived\": true}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/shopping-lists"))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")]").isEmpty());
+        mvc.perform(get("/api/shopping-lists").param("archived", "true"))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].lines", contains(1)))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].archived", contains(true)));
+        mvc.perform(get("/api/shopping-lists/{id}", listId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.archived").value(true));
+        mvc.perform(put("/api/shopping-lists/{id}/archived", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"archived\": false}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/shopping-lists"))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].lines", contains(1)));
+
+        mvc.perform(put("/api/shopping-lists/{id}/archived", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/shopping-lists/{id}/archived", 999_999).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"archived\": true}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void inventorySearchFiltersPagesAndValidatesPaging() throws Exception {
         mvc.perform(get("/api/inventory/search").param("pageSize", "2"))
                 .andExpect(status().isOk())

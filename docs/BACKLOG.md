@@ -454,9 +454,10 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
   PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, INVALID_TOKEN, INTERNAL_ERROR),
   `GET /api/inventory/search` (`q`, `category`, `page`, `pageSize`; the plain `GET /api/inventory` is unchanged), and
-  a list without a plan (`POST /api/shopping-lists`, `GET /api/shopping-lists` lists all). Next (migration 0019, Nate
-  decided archive instead of delete: every list stays in the database): `archived` flag on a list (hidden from the
-  overview unless asked for, can be unarchived) and a `name` column for free-text lines like "Backpapier".
+  a list without a plan (`POST /api/shopping-lists`, `GET /api/shopping-lists` lists all). Migration 0019 (Nate decided
+  archive instead of delete: every list stays in the database): `PUT /api/shopping-lists/{id}/archived` hides a list from
+  the overview (`?archived=true` shows only the archived ones; nothing is deleted) and `POST .../items` takes a free-text
+  `name` ("Backpapier") instead of an `inventoryItemId`. Hard delete is not built.
   Also wanted: a scheduled nightly `mariadb-dump` with a longer rotation than the 3 hand-made snapshots (llmbox session).
 - **Shopping list lifecycle** — `next`. Nate 2026-11-10: the list shows an estimated total cost (per store); the
   suggestions deliberately do not. Save a list (from a meal-plan week), tick items, record the

@@ -30,10 +30,13 @@ public class ShoppingListItemController {
         this.mealPlanService = mealPlanService;
     }
 
-    /** Every saved list, newest first, with its lines and how many are ticked; {@code mealPlanId} is null for a list without a plan. */
+    /**
+     * Every saved list, newest first, with its lines and how many are ticked; {@code mealPlanId} is null for a list
+     * without a plan. Archived lists are left out; {@code ?archived=true} shows only the archived ones.
+     */
     @GetMapping
-    public List<PersistedShoppingListDto.Summary> all() {
-        return shoppingListService.allLists().stream().map(PersistedShoppingListDto.Summary::from).toList();
+    public List<PersistedShoppingListDto.Summary> all(@RequestParam(name = "archived", defaultValue = "false") boolean archived) {
+        return shoppingListService.allLists(archived).stream().map(PersistedShoppingListDto.Summary::from).toList();
     }
 
     /**
@@ -106,19 +109,36 @@ public class ShoppingListItemController {
         shoppingListService.removeItem(listId, itemId);
     }
 
-    /** Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). */
+    /**
+     * Adds a line by hand: for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional) or as
+     * free text ({"name": "Backpapier", "quantity": 1}, unit optional). Exactly one of inventoryItemId and name.
+     */
     @PostMapping("/{listId}/items")
     @ResponseStatus(HttpStatus.CREATED)
     public ShoppingListEdits.AddedLineDto addItem(@PathVariable("listId") int listId,
                                                   @RequestBody ShoppingListEdits.AddLineRequest request) {
-        if (request.inventoryItemId() == null || request.quantity() == null) {
-            throw new BadRequestException("'inventoryItemId' and 'quantity' are required");
+        if (request.quantity() == null) {
+            throw new BadRequestException("'quantity' is required");
         }
         if (shoppingListService.loadPersistedList(listId).isEmpty()) {
             throw new NotFoundException("No shopping list with id " + listId);
         }
         return new ShoppingListEdits.AddedLineDto(shoppingListService.addManualItem(listId,
-                request.inventoryItemId(), request.quantity(), request.unit()));
+                request.inventoryItemId(), request.name(), request.quantity(), request.unit()));
+    }
+
+    /** Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back. */
+    @PutMapping("/{listId}/archived")
+    public ShoppingListEdits.ArchivedDto setArchived(@PathVariable("listId") int listId,
+                                                     @RequestBody ShoppingListEdits.ArchivedRequest request) {
+        if (request.archived() == null) {
+            throw new BadRequestException("'archived' must be true or false");
+        }
+        if (shoppingListService.loadPersistedList(listId).isEmpty()) {
+            throw new NotFoundException("No shopping list with id " + listId);
+        }
+        shoppingListService.setArchived(listId, request.archived());
+        return new ShoppingListEdits.ArchivedDto(listId, request.archived());
     }
 
     /** Completes a list ({"completed": true}: it becomes read-only) or reopens it. */
