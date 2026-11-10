@@ -362,6 +362,30 @@ public class ShoppingListService {
         return repository.findListsForPlan(mealPlanId);
     }
 
+    /** Every saved list, newest first, including the ones that belong to no meal plan. */
+    public List<ShoppingListSummary> allLists() {
+        return repository.findAllLists();
+    }
+
+    /**
+     * Makes an empty list that belongs to no meal plan, for a trip without planned meals (the user adds the lines by
+     * hand). {@code shoppingDate} is the day of the trip, not in the past. Returns the new list's id.
+     */
+    public int createEmptyList(LocalDate today, LocalDate shoppingDate) {
+        requireNotPast(shoppingDate, today);
+        Connection con = repository.openTransaction();
+        try {
+            int id = repository.insertShoppingList(con, null, today, shoppingDate, null, false);
+            con.commit();
+            return id;
+        } catch (SQLException e) {
+            rollback(con);
+            throw new RuntimeException("Could not create an empty shopping list", e);
+        } finally {
+            close(con);
+        }
+    }
+
     private PersistedShoppingListItem toPersistedItem(ShoppingListItemRow row, LocalDate offersOn,
                                                       List<SourceRecipe> recipes) {
         List<StoreOption> options = row.inventoryItemId() == null

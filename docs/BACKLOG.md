@@ -450,6 +450,14 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   stock (that comes from receipts / barcodes). Still open from the entry below: a manual line for something that is
   not in the catalogue (needs a name column, so a migration), a price snapshot per selection, recording the shop as
   purchases, warning on expired offers, and the list of open lists per household.
+- **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list
+  summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
+  PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN, INTERNAL_ERROR),
+  `GET /api/inventory/search` (`q`, `category`, `page`, `pageSize`; the plain `GET /api/inventory` is unchanged), and
+  a list without a plan (`POST /api/shopping-lists`, `GET /api/shopping-lists` lists all). Next (migration 0019, Nate
+  decided archive instead of delete: every list stays in the database): `archived` flag on a list (hidden from the
+  overview unless asked for, can be unarchived) and a `name` column for free-text lines like "Backpapier".
+  Also wanted: a scheduled nightly `mariadb-dump` with a longer rotation than the 3 hand-made snapshots (llmbox session).
 - **Shopping list lifecycle** — `next`. Nate 2026-11-10: the list shows an estimated total cost (per store); the
   suggestions deliberately do not. Save a list (from a meal-plan week), tick items, record the
   shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn

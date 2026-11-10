@@ -63,7 +63,7 @@ public class InternalTokenFilter extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             objectMapper.writeValue(response.getOutputStream(), new ErrorResponse(
                     HttpStatus.UNAUTHORIZED.value(), HttpStatus.UNAUTHORIZED.getReasonPhrase(),
-                    "Missing or invalid internal token"));
+                    "Missing or invalid internal token", "INVALID_TOKEN"));
             return;
         }
         SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(

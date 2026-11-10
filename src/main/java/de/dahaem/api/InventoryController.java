@@ -2,6 +2,8 @@ package de.dahaem.api;
 
 import de.dahaem.finance.StockService;
 import de.dahaem.inventory.InventoryService;
+import de.dahaem.inventory.ItemPage;
+import de.dahaem.shared.PageRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,6 +42,22 @@ public class InventoryController {
     @GetMapping
     public List<ItemDto> all() {
         return inventoryService.allItems().stream().map(ItemDto::from).toList();
+    }
+
+    /**
+     * Search the catalogue, one page of items plus the total. {@code q} matches the English or German name as a
+     * case-insensitive substring, {@code category} must equal the item's category (both optional); {@code page} (from 1,
+     * default 1) and {@code pageSize} (1 - 100, default 24) like {@code GET /api/recipes/search}. Out-of-range paging is a 400.
+     */
+    @GetMapping("/search")
+    public ItemPageDto search(@RequestParam(name = "q", required = false) String q,
+                              @RequestParam(name = "category", required = false) String category,
+                              @RequestParam(name = "page", required = false) Integer page,
+                              @RequestParam(name = "pageSize", required = false) Integer pageSize) {
+        PageRequest request = PageRequest.of(page, pageSize);
+        ItemPage result = inventoryService.search(q, category, request.offset(), request.pageSize());
+        return new ItemPageDto(result.items().stream().map(ItemDto::from).toList(), result.total(), request.page(),
+                request.pageSize(), request.totalPages(result.total()));
     }
 
     /** Items expiring within the next {@code days} days (default 7). */

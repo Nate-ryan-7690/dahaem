@@ -1,6 +1,8 @@
 package de.dahaem.api;
 
+import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.shopping.ShoppingListService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,17 +11,42 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/shopping-lists")
 public class ShoppingListItemController {
 
     private final ShoppingListService shoppingListService;
+    private final MealPlanService mealPlanService;
 
-    public ShoppingListItemController(ShoppingListService shoppingListService) {
+    public ShoppingListItemController(ShoppingListService shoppingListService, MealPlanService mealPlanService) {
         this.shoppingListService = shoppingListService;
+        this.mealPlanService = mealPlanService;
+    }
+
+    /** Every saved list, newest first, with its lines and how many are ticked; {@code mealPlanId} is null for a list without a plan. */
+    @GetMapping
+    public List<PersistedShoppingListDto.Summary> all() {
+        return shoppingListService.allLists().stream().map(PersistedShoppingListDto.Summary::from).toList();
+    }
+
+    /**
+     * Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand
+     * ({@code POST /{listId}/items}). {@code ?shoppingDate=YYYY-MM-DD} is the day of the trip (default today, not in the past).
+     */
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public GeneratedShoppingListDto create(@RequestParam(name = "shoppingDate", required = false)
+                                           @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate shoppingDate) {
+        LocalDate today = mealPlanService.today();   // the household's day, not the server's
+        return new GeneratedShoppingListDto(shoppingListService.createEmptyList(today,
+                shoppingDate != null ? shoppingDate : today));
     }
 
     /** Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. */

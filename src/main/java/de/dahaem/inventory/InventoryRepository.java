@@ -47,6 +47,54 @@ public class InventoryRepository {
         return items;
     }
 
+    /**
+     * One page of the catalogue, ordered by English name. {@code query} (nullable) matches the English or German name
+     * as a case-insensitive substring; {@code category} (nullable) must equal the item's category. Both are bound as
+     * parameters; the wildcards of the query text are escaped so a search for "50%" means "50%".
+     */
+    public ItemPage search(String query, String category, long offset, int limit) {
+        String where = " WHERE (? IS NULL OR inventory_item_name_english LIKE ? OR inventory_item_name_deutsch LIKE ?) "
+                + "AND (? IS NULL OR inventory_item_category = ?)";
+        String pattern = query == null ? null : "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        String listSql = "SELECT inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, " +
+                "inventory_item_quantity, inventory_item_unit, inventory_item_category, " +
+                "inventory_item_subcategory, inventory_item_earliest_exp_date FROM inventory_item" + where +
+                " ORDER BY inventory_item_name_english, inventory_item_id LIMIT ? OFFSET ?";
+        String countSql = "SELECT COUNT(*) FROM inventory_item" + where;
+        try (Connection con = Database.getConnection()) {
+            long total;
+            try (PreparedStatement ps = con.prepareStatement(countSql)) {
+                bindFilter(ps, pattern, category);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    total = rs.getLong(1);
+                }
+            }
+            List<Item> items = new ArrayList<>();
+            try (PreparedStatement ps = con.prepareStatement(listSql)) {
+                bindFilter(ps, pattern, category);
+                ps.setInt(6, limit);
+                ps.setLong(7, offset);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        items.add(mapRow(rs));
+                    }
+                }
+            }
+            return new ItemPage(items, total);
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not search inventory items", e);
+        }
+    }
+
+    private static void bindFilter(PreparedStatement ps, String pattern, String category) throws SQLException {
+        ps.setString(1, pattern);
+        ps.setString(2, pattern);
+        ps.setString(3, pattern);
+        ps.setString(4, category);
+        ps.setString(5, category);
+    }
+
     public Optional<Item> findById(int id) {
         String sql = "SELECT inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, " +
                 "inventory_item_quantity, inventory_item_unit, inventory_item_category, " +

@@ -114,7 +114,59 @@ class ApiSmokeTest {
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/inventory/{id}/use", 999_999).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void inventorySearchFiltersPagesAndValidatesPaging() throws Exception {
+        mvc.perform(get("/api/inventory/search").param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.total", greaterThan(2)))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.pageSize").value(2))
+                .andExpect(jsonPath("$.totalPages", greaterThan(1)));
+        mvc.perform(get("/api/inventory/search").param("pageSize", "2").param("page", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.page").value(2));
+        mvc.perform(get("/api/inventory/search").param("q", "milch"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total", greaterThan(0)))
+                .andExpect(jsonPath("$.items[*].nameDeutsch", everyItem(org.hamcrest.Matchers.containsStringIgnoringCase("milch"))));
+        mvc.perform(get("/api/inventory/search").param("q", "zzzz-no-such-item"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0));
+        mvc.perform(get("/api/inventory/search").param("pageSize", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
+    void aListWithoutAPlanCanBeMadeFilledAndListed() throws Exception {
+        String created = mvc.perform(post("/api/shopping-lists").with(csrf()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.shoppingListId").isNumber())
+                .andReturn().getResponse().getContentAsString();
+        int listId = Integer.parseInt(created.replaceAll(".*\"shoppingListId\":(\\d+).*", "$1"));
+
+        mvc.perform(get("/api/shopping-lists/{id}", listId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mealPlanId").value(nullValue()))
+                .andExpect(jsonPath("$.items.length()").value(0));
+        mvc.perform(post("/api/shopping-lists/{id}/items", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"inventoryItemId\": 1, \"quantity\": 1}"))
+                .andExpect(status().isCreated());
+        mvc.perform(get("/api/shopping-lists"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].lines", contains(1)))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].purchasedLines", contains(0)))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].mealPlanId", contains(nullValue())));
+
+        mvc.perform(post("/api/shopping-lists").with(csrf()).param("shoppingDate", "2000-01-01"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -703,6 +755,10 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + itemId + ")].purchased", contains(true)))
                 .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + itemId + ")].quantityNeeded", contains(2.5)));
 
+        mvc.perform(get("/api/meal-plans/{id}/shopping-lists", 1))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].purchasedLines", contains(1)))
+                .andExpect(jsonPath("$[?(@.id == " + listId + ")].mealPlanId", contains(1)));
+
         String added = mvc.perform(post("/api/shopping-lists/{listId}/items", listId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"inventoryItemId\": " + inventoryItemId + ", \"quantity\": 1}"))
@@ -725,7 +781,8 @@ class ApiSmokeTest {
                 .andExpect(status().isOk());
         mvc.perform(put(items + "/purchased", listId, itemId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"purchased\": false}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LIST_COMPLETED"));
         mvc.perform(put("/api/shopping-lists/{id}/status", listId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"completed\": false}"))
                 .andExpect(status().isOk());

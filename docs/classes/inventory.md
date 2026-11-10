@@ -4,7 +4,7 @@
 
 The item catalogue and the pantry.
 
-3 types in 3 source files (`src/main/java/de/dahaem/inventory`). Back to the [class index](README.md).
+4 types in 4 source files (`src/main/java/de/dahaem/inventory`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -14,9 +14,15 @@ classDiagram
     class inventory_InventoryRepository["InventoryRepository"]
     class inventory_InventoryService["InventoryService"]
     class inventory_Item["Item"]
+    class inventory_ItemPage["ItemPage"] {
+        <<record>>
+    }
     inventory_InventoryRepository ..> inventory_Item
+    inventory_InventoryRepository ..> inventory_ItemPage
     inventory_InventoryService --> inventory_InventoryRepository
     inventory_InventoryService ..> inventory_Item
+    inventory_InventoryService ..> inventory_ItemPage
+    inventory_ItemPage --> inventory_Item
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -26,6 +32,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`InventoryRepository`](#inventoryrepository) | class |  | All SQL for the inventory_item table lives here and nowhere else. |
 | [`InventoryService`](#inventoryservice) | class |  | Business logic for inventory. |
 | [`Item`](#item) | class |  | Plain data holder for one row of the inventory_item table. |
+| [`ItemPage`](#itempage) | record |  | One page of inventory items plus how many items match in all pages. |
 
 ## InventoryRepository
 
@@ -40,6 +47,7 @@ classDiagram
     class inventory_InventoryRepository["InventoryRepository"] {
         +countAll() long
         +findAll() List~Item~
+        +search(String query, String category, long offset, int limit) ItemPage
         +findById(int id) Optional~Item~
         +findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit) int
         +updateQuantity(int id, int newQuantity) void
@@ -51,10 +59,14 @@ classDiagram
     class inventory_InventoryService["InventoryService"]
     class shopping_ShoppingListService["ShoppingListService"]
     class inventory_Item["Item"]
+    class inventory_ItemPage["ItemPage"] {
+        <<record>>
+    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
     inventory_InventoryRepository ..> inventory_Item
+    inventory_InventoryRepository ..> inventory_ItemPage
     api_ServiceConfig ..> inventory_InventoryRepository
     finance_PurchaseService --> inventory_InventoryRepository
     finance_StockService --> inventory_InventoryRepository
@@ -66,6 +78,7 @@ classDiagram
 |---|---|---|
 | `long countAll()` | public |  |
 | `List<Item> findAll()` | public |  |
+| `ItemPage search(String query, String category, long offset, int limit)` | public | One page of the catalogue, ordered by English name. |
 | `Optional<Item> findById(int id)` | public |  |
 | `int findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit)` | public | Find-or-create a generic inventory_item by (name_english, category), on the caller's transaction (see PurchaseRepository.openTransaction()/StoreRepository.openTransaction()). |
 | `void updateQuantity(int id, int newQuantity)` | public |  |
@@ -90,6 +103,7 @@ classDiagram
         +InventoryService(InventoryRepository repository)
         +totalItemCount() long
         +allItems() List~Item~
+        +search(String query, String category, long offset, int limit) ItemPage
         +lowStock(int threshold) List~Item~
         +expiringWithin(int days) List~Item~
     }
@@ -98,11 +112,15 @@ classDiagram
         <<controller>>
     }
     class inventory_Item["Item"]
+    class inventory_ItemPage["ItemPage"] {
+        <<record>>
+    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
     inventory_InventoryService --> inventory_InventoryRepository
     inventory_InventoryService ..> inventory_Item
+    inventory_InventoryService ..> inventory_ItemPage
     api_InventoryController --> inventory_InventoryService
     api_ServiceConfig ..> inventory_InventoryService
 ```
@@ -116,6 +134,7 @@ classDiagram
 | `InventoryService(InventoryRepository repository)` | public |  |
 | `long totalItemCount()` | public |  |
 | `List<Item> allItems()` | public |  |
+| `ItemPage search(String query, String category, long offset, int limit)` | public | One page of the catalogue filtered by name text and/or category (both optional); see InventoryRepository.search. |
 | `List<Item> lowStock(int threshold)` | public | Items at or below a stock threshold, e.g. |
 | `List<Item> expiringWithin(int days)` | public | Items with a known expiry date within the next N days. |
 
@@ -151,6 +170,9 @@ classDiagram
         +getEarliestExpDate() LocalDate
         +toString() String
     }
+    class inventory_ItemPage["ItemPage"] {
+        <<record>>
+    }
     class api_ItemDto["ItemDto"] {
         <<record>>
     }
@@ -161,6 +183,7 @@ classDiagram
     finance_StockService ..> inventory_Item
     inventory_InventoryRepository ..> inventory_Item
     inventory_InventoryService ..> inventory_Item
+    inventory_ItemPage --> inventory_Item
 ```
 
 | Field | Type |
@@ -187,4 +210,33 @@ classDiagram
 | `LocalDate getEarliestExpDate()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `InventoryRepository`, `InventoryService`, `ItemDto`, `StockService`
+**Referenced by:** `InventoryRepository`, `InventoryService`, `ItemDto`, `ItemPage`, `StockService`
+
+## ItemPage
+
+*record*
+
+One page of inventory items plus how many items match in all pages.
+
+```mermaid
+classDiagram
+    direction LR
+    class inventory_ItemPage["ItemPage"] {
+        <<record>>
+        +List~Item~ items
+        +long total
+    }
+    class inventory_Item["Item"]
+    class inventory_InventoryRepository["InventoryRepository"]
+    class inventory_InventoryService["InventoryService"]
+    inventory_ItemPage --> inventory_Item
+    inventory_InventoryRepository ..> inventory_ItemPage
+    inventory_InventoryService ..> inventory_ItemPage
+```
+
+| Component | Type |
+|---|---|
+| `items` | `List<Item>` |
+| `total` | `long` |
+
+**Referenced by:** `InventoryRepository`, `InventoryService`
