@@ -62,6 +62,16 @@ class StorePromotionServiceTest {
     }
 
     @Test
+    void aThousandGramsWrittenWithADotIsNotOneGram() {
+        // this once parsed as 1 g (a 2,49 EUR rice looked like 2490 EUR / kg); it must stay 1000 g
+        StorePromotionService.Pack pack = StorePromotionService.parseSize("1.000-g-Packung");
+
+        assertEquals(1000, pack.size());
+        assertEquals("g", pack.unit());
+        assertEquals(1000, StorePromotionService.parseSize("1.000 g").size());
+    }
+
+    @Test
     void dotBeforeThreeDigitsStaysADecimalForKgAndLitres() {
         assertEquals(1250, StorePromotionService.parseSize("1.250 kg").size());
         assertEquals(1500, StorePromotionService.parseSize("1.5 l").size());

@@ -220,7 +220,8 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$[?(@.id == " + listId + ")].mealPlanId", contains(nullValue())));
 
         mvc.perform(post("/api/shopping-lists").with(csrf()).param("shoppingDate", "2000-01-01"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PAST_SHOPPING_DAY"));
     }
 
     @Test
