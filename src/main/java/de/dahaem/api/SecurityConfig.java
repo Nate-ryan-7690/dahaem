@@ -100,10 +100,10 @@ public class SecurityConfig {
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, exception) ->
-                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "Login required"))
+                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "Login required"))
                         // Reached for a missing/stale CSRF token: the frontend refetches it and retries.
                         .accessDeniedHandler((request, response, exception) ->
-                                writeError(response, objectMapper, HttpStatus.FORBIDDEN, "Forbidden (missing or expired CSRF token)")))
+                                writeError(response, objectMapper, HttpStatus.FORBIDDEN, "CSRF_INVALID", "Forbidden (missing or expired CSRF token)")))
                 // An API client that hits a 401 does not want to be sent back to that URL after
                 // logging in, and remembering it would open a session for every anonymous request.
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()));
@@ -112,11 +112,11 @@ public class SecurityConfig {
 
     // Same JSON shape as ApiExceptionHandler's errors, so the frontend reads every error the same way.
     private static void writeError(HttpServletResponse response, ObjectMapper objectMapper, HttpStatus status,
-                                   String message) throws IOException {
+                                   String code, String message) throws IOException {
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         objectMapper.writeValue(response.getOutputStream(),
-                new ErrorResponse(status.value(), status.getReasonPhrase(), message));
+                new ErrorResponse(status.value(), status.getReasonPhrase(), message, code));
     }
 }

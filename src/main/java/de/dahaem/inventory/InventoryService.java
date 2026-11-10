@@ -24,6 +24,15 @@ public class InventoryService {
         return repository.findAll();
     }
 
+    /** One page of the catalogue filtered by name text and/or category (both optional); see {@link InventoryRepository#search}. */
+    public ItemPage search(String query, String category, long offset, int limit) {
+        return repository.search(blankToNull(query), blankToNull(category), offset, limit);
+    }
+
+    private static String blankToNull(String text) {
+        return text == null || text.isBlank() ? null : text.trim();
+    }
+
     /** Items at or below a stock threshold, e.g. "what is running low?". */
     public List<Item> lowStock(int threshold) {
         return repository.findAll().stream()

@@ -19,6 +19,8 @@ import java.sql.SQLIntegrityConstraintViolationException;
  * The services report failures as plain RuntimeExceptions wrapping the SQLException,
  * so a constraint violation (foreign key, unique, primary key) is recognised from the cause
  * and reported as 409 instead of a generic 500.
+ * Every error carries a stable machine-readable {@code code} (NOT_FOUND, PAST_DAY, LIST_COMPLETED, ...) next to the
+ * English message, so a client can show its own text without matching message strings.
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -27,53 +29,53 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> notFound(NotFoundException e) {
-        return error(HttpStatus.NOT_FOUND, e.getMessage());
+        return error(HttpStatus.NOT_FOUND, "NOT_FOUND", e.getMessage());
     }
 
     /** A meal on a past day cannot be added, changed, moved or removed: the request conflicts with the calendar. */
     @ExceptionHandler(PastDayException.class)
     public ResponseEntity<ErrorResponse> pastDay(PastDayException e) {
-        return error(HttpStatus.CONFLICT, e.getMessage());
+        return error(HttpStatus.CONFLICT, "PAST_DAY", e.getMessage());
     }
 
     /** A completed shopping list cannot be edited. */
     @ExceptionHandler(ListCompletedException.class)
     public ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e) {
-        return error(HttpStatus.CONFLICT, e.getMessage());
+        return error(HttpStatus.CONFLICT, "LIST_COMPLETED", e.getMessage());
     }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e) {
-        return error(HttpStatus.UNAUTHORIZED, e.getMessage());
+        return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", e.getMessage());
     }
 
     @ExceptionHandler({BadRequestException.class, IllegalArgumentException.class})
     public ResponseEntity<ErrorResponse> badRequest(RuntimeException e) {
-        return error(HttpStatus.BAD_REQUEST, e.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", e.getMessage());
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> missingParameter(MissingServletRequestParameterException e) {
-        return error(HttpStatus.BAD_REQUEST, "Missing required parameter '" + e.getParameterName() + "'");
+        return error(HttpStatus.BAD_REQUEST, "MISSING_PARAMETER", "Missing required parameter '" + e.getParameterName() + "'");
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> typeMismatch(MethodArgumentTypeMismatchException e) {
-        return error(HttpStatus.BAD_REQUEST, "Invalid value '" + e.getValue() + "' for '" + e.getName() + "'");
+        return error(HttpStatus.BAD_REQUEST, "INVALID_VALUE", "Invalid value '" + e.getValue() + "' for '" + e.getName() + "'");
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> unreadableBody(HttpMessageNotReadableException e) {
-        return error(HttpStatus.BAD_REQUEST, "Request body is missing or not valid JSON");
+        return error(HttpStatus.BAD_REQUEST, "INVALID_BODY", "Request body is missing or not valid JSON");
     }
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ErrorResponse> unexpected(RuntimeException e) {
         if (isConstraintViolation(e)) {
-            return error(HttpStatus.CONFLICT, e.getMessage() + " (conflicts with existing data)");
+            return error(HttpStatus.CONFLICT, "CONFLICT", e.getMessage() + " (conflicts with existing data)");
         }
         log.error("Unhandled error in API request", e);
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Internal server error");
     }
 
     private static boolean isConstraintViolation(Throwable e) {
@@ -85,8 +87,8 @@ public class ApiExceptionHandler {
         return false;
     }
 
-    private static ResponseEntity<ErrorResponse> error(HttpStatus status, String message) {
+    private static ResponseEntity<ErrorResponse> error(HttpStatus status, String code, String message) {
         return ResponseEntity.status(status)
-                .body(new ErrorResponse(status.value(), status.getReasonPhrase(), message));
+                .body(new ErrorResponse(status.value(), status.getReasonPhrase(), message, code));
     }
 }

@@ -48,11 +48,11 @@ public record PersistedShoppingListDto(int id, Integer mealPlanId, LocalDate cre
     public record RecipeRef(int id, String name) {
     }
 
-    /** One saved list of a meal plan in short (see {@code GET /api/meal-plans/{id}/shopping-lists}). */
-    public record Summary(int id, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status,
-                          int lines) {
+    /** One saved list of a meal plan in short (see {@code GET /api/meal-plans/{id}/shopping-lists}); {@code purchasedLines} of its {@code lines} are ticked as bought. */
+    public record Summary(int id, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status,
+                          int lines, int purchasedLines) {
         static Summary from(ShoppingListSummary s) {
-            return new Summary(s.id(), s.createdDate(), s.shoppingDate(), s.fromDate(), s.status(), s.lines());
+            return new Summary(s.id(), s.mealPlanId(), s.createdDate(), s.shoppingDate(), s.fromDate(), s.status(), s.lines(), s.purchasedLines());
         }
     }
 

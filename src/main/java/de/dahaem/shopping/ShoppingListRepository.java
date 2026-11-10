@@ -422,27 +422,42 @@ public class ShoppingListRepository {
 
     /** The saved lists of a meal plan, newest first, each with its number of lines. */
     public List<ShoppingListSummary> findListsForPlan(int mealPlanId) {
-        String sql = "SELECT sl.shopping_list_id, sl.shopping_list_created_date, sl.shopping_list_shopping_date, "
-                + "sl.shopping_list_from_date, sl.shopping_list_status, "
-                + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS line_count "
-                + "FROM shopping_list sl WHERE sl.shopping_list_meal_plan_id = ? ORDER BY sl.shopping_list_id DESC";
+        return findLists(mealPlanId);
+    }
+
+    /** Every saved list, newest first (lists that belong to no plan included). */
+    public List<ShoppingListSummary> findAllLists() {
+        return findLists(null);
+    }
+
+    private List<ShoppingListSummary> findLists(Integer mealPlanId) {
+        String sql = "SELECT sl.shopping_list_id, sl.shopping_list_meal_plan_id, sl.shopping_list_created_date, "
+                + "sl.shopping_list_shopping_date, sl.shopping_list_from_date, sl.shopping_list_status, "
+                + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS line_count, "
+                + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id "
+                + "AND sli.shopping_list_item_purchase_status) AS purchased_count "
+                + "FROM shopping_list sl WHERE (? IS NULL OR sl.shopping_list_meal_plan_id = ?) "
+                + "ORDER BY sl.shopping_list_id DESC";
         List<ShoppingListSummary> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, mealPlanId);
+            ps.setObject(1, mealPlanId);
+            ps.setObject(2, mealPlanId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new ShoppingListSummary(
                             rs.getInt("shopping_list_id"),
+                            (Integer) rs.getObject("shopping_list_meal_plan_id"),
                             rs.getObject("shopping_list_created_date", LocalDate.class),
                             rs.getObject("shopping_list_shopping_date", LocalDate.class),
                             rs.getObject("shopping_list_from_date", LocalDate.class),
                             rs.getBoolean("shopping_list_status"),
-                            rs.getInt("line_count")));
+                            rs.getInt("line_count"),
+                            rs.getInt("purchased_count")));
                 }
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Could not list the shopping lists of meal plan " + mealPlanId, e);
+            throw new RuntimeException("Could not list the shopping lists", e);
         }
         return out;
     }
