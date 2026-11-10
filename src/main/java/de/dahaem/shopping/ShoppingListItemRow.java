@@ -1,11 +1,10 @@
 package de.dahaem.shopping;
 
 /**
- * Raw shopping_list_item row, joined to its inventory_item's names and unit. inventoryItemId,
- * nameDeutsch, nameEnglish and unit are all null for a purely manual line with no catalog match.
- * unit is the inventory_item's own tracking unit (inventory_item_unit) — quantityNeeded was
- * computed against that unit at generation time, so it doubles as the line's needed unit for
- * unit-aware pricing.
+ * Raw shopping_list_item row, joined to its inventory_item. inventoryItemId, nameDeutsch, nameEnglish, stockQuantity
+ * and stockUnit are null for a purely manual line with no catalog match. {@code unit} is the unit of the amount: the
+ * line's own unit, or for a line made before migration 0017 the inventory_item's tracking unit. stockQuantity /
+ * stockUnit is what the household has now, in the item's own unit (shown when a line needs review).
  */
 public record ShoppingListItemRow(
         int itemId,
@@ -13,8 +12,11 @@ public record ShoppingListItemRow(
         String nameDeutsch,
         String nameEnglish,
         String unit,
-        int quantityNeeded,
+        double quantityNeeded,
         Integer selectedStoreItemId,
-        boolean isManual
+        boolean isManual,
+        boolean needsReview,
+        Integer stockQuantity,
+        String stockUnit
 ) {
 }

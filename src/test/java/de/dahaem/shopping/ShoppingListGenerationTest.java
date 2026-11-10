@@ -17,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -183,7 +184,7 @@ class ShoppingListGenerationTest {
     }
 
     @Test
-    void dropsAnItemNoStoreCurrentlySells() throws SQLException {
+    void keepsAnItemNoStoreSellsAsAnUnavailableLine() throws SQLException {
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Saffron', 'Safran', 0, 'g', 'Gewürze', NULL, NULL)");
         exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Paella', 2)");
         exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 5)");
@@ -194,8 +195,124 @@ class ShoppingListGenerationTest {
 
         int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
 
-        assertEquals(0, countRows("shopping_list_item WHERE shopping_list_id = " + shoppingListId),
-                "nothing currently sells the item, so there is nothing meaningful to persist");
+        PersistedShoppingListItem line = service.loadPersistedList(shoppingListId, LocalDate.of(2026, 9, 25))
+                .orElseThrow().items().get(0);
+        assertEquals("Safran", line.nameDeutsch());
+        assertFalse(line.available(), "nothing sells it: the line stays, flagged unavailable, never silently dropped");
+        assertTrue(line.storeOptions().isEmpty());
+        assertEquals(5, line.quantityNeeded());
+    }
+
+    @Test
+    void savesTheAmountAsADecimalWithItsUnitAndTheRecipesThatNeedIt() throws SQLException {
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Flour', 'Mehl', 0, 'kg', 'Backen', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Brot', 2)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (2, 'Kuchen', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'kg', 0.5)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 2, 'kg', 0.25)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+        addRecipeToPlan(planId, 2);
+
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+
+        PersistedShoppingListItem line = service.loadPersistedList(shoppingListId, LocalDate.of(2026, 9, 25))
+                .orElseThrow().items().get(0);
+        assertEquals(0.75, line.quantityNeeded(), 0.0001, "0.5 kg + 0.25 kg is not rounded up to 1");
+        assertEquals("kg", line.unit());
+        assertEquals(List.of("Brot", "Kuchen"), line.recipes().stream().map(SourceRecipe::name).toList());
+    }
+
+    @Test
+    void doesNotSubtractStockInAnotherUnitAndFlagsTheLineForReview() throws SQLException {
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Oil', 'Öl', 300, 'g', 'Öle', NULL, NULL)");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Rice', 'Reis', 300, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pfanne', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'ml', 500)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (2, 1, 'g', 500)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+
+        int shoppingListId = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+
+        List<PersistedShoppingListItem> items = service.loadPersistedList(shoppingListId, LocalDate.of(2026, 9, 25))
+                .orElseThrow().items();
+        PersistedShoppingListItem oil = items.stream().filter(i -> i.inventoryItemId() == 1).findFirst().orElseThrow();
+        PersistedShoppingListItem rice = items.stream().filter(i -> i.inventoryItemId() == 2).findFirst().orElseThrow();
+        assertEquals(500, oil.quantityNeeded(), "300 g of stock is not subtracted from 500 ml");
+        assertTrue(oil.needsReview());
+        assertEquals(300, oil.stockQuantity());
+        assertEquals("g", oil.stockUnit());
+        assertEquals("ml", oil.unit());
+        assertEquals(200, rice.quantityNeeded(), "same unit: 500 g - 300 g");
+        assertFalse(rice.needsReview());
+    }
+
+    @Test
+    void expiredStockIsNotSubtractedAndNeedsNoReview() throws SQLException {
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Milk', 'Milch', 500, 'ml', 'Milch', NULL, '2026-09-30')");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pudding', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'ml', 500)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+
+        // shopping on the 25th: the milk (best before the 30th) is still good, so it covers the recipe
+        service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25));
+        assertEquals(0, countRows("shopping_list_item"), "usable stock covers the whole need");
+
+        // shopping on 2026-10-02: the milk has expired by then, so all of it is still needed
+        int later = service.generateFromMealPlan(planId, LocalDate.of(2026, 9, 25), 2, LocalDate.of(2026, 10, 2), null);
+        PersistedShoppingListItem milk = service.loadPersistedList(later, LocalDate.of(2026, 9, 25))
+                .orElseThrow().items().get(0);
+        assertEquals(500, milk.quantityNeeded());
+        assertFalse(milk.needsReview(), "expired stock is simply not counted; nothing to review");
+    }
+
+    @Test
+    void aListIsMadeForAShoppingDayAndJudgesOffersOnThatDay() throws SQLException {
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Pasta', 'Nudeln', 0, 'g', 'Trockenware', NULL, NULL)");
+        exec("INSERT INTO recipe (recipe_id, recipe_name, recipe_servings) VALUES (1, 'Pasta al Pomodoro', 2)");
+        exec("INSERT INTO recipe_ingredient (recipe_ingredient_item_id, recipe_ingredient_recipe_id, recipe_ingredient_unit, recipe_ingredient_quantity_needed) VALUES (1, 1, 'g', 500)");
+        exec("INSERT INTO store (store_id, store_name) VALUES (2, 'Rewe')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (2, 'Barilla')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available, store_item_deposit, store_item_store_product_id, store_item_external_id) VALUES (3, 2, 2, 1, 'g', 500, 1.49, 1, 0.0, NULL, NULL)");
+        // on sale only from 2026-10-01 to 2026-10-07
+        exec("INSERT INTO store_discount (store_discount_id, store_discount_store_item_id, store_discount_start_date, store_discount_end_date, store_discount_price, store_discount_notes, store_discount_deal_quantity, store_discount_deal_price) VALUES (1, 3, '2026-10-01', '2026-10-07', 0.99, 'promo', 1, NULL)");
+
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+        addRecipeToPlan(planId, 1);
+        LocalDate today = LocalDate.of(2026, 9, 25);
+
+        int forToday = service.generateFromMealPlan(planId, today, 2, today, null);
+        int forNextWeek = service.generateFromMealPlan(planId, today, 2, LocalDate.of(2026, 10, 2), null);
+
+        // read on any day: each list judges offers on its OWN shopping day
+        PersistedShoppingList todays = service.loadPersistedList(forToday, LocalDate.of(2026, 10, 3)).orElseThrow();
+        PersistedShoppingList nextWeeks = service.loadPersistedList(forNextWeek, LocalDate.of(2026, 10, 3)).orElseThrow();
+        assertEquals(today, todays.shoppingDate());
+        assertFalse(todays.items().get(0).storeOptions().get(0).onSale(), "no offer runs on the 25th");
+        assertEquals(LocalDate.of(2026, 10, 2), nextWeeks.shoppingDate());
+        StoreOption offer = nextWeeks.items().get(0).storeOptions().get(0);
+        assertTrue(offer.onSale());
+        assertEquals(LocalDate.of(2026, 10, 1), offer.validFrom());
+        assertEquals(LocalDate.of(2026, 10, 7), offer.validUntil());
+
+        // generating again never rewrites the earlier list: both stay, newest first
+        List<ShoppingListSummary> lists = service.listsForPlan(planId);
+        assertEquals(List.of(forNextWeek, forToday), lists.stream().map(ShoppingListSummary::id).toList());
+        assertEquals(1, lists.get(1).lines());
+    }
+
+    @Test
+    void aShoppingDayInThePastIsRefused() throws SQLException {
+        int planId = createPlan(LocalDate.of(2026, 9, 28));
+
+        assertThrows(IllegalArgumentException.class, () -> service.generateFromMealPlan(planId,
+                LocalDate.of(2026, 9, 25), 2, LocalDate.of(2026, 9, 24), null));
+        assertEquals(0, countRows("shopping_list"));
     }
 
     @Test

@@ -24,6 +24,7 @@ public record StoreOption(
         Double salePrice,
         int dealQuantity,
         Double dealPrice,
+        LocalDate validFrom,
         LocalDate validUntil,
         Double deposit,
         Double tillPrice,

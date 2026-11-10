@@ -57,6 +57,7 @@ class PlannedMealApiTest {
 
     @BeforeEach
     void clearPlans() throws SQLException {
+        exec("DELETE FROM shopping_list_item_recipe");
         exec("DELETE FROM shopping_list_item");
         exec("DELETE FROM shopping_list");
         exec("DELETE FROM meal_plan_recipe");
@@ -233,6 +234,30 @@ class PlannedMealApiTest {
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999999).with(csrf()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void shoppingListsAreMadeForAShoppingDayAndListedForThePlan() throws Exception {
+        addMeal("2031-01-08", null);
+        int planId = id("SELECT MAX(meal_plan_id) FROM meal_plan");
+
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf())
+                        .param("shoppingDate", "2031-01-07").param("from", "2031-01-08"))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()))   // today: a second, separate list
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/meal-plans/{id}/shopping-lists", planId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[1].shoppingDate").value("2031-01-07"))
+                .andExpect(jsonPath("$[1].fromDate").value("2031-01-08"))
+                .andExpect(jsonPath("$[0].id").isNumber());
+        mvc.perform(get("/api/meal-plans/{id}/shopping-lists", 999999)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()).param("shoppingDate", "2020-01-01"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()).param("shoppingDate", "soon"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

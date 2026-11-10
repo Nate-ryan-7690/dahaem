@@ -34,13 +34,14 @@ public record ShoppingListDto(List<Line> items) {
      */
     public record StoreOptionDto(int storeItemId, String storeName, String brandName, String packageUnit,
                              int packageSize, Double normalPrice, boolean onSale, Double salePrice,
-                             int dealQuantity, Double dealPrice, LocalDate validUntil, Double deposit,
+                             int dealQuantity, Double dealPrice, LocalDate validFrom, LocalDate validUntil,
+                             Double deposit,
                              Double tillPrice, boolean unitCompatible, Integer packsNeeded, Double packsTotalPrice) {
 
         static StoreOptionDto from(StoreOption option) {
             return new StoreOptionDto(option.storeItemId(), option.storeName(), option.brandName(),
                     option.packageUnit(), option.packageSize(), option.normalPrice(), option.onSale(),
-                    option.salePrice(), option.dealQuantity(), option.dealPrice(), option.validUntil(),
+                    option.salePrice(), option.dealQuantity(), option.dealPrice(), option.validFrom(), option.validUntil(),
                     option.deposit(), option.tillPrice(), option.unitCompatible(), option.packsNeeded(),
                     option.packsTotalPrice());
         }

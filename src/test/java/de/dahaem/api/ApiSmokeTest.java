@@ -666,7 +666,9 @@ class ApiSmokeTest {
     void shoppingListCanBeGeneratedPersistedReloadedAndSelectedFrom() throws Exception {
         int mealPlanId = 1; // seeded by demo_data.sql, with recipes attached
 
-        String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId).with(csrf()))
+        // the demo plan is an old week: count all of its meals, not only the ones from today on (the default)
+        String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", mealPlanId).with(csrf())
+                        .param("from", "2000-01-01"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.shoppingListId").isNumber())
                 .andReturn().getResponse().getContentAsString();
@@ -685,7 +687,7 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.items[0].storeOptions").isArray())
                 .andExpect(jsonPath("$.items[0].selectedStoreItemId").doesNotExist());
 
-        int itemId = itemIdOnList(shoppingListId, 0);
+        int itemId = firstLineSoldByAStore(shoppingListId);   // lines no store sells are kept now, so index 0 may be one
         int inventoryItemId = inventoryItemIdForItem(itemId);
         int matchingStoreItemId = anyStoreItemIdForInventoryItem(inventoryItemId);
         int mismatchedStoreItemId = anyStoreItemIdForADifferentInventoryItem(inventoryItemId);
@@ -703,7 +705,8 @@ class ApiSmokeTest {
 
         mvc.perform(get("/api/shopping-lists/{id}", shoppingListId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].selectedStoreItemId").value(matchingStoreItemId));
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + itemId + ")].selectedStoreItemId",
+                        contains(matchingStoreItemId)));
 
         mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999_999).with(csrf()))
                 .andExpect(status().isNotFound());
@@ -923,6 +926,20 @@ class ApiSmokeTest {
                      + "WHERE shopping_list_id = ? ORDER BY shopping_list_item_id LIMIT 1 OFFSET ?")) {
             ps.setInt(1, shoppingListId);
             ps.setInt(2, index);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private static int firstLineSoldByAStore(int shoppingListId) throws SQLException {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT sli.shopping_list_item_id FROM shopping_list_item sli "
+                     + "WHERE sli.shopping_list_id = ? AND EXISTS (SELECT 1 FROM store_item si "
+                     + "WHERE si.store_item_item_id = sli.shopping_list_item_inventory_item_id) "
+                     + "ORDER BY sli.shopping_list_item_id LIMIT 1")) {
+            ps.setInt(1, shoppingListId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);
