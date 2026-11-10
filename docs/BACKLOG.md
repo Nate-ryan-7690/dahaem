@@ -434,16 +434,23 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   by store, never ranked: the user chooses. The live data also holds identical offer rows (e.g. Butter at Aldi twice,
   same price and dates); the PHP now collapses them, but the importer or `store_discount` should not store them twice
   (unique key on store item, start and end date, price?). Decide with the "Offers read API" item.
+- **Shopping list lines (PR D, migration 0017)** — `in progress` (migration not applied to the live DB by its PR; snapshot
+  first). Built: a list has a shopping day (offers judged on it, each option with `validFrom` / `validUntil`) and a first
+  meal day (`shoppingDate`, `from`; default today, the next day when shopping after dinner); every generation is a NEW
+  list, never rewritten, and `GET /api/meal-plans/{id}/shopping-lists` lists them; lines keep a decimal amount and its
+  unit, the recipes that need them, and stay when no store sells them (`available`); stock is subtracted only in the
+  same unit and when not expired by the shopping day, otherwise nothing is subtracted and the line is `needsReview`
+  (Nate reviews until the unit questions are settled). Still open: the estimated totals per store (next small PR), and
+  the lifecycle below. The strict unit match sends g vs kg to review too; use `Units` to convert once the conversion
+  table exists.
 - **Shopping list lifecycle** — `next`. Nate 2026-11-10: the list shows an estimated total cost (per store); the
   suggestions deliberately do not. Save a list (from a meal-plan week), tick items, record the
   shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn
   when a chosen offer has expired or a price changed, never substitute silently. Audit adds: list the lists (open
   list of a week / household), add a manual line (`is_manual` column exists), change quantity, remove a line,
   tick a line (`purchase_status` exists, never written), complete a list (`status` exists, never set), keep a
-  price snapshot per selection so "price changed" can be told. Problems in the current save (see
-  `docs/api-audit-ui.md` "Possible bugs"), to be fixed with this item: items nobody sells are silently dropped
-  (the spec wants them shown as unavailable); the saved line has no unit and `quantityNeeded` is an integer, so
-  fractional amounts are rounded up.
+  price snapshot per selection so "price changed" can be told. The save problems found in the API audit (items nobody
+  sells dropped, no unit, integer amounts) are fixed in "Shopping list lines".
 - **Inventory writes** — `next`. Add, consume, correct and expiry changes with a history, so low /
   expiring items can lead to "adjust stock", "plan a recipe" or "add to the list". Audit adds: today only a
   purchase changes stock; `GET /api/inventory` returns the whole catalogue incl. zero stock with no search,

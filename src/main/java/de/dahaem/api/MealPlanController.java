@@ -6,6 +6,7 @@ import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.RecipeService;
 import de.dahaem.shared.Portions;
 import de.dahaem.shopping.ShoppingListService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -96,12 +97,23 @@ public class MealPlanController {
      * {@link ShoppingListService#generateFromMealPlanByServings}), so a recipe planned twice counts twice. The
      * optional {@code ?householdId=N} lets the head count apply. An explicit {@code ?people=N} overrides all of
      * that: every recipe is scaled to N people, as before.
+     *
+     * <p>{@code ?shoppingDate=YYYY-MM-DD} is the day of the shopping trip (default today, not in the past): the
+     * offers that run on that day are the ones shown, so a list made today for a trip next week shows next week's
+     * offers. {@code ?from=YYYY-MM-DD} is the first meal day the list counts (default the shopping day; pass the next
+     * day when the shopping is after dinner). Every call makes a NEW list; earlier lists of the plan stay as they
+     * were ({@code GET /{id}/shopping-lists} shows them). Stock is subtracted only in the same unit and only when it
+     * has not expired by the shopping day; a unit mismatch leaves the line flagged {@code needsReview}.
      */
     @PostMapping("/{id}/shopping-list")
     @ResponseStatus(HttpStatus.CREATED)
     public GeneratedShoppingListDto generateShoppingList(@PathVariable("id") int id,
                                                           @RequestParam(name = "people", required = false) Integer people,
-                                                          @RequestParam(name = "householdId", required = false) Integer householdId) {
+                                                          @RequestParam(name = "householdId", required = false) Integer householdId,
+                                                          @RequestParam(name = "shoppingDate", required = false)
+                                                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate shoppingDate,
+                                                          @RequestParam(name = "from", required = false)
+                                                          @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from) {
         mealPlanService.allPlans().stream()
                 .filter(p -> p.getId() == id)
                 .findFirst()
@@ -109,15 +121,29 @@ public class MealPlanController {
         if (people != null && !Portions.isValidPeople(people)) {
             throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
         }
+        LocalDate today = mealPlanService.today();   // the household's day, not the server's
+        LocalDate tripDay = shoppingDate != null ? shoppingDate : today;
+        LocalDate firstMealDay = from != null ? from : tripDay;
         int shoppingListId;
         if (people != null) {
-            shoppingListId = shoppingListService.generateFromMealPlan(id, LocalDate.now(), people);
+            shoppingListId = shoppingListService.generateFromMealPlan(id, today, people, tripDay, firstMealDay);
         } else {
             Integer householdPeople = householdId == null ? null : accountService.findHousehold(householdId)
                     .orElseThrow(() -> new NotFoundException("No household with id " + householdId))
                     .getPeople();
-            shoppingListId = shoppingListService.generateFromMealPlanByServings(id, LocalDate.now(), householdPeople);
+            shoppingListId = shoppingListService.generateFromMealPlanByServings(id, today, householdPeople, tripDay,
+                    firstMealDay);
         }
         return new GeneratedShoppingListDto(shoppingListId);
+    }
+
+    /** The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). */
+    @GetMapping("/{id}/shopping-lists")
+    public List<PersistedShoppingListDto.Summary> shoppingLists(@PathVariable("id") int id) {
+        mealPlanService.allPlans().stream()
+                .filter(p -> p.getId() == id)
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("No meal plan with id " + id));
+        return shoppingListService.listsForPlan(id).stream().map(PersistedShoppingListDto.Summary::from).toList();
     }
 }

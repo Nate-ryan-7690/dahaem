@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-67 types in 53 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+69 types in 53 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -114,6 +114,12 @@ classDiagram
     class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
         <<record>>
     }
+    class api_PersistedShoppingListDto_RecipeRef["PersistedShoppingListDto.RecipeRef"] {
+        <<record>>
+    }
+    class api_PersistedShoppingListDto_Summary["PersistedShoppingListDto.Summary"] {
+        <<record>>
+    }
     class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
@@ -219,6 +225,7 @@ classDiagram
     api_MealPlanController ..> api_CreateMealPlanRequest
     api_MealPlanController ..> api_AddPlannedRecipeRequest
     api_MealPlanController ..> api_GeneratedShoppingListDto
+    api_MealPlanController ..> api_PersistedShoppingListDto
     api_MealPlanDto *-- api_MealPlanDto_PlannedRecipe
     api_MealPlanWeekDto *-- api_MealPlanWeekDto_DayDto
     api_MealPlanWeekDto_DayDto --> api_PlannedMealDto
@@ -228,6 +235,9 @@ classDiagram
     api_PantrySuggestionDto --> api_PantryIngredientDto
     api_PantrySuggestionPageDto --> api_PantrySuggestionDto
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
+    api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_RecipeRef
+    api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Summary
+    api_PersistedShoppingListDto_Line --> api_PersistedShoppingListDto_RecipeRef
     api_PersistedShoppingListDto_Line --> api_ShoppingListDto
     api_PlannedMealController ..> api_MealPlanWeekDto
     api_PlannedMealController ..> api_AddMealRequest
@@ -300,8 +310,10 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`PantryOfferDto`](#pantryofferdto) | record |  | An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in packUnit, e.g. |
 | [`PantrySuggestionDto`](#pantrysuggestiondto) | record |  | A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing ones are on sa |
 | [`PantrySuggestionPageDto`](#pantrysuggestionpagedto) | record |  | One page of GET /api/suggestions/pantry. |
-| [`PersistedShoppingListDto`](#persistedshoppinglistdto) | record |  | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
+| [`PersistedShoppingListDto`](#persistedshoppinglistdto) | record |  | A previously generated shopping list as it was persisted: its items with names, the amount still needed and its unit, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has s |
 | [`PersistedShoppingListDto.Line`](#persistedshoppinglistdtoline) | record |  |  |
+| [`PersistedShoppingListDto.RecipeRef`](#persistedshoppinglistdtoreciperef) | record |  | A recipe that needs a line. |
+| [`PersistedShoppingListDto.Summary`](#persistedshoppinglistdtosummary) | record |  | One saved list of a meal plan in short (see GET /api/meal-plans/{id/shopping-lists}). |
 | [`PlannedMealController`](#plannedmealcontroller) | class | REST controller | The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal, remove it, and set a recipe's preferred servings. |
 | [`PlannedMealDto`](#plannedmealdto) | record |  | One planned meal. |
 | [`PreferredServingsDto`](#preferredservingsdto) | record |  | A recipe's permanent preferred servings ("this meal is always for X people"); null = no preference. |
@@ -1202,7 +1214,8 @@ classDiagram
         +create(CreateMealPlanRequest request) MealPlanDto
         +addRecipe(int id, AddPlannedRecipeRequest request) MealPlanDto
         +removeRecipe(int id, int recipeId) MealPlanDto
-        +generateShoppingList(int id, Integer people, Integer householdId) GeneratedShoppingListDto
+        +generateShoppingList(int id, Integer people, Integer householdId, LocalDate shoppingDate, LocalDate from) GeneratedShoppingListDto
+        +shoppingLists(int id) List~PersistedShoppingListDto.Summary~
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class mealplanner_RecipeService["RecipeService"]
@@ -1220,6 +1233,9 @@ classDiagram
     class api_GeneratedShoppingListDto["GeneratedShoppingListDto"] {
         <<record>>
     }
+    class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
+        <<record>>
+    }
     api_MealPlanController --> mealplanner_MealPlanService
     api_MealPlanController --> mealplanner_RecipeService
     api_MealPlanController --> shopping_ShoppingListService
@@ -1228,6 +1244,7 @@ classDiagram
     api_MealPlanController ..> api_CreateMealPlanRequest
     api_MealPlanController ..> api_AddPlannedRecipeRequest
     api_MealPlanController ..> api_GeneratedShoppingListDto
+    api_MealPlanController ..> api_PersistedShoppingListDto
 ```
 
 | Field | Type |
@@ -1244,7 +1261,8 @@ classDiagram
 | `MealPlanDto create(CreateMealPlanRequest request)` | public | Creates an empty plan for the week. |
 | `MealPlanDto addRecipe(int id, AddPlannedRecipeRequest request)` | public | Adds a recipe to a plan and returns the updated plan. |
 | `MealPlanDto removeRecipe(int id, int recipeId)` | public | Removes a recipe from a plan and returns the updated plan. |
-| `GeneratedShoppingListDto generateShoppingList(int id, Integer people, Integer householdId)` | public | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
+| `GeneratedShoppingListDto generateShoppingList(int id, Integer people, Integer householdId, LocalDate shoppingDate, LocalDate from)` | public | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
+| `List<PersistedShoppingListDto.Summary> shoppingLists(int id)` | public | The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). |
 
 ## MealPlanDto
 
@@ -1660,10 +1678,18 @@ classDiagram
 
 *record*
 
-A previously generated shopping list as it was persisted: its items with names, quantity still
-needed, every current store option for each item (cheapest till price first, but not pre-picked)
-and the store item the user has selected, if any. DAHÄM surfaces the options; it never chooses
-one for the user.
+A previously generated shopping list as it was persisted: its items with names, the amount still needed and its
+unit, every current store option for each item (cheapest till price first, but not pre-picked) and the store item
+the user has selected, if any. DAHÄM surfaces the options; it never chooses one for the user.
+
+shoppingDate is the day of the trip the list was made for: the offers in the store options are the ones
+that run on that day (validFrom / validUntil on each option say when). fromDate is the first
+meal day the list counts. Both are null on a list made before they existed.
+
+Each line: available is false when no store currently sells the item (the line is kept, never silently
+dropped); needsReview is true when stock exists but in another unit than the line's, so nothing was
+subtracted and a person checks it (stockQuantity / stockUnit show what the household has);
+recipes are the recipes that need the line.
 
 ```mermaid
 classDiagram
@@ -1673,6 +1699,8 @@ classDiagram
         +int id
         +Integer mealPlanId
         +LocalDate createdDate
+        +LocalDate shoppingDate
+        +LocalDate fromDate
         +boolean status
         +List~Line~ items
         ~from(PersistedShoppingList list) PersistedShoppingListDto$
@@ -1680,14 +1708,26 @@ classDiagram
     class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
         <<record>>
     }
+    class api_PersistedShoppingListDto_RecipeRef["PersistedShoppingListDto.RecipeRef"] {
+        <<record>>
+    }
+    class api_PersistedShoppingListDto_Summary["PersistedShoppingListDto.Summary"] {
+        <<record>>
+    }
     class shopping_PersistedShoppingList["PersistedShoppingList"] {
         <<record>>
+    }
+    class api_MealPlanController["MealPlanController"] {
+        <<controller>>
     }
     class api_ShoppingListItemController["ShoppingListItemController"] {
         <<controller>>
     }
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
+    api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_RecipeRef
+    api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Summary
     api_PersistedShoppingListDto ..> shopping_PersistedShoppingList
+    api_MealPlanController ..> api_PersistedShoppingListDto
     api_ShoppingListItemController ..> api_PersistedShoppingListDto
 ```
 
@@ -1696,6 +1736,8 @@ classDiagram
 | `id` | `int` |
 | `mealPlanId` | `Integer` |
 | `createdDate` | `LocalDate` |
+| `shoppingDate` | `LocalDate` |
+| `fromDate` | `LocalDate` |
 | `status` | `boolean` |
 | `items` | `List<Line>` |
 
@@ -1703,7 +1745,7 @@ classDiagram
 |---|---|---|
 | `PersistedShoppingListDto from(PersistedShoppingList list)` | package static |  |
 
-**Referenced by:** `ShoppingListItemController`
+**Referenced by:** `MealPlanController`, `ShoppingListItemController`
 
 ## PersistedShoppingListDto.Line
 
@@ -1718,13 +1760,22 @@ classDiagram
         +Integer inventoryItemId
         +String nameDeutsch
         +String nameEnglish
-        +int quantityNeeded
+        +double quantityNeeded
+        +String unit
+        +boolean available
+        +boolean needsReview
+        +Integer stockQuantity
+        +String stockUnit
         +boolean isManual
+        +List~RecipeRef~ recipes
         +List~ShoppingListDto.StoreOptionDto~ storeOptions
         +Integer selectedStoreItemId
         ~from(PersistedShoppingListItem item) Line$
     }
     class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
+        <<record>>
+    }
+    class api_PersistedShoppingListDto_RecipeRef["PersistedShoppingListDto.RecipeRef"] {
         <<record>>
     }
     class api_ShoppingListDto["ShoppingListDto"] {
@@ -1733,6 +1784,7 @@ classDiagram
     class shopping_PersistedShoppingListItem["PersistedShoppingListItem"] {
         <<record>>
     }
+    api_PersistedShoppingListDto_Line --> api_PersistedShoppingListDto_RecipeRef
     api_PersistedShoppingListDto_Line --> api_ShoppingListDto
     api_PersistedShoppingListDto_Line ..> shopping_PersistedShoppingListItem
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
@@ -1744,14 +1796,95 @@ classDiagram
 | `inventoryItemId` | `Integer` |
 | `nameDeutsch` | `String` |
 | `nameEnglish` | `String` |
-| `quantityNeeded` | `int` |
+| `quantityNeeded` | `double` |
+| `unit` | `String` |
+| `available` | `boolean` |
+| `needsReview` | `boolean` |
+| `stockQuantity` | `Integer` |
+| `stockUnit` | `String` |
 | `isManual` | `boolean` |
+| `recipes` | `List<RecipeRef>` |
 | `storeOptions` | `List<ShoppingListDto.StoreOptionDto>` |
 | `selectedStoreItemId` | `Integer` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `Line from(PersistedShoppingListItem item)` | package static |  |
+
+**Referenced by:** `PersistedShoppingListDto`
+
+## PersistedShoppingListDto.RecipeRef
+
+*record*
+
+A recipe that needs a line.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PersistedShoppingListDto_RecipeRef["PersistedShoppingListDto.RecipeRef"] {
+        <<record>>
+        +int id
+        +String name
+    }
+    class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
+        <<record>>
+    }
+    class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
+        <<record>>
+    }
+    api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_RecipeRef
+    api_PersistedShoppingListDto_Line --> api_PersistedShoppingListDto_RecipeRef
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+
+**Referenced by:** `PersistedShoppingListDto`
+
+## PersistedShoppingListDto.Summary
+
+*record*
+
+One saved list of a meal plan in short (see GET /api/meal-plans/{id/shopping-lists}).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PersistedShoppingListDto_Summary["PersistedShoppingListDto.Summary"] {
+        <<record>>
+        +int id
+        +LocalDate createdDate
+        +LocalDate shoppingDate
+        +LocalDate fromDate
+        +boolean status
+        +int lines
+        ~from(ShoppingListSummary s) Summary$
+    }
+    class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
+        <<record>>
+    }
+    class shopping_ShoppingListSummary["ShoppingListSummary"] {
+        <<record>>
+    }
+    api_PersistedShoppingListDto_Summary ..> shopping_ShoppingListSummary
+    api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Summary
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `createdDate` | `LocalDate` |
+| `shoppingDate` | `LocalDate` |
+| `fromDate` | `LocalDate` |
+| `status` | `boolean` |
+| `lines` | `int` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `Summary from(ShoppingListSummary s)` | package static |  |
 
 **Referenced by:** `PersistedShoppingListDto`
 
@@ -2974,6 +3107,7 @@ classDiagram
         +Double salePrice
         +int dealQuantity
         +Double dealPrice
+        +LocalDate validFrom
         +LocalDate validUntil
         +Double deposit
         +Double tillPrice
@@ -3008,6 +3142,7 @@ classDiagram
 | `salePrice` | `Double` |
 | `dealQuantity` | `int` |
 | `dealPrice` | `Double` |
+| `validFrom` | `LocalDate` |
 | `validUntil` | `LocalDate` |
 | `deposit` | `Double` |
 | `tillPrice` | `Double` |

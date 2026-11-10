@@ -2,12 +2,13 @@ package de.dahaem.shopping;
 
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.Item;
-import de.dahaem.mealplanner.MealPlanRecipe;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.mealplanner.MealServings;
 import de.dahaem.mealplanner.PlannedMeal;
 import de.dahaem.shared.Units;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -89,8 +90,8 @@ public class ShoppingListService {
      * shopping_list's id.
      */
     public int generateFromMealPlan(int mealPlanId, LocalDate today) {
-        List<Integer> recipeIds = recipeIdsForPlan(mealPlanId);
-        return persistGeneratedList(mealPlanId, today, buildFromRecipes(recipeIds, today));
+        return persistGeneratedList(mealPlanId, today, today, null,
+                buildFromRecipes(recipeIdsForPlan(mealPlanId, null), today));
     }
 
     /**
@@ -99,8 +100,21 @@ public class ShoppingListService {
      * {@link #generateFromMealPlan(int, LocalDate)}.
      */
     public int generateFromMealPlan(int mealPlanId, LocalDate today, int people) {
-        List<Integer> recipeIds = recipeIdsForPlan(mealPlanId);
-        return persistGeneratedList(mealPlanId, today, buildFromRecipes(recipeIds, today, people));
+        return generateFromMealPlan(mealPlanId, today, people, today, null);
+    }
+
+    /**
+     * As {@link #generateFromMealPlan(int, LocalDate, int)} for a shopping trip on {@code shoppingDate} (offers are
+     * judged on that day, and stock that has expired by then is not subtracted) counting the meals from {@code from}
+     * on ({@code null} = all meals of the plan). {@code today} is the day the list is made.
+     *
+     * @throws IllegalArgumentException when the shopping day is before today
+     */
+    public int generateFromMealPlan(int mealPlanId, LocalDate today, int people, LocalDate shoppingDate,
+                                    LocalDate from) {
+        requireNotPast(shoppingDate, today);
+        return persistGeneratedList(mealPlanId, today, shoppingDate, from,
+                buildFromRecipes(recipeIdsForPlan(mealPlanId, from), shoppingDate, people));
     }
 
     /**
@@ -111,47 +125,78 @@ public class ShoppingListService {
      * Otherwise identical to {@link #generateFromMealPlan(int, LocalDate)}. {@code householdPeople} may be null.
      */
     public int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople) {
-        Map<Integer, Integer> servingsPerRecipe = servingsPerRecipe(mealPlanId, householdPeople);
-        return persistGeneratedList(mealPlanId, today,
-                buildFromRecipes(today, repository.aggregateIngredientsByServings(servingsPerRecipe)));
+        return generateFromMealPlanByServings(mealPlanId, today, householdPeople, today, today);
+    }
+
+    /**
+     * As {@link #generateFromMealPlanByServings(int, LocalDate, Integer)} for a shopping trip on {@code shoppingDate}
+     * (offers are judged on that day, stock that has expired by then is not subtracted), counting the meals from
+     * {@code from} on ({@code null} = all). A list is always a new row; earlier lists of the plan stay as they are.
+     * Stock is subtracted only when its unit is the line's unit; if the units differ nothing is subtracted and the
+     * line is flagged {@code needsReview}. A line no store sells is kept.
+     *
+     * @throws IllegalArgumentException when the shopping day is before today
+     */
+    public int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople,
+                                              LocalDate shoppingDate, LocalDate from) {
+        requireNotPast(shoppingDate, today);
+        Map<Integer, Integer> servingsPerRecipe = servingsPerRecipe(mealPlanId, householdPeople, from);
+        return persistGeneratedList(mealPlanId, today, shoppingDate, from,
+                buildFromRecipes(shoppingDate, repository.aggregateIngredientsByServings(servingsPerRecipe)));
     }
 
     /** Per recipe on the plan, the servings of all its meals added up (a recipe planned for 2 and for 4 is 6). */
     Map<Integer, Integer> servingsPerRecipe(int mealPlanId, Integer householdPeople) {
+        return servingsPerRecipe(mealPlanId, householdPeople, null);
+    }
+
+    // Only the meals on or after 'from' count (null = all of them).
+    private Map<Integer, Integer> servingsPerRecipe(int mealPlanId, Integer householdPeople, LocalDate from) {
         Map<Integer, Integer> servingsPerRecipe = new LinkedHashMap<>();
-        for (PlannedMeal meal : mealPlanRepository.findMeals(mealPlanId)) {
+        for (PlannedMeal meal : mealsFrom(mealPlanId, from)) {
             servingsPerRecipe.merge(meal.getRecipeId(), MealServings.resolve(meal, householdPeople).servings(),
                     Integer::sum);
         }
         return servingsPerRecipe;
     }
 
-    private List<Integer> recipeIdsForPlan(int mealPlanId) {
-        List<MealPlanRecipe> planRecipes = mealPlanRepository.findRecipesForPlan(mealPlanId);
-        return planRecipes.stream().map(MealPlanRecipe::getRecipeId).distinct().toList();
+    private List<Integer> recipeIdsForPlan(int mealPlanId, LocalDate from) {
+        return mealsFrom(mealPlanId, from).stream().map(PlannedMeal::getRecipeId).distinct().toList();
     }
 
-    private int persistGeneratedList(int mealPlanId, LocalDate today, ShoppingList list) {
+    private List<PlannedMeal> mealsFrom(int mealPlanId, LocalDate from) {
+        return mealPlanRepository.findMeals(mealPlanId).stream()
+                .filter(meal -> from == null || !meal.getDate().isBefore(from))
+                .toList();
+    }
+
+    private static void requireNotPast(LocalDate shoppingDate, LocalDate today) {
+        if (shoppingDate.isBefore(today)) {
+            throw new IllegalArgumentException("'shoppingDate' must not be before today");
+        }
+    }
+
+    private int persistGeneratedList(int mealPlanId, LocalDate today, LocalDate shoppingDate, LocalDate from,
+                                     ShoppingList list) {
         Connection con = repository.openTransaction();
         try {
-            int shoppingListId = repository.insertShoppingList(con, mealPlanId, today, false);
+            int shoppingListId = repository.insertShoppingList(con, mealPlanId, today, shoppingDate, from, false);
 
             for (ShoppingListItem item : list.items()) {
-                int inStock = inventoryRepository.findById(item.inventoryItemId())
-                        .map(Item::getQuantity)
-                        .orElse(0);
-                double missing = item.totalQuantity() - inStock;
+                Item stock = inventoryRepository.findById(item.inventoryItemId()).orElse(null);
+                double usable = usableStock(stock, shoppingDate);
+                boolean sameUnit = stock != null && sameUnit(item.unit(), stock.getUnit());
+                // Stock is subtracted only in the same unit; otherwise nothing is, and a person reviews the line.
+                boolean needsReview = usable > 0 && !sameUnit;
+                double missing = item.totalQuantity() - (sameUnit ? usable : 0);
                 if (missing <= 0) {
                     continue; // already fully covered by inventory
                 }
-                if (item.storeOptions().isEmpty()) {
-                    continue; // nothing currently sells it; nothing meaningful to persist
-                }
-                // TODO: shopping_list_item_quantity_needed is INTEGER; fractional needs (kg, L) are
-                // rounded up until that column is widened to a real number type.
-                int quantityNeeded = (int) Math.ceil(missing);
-                repository.insertShoppingListItem(con, shoppingListId, null, item.inventoryItemId(), null,
-                        quantityNeeded, null, false, false);
+                // a line no store sells stays on the list: it is shown as unavailable when the list is read
+                int lineId = repository.insertShoppingListItem(con, shoppingListId, null, item.inventoryItemId(), null,
+                        BigDecimal.valueOf(missing).setScale(3, RoundingMode.HALF_UP), item.unit(), null, false,
+                        false, needsReview);
+                repository.insertItemRecipes(con, lineId, item.sourceRecipeIds());
             }
 
             con.commit();
@@ -165,6 +210,19 @@ public class ShoppingListService {
         } finally {
             close(con);
         }
+    }
+
+    /** What can be counted on: the stock if there is some and it has not expired by the shopping day, else 0. */
+    private static double usableStock(Item stock, LocalDate shoppingDate) {
+        if (stock == null || stock.getQuantity() <= 0) {
+            return 0;
+        }
+        LocalDate expires = stock.getEarliestExpDate();
+        return expires != null && expires.isBefore(shoppingDate) ? 0 : stock.getQuantity();
+    }
+
+    private static boolean sameUnit(String a, String b) {
+        return a != null && b != null && a.trim().equalsIgnoreCase(b.trim());
     }
 
     private static void rollback(Connection con) {
@@ -220,20 +278,33 @@ public class ShoppingListService {
      */
     public Optional<PersistedShoppingList> loadPersistedList(int shoppingListId, LocalDate today) {
         return repository.findShoppingListById(shoppingListId).map(row -> {
+            // offers are judged on the list's own shopping day (a list made before it existed: on 'today')
+            LocalDate offersOn = row.shoppingDate() != null ? row.shoppingDate() : today;
+            Map<Integer, List<SourceRecipe>> recipes = repository.recipesByItem(shoppingListId);
             List<PersistedShoppingListItem> items = repository.findItemsForShoppingList(shoppingListId).stream()
-                    .map(itemRow -> toPersistedItem(itemRow, today))
+                    .map(itemRow -> toPersistedItem(itemRow, offersOn, recipes.getOrDefault(itemRow.itemId(), List.of())))
                     .toList();
-            return new PersistedShoppingList(row.id(), row.mealPlanId(), row.createdDate(), row.status(), items);
+            return new PersistedShoppingList(row.id(), row.mealPlanId(), row.createdDate(), row.shoppingDate(),
+                    row.fromDate(), row.status(), items);
         });
     }
 
-    private PersistedShoppingListItem toPersistedItem(ShoppingListItemRow row, LocalDate today) {
+    /** The saved lists of a meal plan, newest first. A new generation never changes an older list. */
+    public List<ShoppingListSummary> listsForPlan(int mealPlanId) {
+        return repository.findListsForPlan(mealPlanId);
+    }
+
+    private PersistedShoppingListItem toPersistedItem(ShoppingListItemRow row, LocalDate offersOn,
+                                                      List<SourceRecipe> recipes) {
         List<StoreOption> options = row.inventoryItemId() == null
                 ? List.of()
-                : buildStoreOptions(repository.loadStoreCandidates(row.inventoryItemId(), today),
+                : buildStoreOptions(repository.loadStoreCandidates(row.inventoryItemId(), offersOn),
                         row.quantityNeeded(), row.unit());
+        // a manual line has no catalogue item to look up; every other line is available when some store sells it
+        boolean available = row.inventoryItemId() == null || !options.isEmpty();
         return new PersistedShoppingListItem(row.itemId(), row.inventoryItemId(), row.nameDeutsch(),
-                row.nameEnglish(), row.quantityNeeded(), row.isManual(), options, row.selectedStoreItemId());
+                row.nameEnglish(), row.quantityNeeded(), row.unit(), available, row.needsReview(),
+                row.stockQuantity(), row.stockUnit(), row.isManual(), recipes, options, row.selectedStoreItemId());
     }
 
     /**
@@ -319,6 +390,7 @@ public class ShoppingListService {
                 candidate.discountPrice(),
                 candidate.dealQuantity(),
                 candidate.dealPrice(),
+                candidate.discountValidFrom(),
                 candidate.discountValidUntil(),
                 deposit,
                 tillPrice,

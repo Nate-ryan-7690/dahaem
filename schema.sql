@@ -351,6 +351,12 @@ CREATE TABLE shopping_list ( shopping_list_id INTEGER PRIMARY KEY AUTO_INCREMENT
 
 	shopping_list_created_date DATE NOT NULL,
 
+	-- the day of the shopping trip: offers are judged on it (migration 0017); NULL on a list made before it
+	shopping_list_shopping_date DATE NULL,
+
+	-- the first meal day the list counts (migration 0017); NULL on a list made before it
+	shopping_list_from_date DATE NULL,
+
 	shopping_list_status BOOLEAN NOT NULL,
 
 	FOREIGN KEY(shopping_list_meal_plan_id) REFERENCES meal_plan(meal_plan_id));
@@ -365,7 +371,13 @@ CREATE TABLE shopping_list_item(shopping_list_item_id INTEGER PRIMARY KEY AUTO_I
 
 	shopping_list_item_store_section TEXT,
 
-	shopping_list_item_quantity_needed INTEGER NOT NULL,
+	shopping_list_item_quantity_needed DECIMAL(10,3) NOT NULL,
+
+	-- the unit of the amount (NULL on a line made before migration 0017: the item's own unit)
+	shopping_list_item_unit TEXT NULL,
+
+	-- TRUE = stock was not subtracted because its unit differs from the line's: Nate reviews
+	shopping_list_item_needs_review BOOLEAN NOT NULL DEFAULT FALSE,
 
 	shopping_list_item_is_discounted BOOLEAN,
 
@@ -378,6 +390,18 @@ CREATE TABLE shopping_list_item(shopping_list_item_id INTEGER PRIMARY KEY AUTO_I
 	FOREIGN KEY(shopping_list_item_store_item_id) REFERENCES store_item(store_item_id),
 
 	FOREIGN KEY(shopping_list_item_inventory_item_id) REFERENCES inventory_item(inventory_item_id));
+
+-- Which recipes need a line (migration 0017).
+CREATE TABLE shopping_list_item_recipe (
+	shopping_list_item_recipe_item_id INTEGER NOT NULL,
+
+	shopping_list_item_recipe_recipe_id INTEGER NOT NULL,
+
+	PRIMARY KEY (shopping_list_item_recipe_item_id, shopping_list_item_recipe_recipe_id),
+
+	FOREIGN KEY(shopping_list_item_recipe_item_id) REFERENCES shopping_list_item(shopping_list_item_id),
+
+	FOREIGN KEY(shopping_list_item_recipe_recipe_id) REFERENCES recipe(recipe_id));
 
 CREATE TABLE store_import_run (
     store_import_run_id          INTEGER PRIMARY KEY AUTO_INCREMENT,

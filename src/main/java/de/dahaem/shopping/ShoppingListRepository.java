@@ -3,6 +3,7 @@ package de.dahaem.shopping;
 import de.dahaem.shared.Database;
 import de.dahaem.shared.Portions;
 
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,7 +13,9 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -175,7 +178,7 @@ public class ShoppingListRepository {
                 + "si.store_item_package_unit, si.store_item_package_size, si.store_item_price, "
                 + "si.store_item_deposit, si.store_item_is_available, "
                 + "sp.store_product_last_seen, sp.store_product_is_available, "
-                + "sd.store_discount_price, sd.store_discount_end_date, "
+                + "sd.store_discount_price, sd.store_discount_start_date, sd.store_discount_end_date, "
                 + "sd.store_discount_deal_quantity, sd.store_discount_deal_price "
                 + "FROM store_item si "
                 + "JOIN store s ON s.store_id = si.store_item_store_id "
@@ -209,6 +212,7 @@ public class ShoppingListRepository {
 
     private StoreItemCandidate mapCandidate(ResultSet rs) throws SQLException {
         LocalDate lastSeen = rs.getObject("store_product_last_seen", LocalDate.class);
+        LocalDate validFrom = rs.getObject("store_discount_start_date", LocalDate.class);
         LocalDate validUntil = rs.getObject("store_discount_end_date", LocalDate.class);
         int dealQuantity = rs.getInt("store_discount_deal_quantity");
         if (rs.wasNull()) {
@@ -226,6 +230,7 @@ public class ShoppingListRepository {
                 lastSeen,
                 getNullableBoolean(rs, "store_product_is_available"),
                 getNullableDouble(rs, "store_discount_price"),
+                validFrom,
                 validUntil,
                 dealQuantity,
                 getNullableDouble(rs, "store_discount_deal_price"));
@@ -252,15 +257,20 @@ public class ShoppingListRepository {
         }
     }
 
-    /** Inserts a new shopping_list row, on the caller's transaction. Returns its generated id. */
-    public int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, boolean status)
-            throws SQLException {
+    /**
+     * Inserts a new shopping_list row, on the caller's transaction. Returns its generated id. shoppingDate is the day of
+     * the trip (offers are judged on it), fromDate the first meal day the list counts; either may be null.
+     */
+    public int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate,
+                                  LocalDate fromDate, boolean status) throws SQLException {
         String sql = "INSERT INTO shopping_list (shopping_list_meal_plan_id, shopping_list_created_date, "
-                + "shopping_list_status) VALUES (?, ?, ?)";
+                + "shopping_list_shopping_date, shopping_list_from_date, shopping_list_status) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setObject(1, mealPlanId);
             ps.setObject(2, createdDate);
-            ps.setBoolean(3, status);
+            ps.setObject(3, shoppingDate);
+            ps.setObject(4, fromDate);
+            ps.setBoolean(5, status);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -270,37 +280,60 @@ public class ShoppingListRepository {
     }
 
     /**
-     * Inserts one shopping_list_item row, on the caller's transaction. storeItemId is nullable
+     * Inserts one shopping_list_item row, on the caller's transaction, and returns its id. unit is the unit of the
+     * amount; needsReview marks a line whose stock was not subtracted because the units differ. storeItemId is nullable
      * (shopping_list_item_store_item_id): null means the line is still awaiting the user's choice
      * of store product. inventoryItemId (shopping_list_item_inventory_item_id) is nullable at the
      * table level for a purely manual free-text line, but every generated line must set it — it is
      * the only way to know which store_items are candidates for the line once it is reloaded.
      */
-    public void insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId,
-                                        Integer inventoryItemId, String storeSection, int quantityNeeded,
-                                        Boolean isDiscounted, boolean purchaseStatus, boolean isManual)
-            throws SQLException {
+    public int insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId,
+                                      Integer inventoryItemId, String storeSection, BigDecimal quantityNeeded,
+                                      String unit, Boolean isDiscounted, boolean purchaseStatus, boolean isManual,
+                                      boolean needsReview) throws SQLException {
         String sql = "INSERT INTO shopping_list_item (shopping_list_id, shopping_list_item_store_item_id, "
                 + "shopping_list_item_inventory_item_id, shopping_list_item_store_section, "
-                + "shopping_list_item_quantity_needed, shopping_list_item_is_discounted, "
-                + "shopping_list_item_purchase_status, shopping_list_item_is_manual) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement ps = con.prepareStatement(sql)) {
+                + "shopping_list_item_quantity_needed, shopping_list_item_unit, shopping_list_item_is_discounted, "
+                + "shopping_list_item_purchase_status, shopping_list_item_is_manual, shopping_list_item_needs_review) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, shoppingListId);
             ps.setObject(2, storeItemId);
             ps.setObject(3, inventoryItemId);
             ps.setString(4, storeSection);
-            ps.setInt(5, quantityNeeded);
-            ps.setObject(6, isDiscounted);
-            ps.setBoolean(7, purchaseStatus);
-            ps.setBoolean(8, isManual);
+            ps.setBigDecimal(5, quantityNeeded);
+            ps.setString(6, unit);
+            ps.setObject(7, isDiscounted);
+            ps.setBoolean(8, purchaseStatus);
+            ps.setBoolean(9, isManual);
+            ps.setBoolean(10, needsReview);
             ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                keys.next();
+                return keys.getInt(1);
+            }
+        }
+    }
+
+    /** Records which recipes need a line, on the caller's transaction. */
+    public void insertItemRecipes(Connection con, int shoppingListItemId, List<Integer> recipeIds) throws SQLException {
+        String sql = "INSERT INTO shopping_list_item_recipe (shopping_list_item_recipe_item_id, "
+                + "shopping_list_item_recipe_recipe_id) VALUES (?, ?)";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            for (int recipeId : recipeIds) {
+                ps.setInt(1, shoppingListItemId);
+                ps.setInt(2, recipeId);
+                ps.addBatch();
+            }
+            ps.executeBatch();
         }
     }
 
     /** The shopping_list row for a persisted list, or empty if no such list exists. */
     public Optional<ShoppingListRow> findShoppingListById(int shoppingListId) {
         String sql = "SELECT shopping_list_id, shopping_list_meal_plan_id, shopping_list_created_date, "
-                + "shopping_list_status FROM shopping_list WHERE shopping_list_id = ?";
+                + "shopping_list_shopping_date, shopping_list_from_date, shopping_list_status "
+                + "FROM shopping_list WHERE shopping_list_id = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, shoppingListId);
@@ -312,6 +345,8 @@ public class ShoppingListRepository {
                         rs.getInt("shopping_list_id"),
                         (Integer) rs.getObject("shopping_list_meal_plan_id"),
                         rs.getObject("shopping_list_created_date", LocalDate.class),
+                        rs.getObject("shopping_list_shopping_date", LocalDate.class),
+                        rs.getObject("shopping_list_from_date", LocalDate.class),
                         rs.getBoolean("shopping_list_status")));
             }
         } catch (SQLException e) {
@@ -325,9 +360,11 @@ public class ShoppingListRepository {
      */
     public List<ShoppingListItemRow> findItemsForShoppingList(int shoppingListId) {
         String sql = "SELECT sli.shopping_list_item_id, sli.shopping_list_item_inventory_item_id, "
-                + "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, ii.inventory_item_unit, "
+                + "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, "
+                + "COALESCE(sli.shopping_list_item_unit, ii.inventory_item_unit) AS unit, "
                 + "sli.shopping_list_item_quantity_needed, sli.shopping_list_item_store_item_id, "
-                + "sli.shopping_list_item_is_manual "
+                + "sli.shopping_list_item_is_manual, sli.shopping_list_item_needs_review, "
+                + "ii.inventory_item_quantity, ii.inventory_item_unit AS stock_unit "
                 + "FROM shopping_list_item sli "
                 + "LEFT JOIN inventory_item ii ON ii.inventory_item_id = sli.shopping_list_item_inventory_item_id "
                 + "WHERE sli.shopping_list_id = ? "
@@ -343,14 +380,67 @@ public class ShoppingListRepository {
                             (Integer) rs.getObject("shopping_list_item_inventory_item_id"),
                             rs.getString("inventory_item_name_deutsch"),
                             rs.getString("inventory_item_name_english"),
-                            rs.getString("inventory_item_unit"),
-                            rs.getInt("shopping_list_item_quantity_needed"),
+                            rs.getString("unit"),
+                            rs.getDouble("shopping_list_item_quantity_needed"),
                             (Integer) rs.getObject("shopping_list_item_store_item_id"),
-                            rs.getBoolean("shopping_list_item_is_manual")));
+                            rs.getBoolean("shopping_list_item_is_manual"),
+                            rs.getBoolean("shopping_list_item_needs_review"),
+                            (Integer) rs.getObject("inventory_item_quantity"),
+                            rs.getString("stock_unit")));
                 }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not load items for shopping list " + shoppingListId, e);
+        }
+        return out;
+    }
+
+    /** The recipes that need each line of a list (line id -> recipes, by name). */
+    public Map<Integer, List<SourceRecipe>> recipesByItem(int shoppingListId) {
+        String sql = "SELECT sir.shopping_list_item_recipe_item_id AS item_id, r.recipe_id, r.recipe_name "
+                + "FROM shopping_list_item_recipe sir "
+                + "JOIN shopping_list_item sli ON sli.shopping_list_item_id = sir.shopping_list_item_recipe_item_id "
+                + "JOIN recipe r ON r.recipe_id = sir.shopping_list_item_recipe_recipe_id "
+                + "WHERE sli.shopping_list_id = ? ORDER BY r.recipe_name, r.recipe_id";
+        Map<Integer, List<SourceRecipe>> out = new HashMap<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.computeIfAbsent(rs.getInt("item_id"), k -> new ArrayList<>())
+                            .add(new SourceRecipe(rs.getInt("recipe_id"), rs.getString("recipe_name")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load the recipes of shopping list " + shoppingListId, e);
+        }
+        return out;
+    }
+
+    /** The saved lists of a meal plan, newest first, each with its number of lines. */
+    public List<ShoppingListSummary> findListsForPlan(int mealPlanId) {
+        String sql = "SELECT sl.shopping_list_id, sl.shopping_list_created_date, sl.shopping_list_shopping_date, "
+                + "sl.shopping_list_from_date, sl.shopping_list_status, "
+                + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS lines "
+                + "FROM shopping_list sl WHERE sl.shopping_list_meal_plan_id = ? ORDER BY sl.shopping_list_id DESC";
+        List<ShoppingListSummary> out = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, mealPlanId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new ShoppingListSummary(
+                            rs.getInt("shopping_list_id"),
+                            rs.getObject("shopping_list_created_date", LocalDate.class),
+                            rs.getObject("shopping_list_shopping_date", LocalDate.class),
+                            rs.getObject("shopping_list_from_date", LocalDate.class),
+                            rs.getBoolean("shopping_list_status"),
+                            rs.getInt("lines")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not list the shopping lists of meal plan " + mealPlanId, e);
         }
         return out;
     }

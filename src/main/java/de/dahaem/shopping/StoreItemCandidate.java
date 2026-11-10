@@ -19,6 +19,7 @@ public record StoreItemCandidate(
         LocalDate productLastSeen,
         Boolean productAvailable,
         Double discountPrice,
+        LocalDate discountValidFrom,
         LocalDate discountValidUntil,
         int dealQuantity,
         Double dealPrice

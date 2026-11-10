@@ -159,6 +159,23 @@ class ShoppingListByServingsTest {
         assertEquals(400, onionOnList(service.generateFromMealPlan(plan, TODAY, 8)));
     }
 
+    @Test
+    void onlyTheMealsFromTheFirstDayOnCount() throws SQLException {
+        recipe(1, 2, 100);
+        recipe(2, 2, 300);
+        int plan = planWith(meal(1, null));                                   // Monday: recipe 1
+        plans.addMeal(2, MON.plusDays(2), null, null, null, null);            // Wednesday: recipe 2
+
+        assertEquals(400, onionOnList(service.generateFromMealPlanByServings(plan, TODAY, null, TODAY, MON)));
+        assertEquals(300, onionOnList(service.generateFromMealPlanByServings(plan, TODAY, null, TODAY,
+                MON.plusDays(1))), "from Tuesday on: only Wednesday's recipe");
+        assertEquals(300, onionOnList(service.generateFromMealPlan(plan, TODAY, 2, TODAY, MON.plusDays(1))),
+                "the same rule with an explicit number of people");
+        assertEquals(0, count("SELECT COUNT(*) FROM shopping_list_item WHERE shopping_list_id = "
+                + service.generateFromMealPlanByServings(plan, TODAY, null, TODAY, MON.plusDays(3))),
+                "nothing planned from Thursday on");
+    }
+
     // ---------- helpers ----------
 
     private record MealSpec(int recipeId, Integer servings) {

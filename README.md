@@ -361,8 +361,18 @@ A planned meal looks like this (`PlannedMealDto`):
   meal is scaled by its OWN resolved `servings`: each meal adds `servings / recipe_servings` of its recipe's
   quantities, so a recipe planned twice counts twice and a recipe stored for 2 and cooked for 2 is taken as written
   (with no head count set that is the default 2). A recipe stored for 4 and cooked for 2 halves. `householdId` lets the
-  head count apply; an explicit `people=N` overrides everything and scales every recipe to N people, as before. The
-  rest of the list behaves as before (inventory subtracted, items nobody sells left out, no store item pre-chosen).
+  head count apply; an explicit `people=N` overrides everything and scales every recipe to N people, as before.
+  - **Shopping day and first meal day.** `shoppingDate=YYYY-MM-DD` (default today, 400 if in the past) is the day of the
+    trip: the offers shown are the ones that run on that day (each store option has `validFrom` / `validUntil`), so a
+    list made today for a trip on the 17th shows the 17th's offers. `from=YYYY-MM-DD` is the first meal day counted
+    (default the shopping day; pass the next day when the shopping is after dinner). Both are saved on the list.
+  - **Every generation is a new list**; earlier lists are never rewritten. `GET /api/meal-plans/{id}/shopping-lists`
+    lists the plan's lists, newest first (`id`, `createdDate`, `shoppingDate`, `fromDate`, `status`, `lines`).
+  - **Lines** (`GET /api/shopping-lists/{id}`): `quantityNeeded` is a decimal with its `unit`; `recipes` are the recipes
+    that need the line; `available` is false when no store sells the item (the line stays, never silently dropped);
+    stock is subtracted only when it is in the line's unit and has not expired by the shopping day, otherwise nothing is
+    subtracted and `needsReview` is true (`stockQuantity` / `stockUnit` show what is at home).
+  - No store item is pre-chosen; the user picks one per line.
 - **Past days are history.** "Today" is the date in the household's time zone (`dahaem.mealplan.zone`, default
   `Europe/Berlin`). Adding a meal to a day before today, and editing, moving or removing a meal of such a day, or
   moving a meal onto one, is refused with **409** (`{"status": 409, ...}`); today and later stay editable. A nightly job
