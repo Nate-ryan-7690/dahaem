@@ -8,11 +8,11 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (79)"]
+    api["api (80)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (5)"]
-    inventory["inventory (3)"]
+    inventory["inventory (4)"]
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
     shared["shared (7)"]
@@ -23,8 +23,8 @@ flowchart TD
     api -->|14| auth
     api -->|12| diet
     api -->|6| finance
-    api -->|4| inventory
-    api -->|31| mealplanner
+    api -->|5| inventory
+    api -->|32| mealplanner
     api -->|14| shopping
     api -->|2| stores
     api -->|10| suggestions
@@ -48,11 +48,11 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 79 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 80 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 5 | Purchases and spending analytics. |
-| [`inventory`](inventory.md) | 3 | The item catalogue and the pantry. |
+| [`inventory`](inventory.md) | 4 | The item catalogue and the pantry. |
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
@@ -118,7 +118,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`DietVerdict.Hint`](diet.md#dietverdicthint) | diet | record | An item with possible animals of which at least one is excluded; allowedAnimals is what remains. |
 | [`DietVerdict.Item`](diet.md#dietverdictitem) | diet | record | A matched item (id and name). |
 | [`DietVerdict.SoftHits`](diet.md#dietverdictsofthits) | diet | record | Soft-rule hits: tags the recipe has, ingredient items it has, and items that MAY be an avoided animal (for an avoided animal tag). |
-| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, and a readable message. |
+| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED, CSRF_INVALID, B |
 | [`GeneratedShoppingListDto`](api.md#generatedshoppinglistdto) | api | record | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
 | [`HouseholdController`](api.md#householdcontroller) | api | class | The household's head count, so the app can scale portions to the people it feeds. |
@@ -138,6 +138,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ItemAnimalService.ApplyReport`](tags.md#itemanimalserviceapplyreport) | tags | record | Result of .apply. |
 | [`ItemAnimalService.Row`](tags.md#itemanimalservicerow) | tags | record | One TSV line. |
 | [`ItemDto`](api.md#itemdto) | api | record | One inventory item as returned by /api/inventory. |
+| [`ItemPage`](inventory.md#itempage) | inventory | record | One page of inventory items plus how many items match in all pages. |
+| [`ItemPageDto`](api.md#itempagedto) | api | record | One page of GET /api/inventory/search. |
 | [`JsonUtil`](stores.md#jsonutil) | stores | class | Small null-safe helpers for reading store JSON. |
 | [`KnownProduct`](stores.md#knownproduct) | stores | record | What the database already knows about a store product. |
 | [`LikePattern`](shared.md#likepattern) | shared | class | Builds LIKE patterns from user text, so a typed % or _ is searched for literally. |
@@ -192,7 +194,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PersistedShoppingListDto`](api.md#persistedshoppinglistdto) | api | record | A previously generated shopping list as it was persisted: its items with names, the amount still needed and its unit, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has s |
 | [`PersistedShoppingListDto.Line`](api.md#persistedshoppinglistdtoline) | api | record |  |
 | [`PersistedShoppingListDto.RecipeRef`](api.md#persistedshoppinglistdtoreciperef) | api | record | A recipe that needs a line. |
-| [`PersistedShoppingListDto.Summary`](api.md#persistedshoppinglistdtosummary) | api | record | One saved list of a meal plan in short (see GET /api/meal-plans/{id/shopping-lists}). |
+| [`PersistedShoppingListDto.Summary`](api.md#persistedshoppinglistdtosummary) | api | record | One saved list of a meal plan in short (see GET /api/meal-plans/{id/shopping-lists}); purchasedLines of its lines are ticked as bought. |
 | [`PersistedShoppingListItem`](shopping.md#persistedshoppinglistitem) | shopping | record | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed and in which unit, the recipes that need it, every current sto |
 | [`PlannedMeal`](mealplanner.md#plannedmeal) | mealplanner | class | Plain data holder for one planned meal: a row of meal_plan_recipe joined to its recipe and its plan. |
 | [`PlannedMealController`](api.md#plannedmealcontroller) | api | class | The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal, remove it, and set a recipe's preferred servings. |
@@ -296,7 +298,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ShoppingListRepository`](shopping.md#shoppinglistrepository) | shopping | class | All SQL for building a shopping list lives here: summing recipe_ingredient across recipes, finding store_item candidates (with brand/store and any current store_discount) for one inventory item, and persisting a generated list to shopping_l |
 | [`ShoppingListRow`](shopping.md#shoppinglistrow) | shopping | record | Raw shopping_list row, before its items are attached. |
 | [`ShoppingListService`](shopping.md#shoppinglistservice) | shopping | class | Turns a set of recipes into a shopping list: sums what they need, then for each item collects every store's current option for it. |
-| [`ShoppingListSummary`](shopping.md#shoppinglistsummary) | shopping | record | One saved list of a meal plan in short: when it was made, for which shopping day, from which meal day, how many lines. |
+| [`ShoppingListSummary`](shopping.md#shoppinglistsummary) | shopping | record | One saved list in short: when it was made, for which shopping day, from which meal day, how many lines and how many of them are ticked as bought ("3 von 8 gekauft"). |
 | [`SourceRecipe`](shopping.md#sourcerecipe) | shopping | record | A recipe that needs a shopping list line ("für Kartoffelsuppe, Lachs"). |
 | [`SpendingDto`](api.md#spendingdto) | api | record | Total spent; from/to are null when the total covers all purchases. |
 | [`StepAmounts`](mealplanner.md#stepamounts) | mealplanner | class | Renders a cooking step's amounts for a number of people. |
