@@ -58,6 +58,7 @@ flowchart LR
     subgraph g_Suggestion["Suggestion"]
         u29(["GET /api/suggestions/by-expiring"])
         u30(["GET /api/suggestions/by-savings"])
+        u31(["GET /api/suggestions/pantry"])
     end
     member --> u1
     member --> u2
@@ -89,6 +90,7 @@ flowchart LR
     member --> u28
     member --> u29
     member --> u30
+    member --> u31
 ```
 
 Each use case is one endpoint; the parameters, bodies and answers are in [API.md](API.md). What a member actually does with them:

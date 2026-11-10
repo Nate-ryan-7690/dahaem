@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-63 types in 49 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+67 types in 53 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -96,6 +96,18 @@ classDiagram
         <<spring>>
     }
     class api_NotFoundException["NotFoundException"]
+    class api_PantryIngredientDto["PantryIngredientDto"] {
+        <<record>>
+    }
+    class api_PantryOfferDto["PantryOfferDto"] {
+        <<record>>
+    }
+    class api_PantrySuggestionDto["PantrySuggestionDto"] {
+        <<record>>
+    }
+    class api_PantrySuggestionPageDto["PantrySuggestionPageDto"] {
+        <<record>>
+    }
     class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
         <<record>>
     }
@@ -211,6 +223,10 @@ classDiagram
     api_MealPlanWeekDto *-- api_MealPlanWeekDto_DayDto
     api_MealPlanWeekDto_DayDto --> api_PlannedMealDto
     api_MealServingsScheduleConfig ..> api_ScheduledMealServings
+    api_PantryIngredientDto --> api_PantryOfferDto
+    api_PantrySuggestionDto --> api_RecipeCardDto
+    api_PantrySuggestionDto --> api_PantryIngredientDto
+    api_PantrySuggestionPageDto --> api_PantrySuggestionDto
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
     api_PersistedShoppingListDto_Line --> api_ShoppingListDto
     api_PlannedMealController ..> api_MealPlanWeekDto
@@ -242,6 +258,7 @@ classDiagram
     api_ShoppingListItemController ..> api_SelectStoreItemRequest
     api_ShoppingListItemController ..> api_ShoppingListItemSelectionDto
     api_SuggestionController ..> api_RecipeSuggestionDto
+    api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -279,6 +296,10 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`MealPlanWeekDto.DayDto`](#mealplanweekdtodaydto) | record |  |  |
 | [`MealServingsScheduleConfig`](#mealservingsscheduleconfig) | class | configuration | Registers the nightly servings freeze. |
 | [`NotFoundException`](#notfoundexception) | class |  | Thrown by a controller when the requested resource does not exist; mapped to 404. |
+| [`PantryIngredientDto`](#pantryingredientdto) | record |  | One ingredient of a suggested recipe. |
+| [`PantryOfferDto`](#pantryofferdto) | record |  | An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in packUnit, e.g. |
+| [`PantrySuggestionDto`](#pantrysuggestiondto) | record |  | A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing ones are on sa |
+| [`PantrySuggestionPageDto`](#pantrysuggestionpagedto) | record |  | One page of GET /api/suggestions/pantry. |
 | [`PersistedShoppingListDto`](#persistedshoppinglistdto) | record |  | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
 | [`PersistedShoppingListDto.Line`](#persistedshoppinglistdtoline) | record |  |  |
 | [`PlannedMealController`](#plannedmealcontroller) | class | REST controller | The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal, remove it, and set a recipe's preferred servings. |
@@ -1423,6 +1444,218 @@ classDiagram
 
 **Referenced by:** `ApiExceptionHandler`
 
+## PantryIngredientDto
+
+*record*
+
+One ingredient of a suggested recipe. status is IN_STOCK, EXPIRING (in stock and expires
+within the look-ahead), EXPIRED (some is in stock but its date has passed: shown with the amount and the
+date, not counted as usable stock), MISSING or TO_TASTE. neededQuantity / neededUnit is what
+the recipe asks for (quantity null for "to taste"); stockQuantity / stockUnit is what the household
+has, in the item's own unit; expiresOn is the earliest expiry date of the stock (null when unknown).
+offers lists, for a missing or expired ingredient, every offer that is on sale today (see PantryOfferDto);
+empty otherwise.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PantryIngredientDto["PantryIngredientDto"] {
+        <<record>>
+        +int itemId
+        +String nameDeutsch
+        +String nameEnglish
+        +String status
+        +Double neededQuantity
+        +String neededUnit
+        +int stockQuantity
+        +String stockUnit
+        +LocalDate expiresOn
+        +List~PantryOfferDto~ offers
+        ~from(PantryLine line) PantryIngredientDto$
+    }
+    class api_PantryOfferDto["PantryOfferDto"] {
+        <<record>>
+    }
+    class api_PantrySuggestionDto["PantrySuggestionDto"] {
+        <<record>>
+    }
+    class suggestions_PantryLine["PantryLine"] {
+        <<record>>
+    }
+    api_PantryIngredientDto --> api_PantryOfferDto
+    api_PantryIngredientDto ..> suggestions_PantryLine
+    api_PantrySuggestionDto --> api_PantryIngredientDto
+```
+
+| Component | Type |
+|---|---|
+| `itemId` | `int` |
+| `nameDeutsch` | `String` |
+| `nameEnglish` | `String` |
+| `status` | `String` |
+| `neededQuantity` | `Double` |
+| `neededUnit` | `String` |
+| `stockQuantity` | `int` |
+| `stockUnit` | `String` |
+| `expiresOn` | `LocalDate` |
+| `offers` | `List<PantryOfferDto>` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PantryIngredientDto from(PantryLine line)` | package static |  |
+
+**Referenced by:** `PantrySuggestionDto`
+
+## PantryOfferDto
+
+*record*
+
+An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in
+packUnit, e.g. 600 g; a price without its pack misleads), the sale price and the regular price (null when
+unknown), both for that pack in euros, and the last day of the offer. Offers are listed by store name and pack
+size, not by price: the user chooses.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PantryOfferDto["PantryOfferDto"] {
+        <<record>>
+        +String storeName
+        +int packSize
+        +String packUnit
+        +double salePrice
+        +Double regularPrice
+        +LocalDate validUntil
+        ~from(PantryOffer offer) PantryOfferDto$
+    }
+    class api_PantryIngredientDto["PantryIngredientDto"] {
+        <<record>>
+    }
+    class suggestions_PantryOffer["PantryOffer"] {
+        <<record>>
+    }
+    api_PantryOfferDto ..> suggestions_PantryOffer
+    api_PantryIngredientDto --> api_PantryOfferDto
+```
+
+| Component | Type |
+|---|---|
+| `storeName` | `String` |
+| `packSize` | `int` |
+| `packUnit` | `String` |
+| `salePrice` | `double` |
+| `regularPrice` | `Double` |
+| `validUntil` | `LocalDate` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PantryOfferDto from(PantryOffer offer)` | package static |  |
+
+**Referenced by:** `PantryIngredientDto`
+
+## PantrySuggestionDto
+
+*record*
+
+A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not
+counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing
+ones are on sale, and every ingredient with its state. Counts are of ingredients, not of amounts: an ingredient is
+in stock when the household has any of it that has not expired; stock past its date is shown as EXPIRED and
+counts as still to buy (missing). With diet rules the recipe card carries diet (status OK / ANPASSBAR
+/ UNCLEAR, hints, softHits), as in the recipe search. Nothing here is a choice made for the user.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PantrySuggestionDto["PantrySuggestionDto"] {
+        <<record>>
+        +RecipeCardDto recipe
+        +int ingredientsNeeded
+        +int inStock
+        +int expiringSoon
+        +int missing
+        +int missingOnSale
+        +List~PantryIngredientDto~ ingredients
+        ~from(PantrySuggestionService.Entry entry) PantrySuggestionDto$
+    }
+    class api_RecipeCardDto["RecipeCardDto"] {
+        <<record>>
+    }
+    class api_PantryIngredientDto["PantryIngredientDto"] {
+        <<record>>
+    }
+    class api_PantrySuggestionPageDto["PantrySuggestionPageDto"] {
+        <<record>>
+    }
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
+    api_PantrySuggestionDto --> api_RecipeCardDto
+    api_PantrySuggestionDto --> api_PantryIngredientDto
+    api_PantrySuggestionDto ..> suggestions_PantrySuggestionService
+    api_PantrySuggestionPageDto --> api_PantrySuggestionDto
+```
+
+| Component | Type |
+|---|---|
+| `recipe` | `RecipeCardDto` |
+| `ingredientsNeeded` | `int` |
+| `inStock` | `int` |
+| `expiringSoon` | `int` |
+| `missing` | `int` |
+| `missingOnSale` | `int` |
+| `ingredients` | `List<PantryIngredientDto>` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PantrySuggestionDto from(PantrySuggestionService.Entry entry)` | package static |  |
+
+**Referenced by:** `PantrySuggestionPageDto`
+
+## PantrySuggestionPageDto
+
+*record*
+
+One page of GET /api/suggestions/pantry. items are the suggested recipes of this page in the
+requested order; total is the number of recipes in ALL pages of this list, at most 200 (the best ones in the
+requested order); totalMatching is how many fit before that cap and capped says whether the list was
+cut: the rest is found with the recipe search (GET /api/recipes/search); page (from 1) and
+pageSize echo the request with its defaults applied; totalPages is ceil(total / pageSize),
+0 when nothing fits. A page past the end has empty items.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_PantrySuggestionPageDto["PantrySuggestionPageDto"] {
+        <<record>>
+        +List~PantrySuggestionDto~ items
+        +long total
+        +long totalMatching
+        +boolean capped
+        +int page
+        +int pageSize
+        +int totalPages
+    }
+    class api_PantrySuggestionDto["PantrySuggestionDto"] {
+        <<record>>
+    }
+    class api_SuggestionController["SuggestionController"] {
+        <<controller>>
+    }
+    api_PantrySuggestionPageDto --> api_PantrySuggestionDto
+    api_SuggestionController ..> api_PantrySuggestionPageDto
+```
+
+| Component | Type |
+|---|---|
+| `items` | `List<PantrySuggestionDto>` |
+| `total` | `long` |
+| `totalMatching` | `long` |
+| `capped` | `boolean` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
+
+**Referenced by:** `SuggestionController`
+
 ## PersistedShoppingListDto
 
 *record*
@@ -1802,12 +2035,16 @@ classDiagram
     class api_DietDto["DietDto"] {
         <<record>>
     }
+    class api_PantrySuggestionDto["PantrySuggestionDto"] {
+        <<record>>
+    }
     class api_RecipePageDto["RecipePageDto"] {
         <<record>>
     }
     class mealplanner_Recipe["Recipe"]
     api_RecipeCardDto --> api_DietDto
     api_RecipeCardDto ..> mealplanner_Recipe
+    api_PantrySuggestionDto --> api_RecipeCardDto
     api_RecipePageDto --> api_RecipeCardDto
 ```
 
@@ -1831,7 +2068,7 @@ classDiagram
 |---|---|---|
 | `RecipeCardDto from(Recipe recipe, List<String> tags, DietDto diet)` | package static |  |
 
-**Referenced by:** `RecipePageDto`
+**Referenced by:** `PantrySuggestionDto`, `RecipePageDto`
 
 ## RecipeController
 
@@ -2491,6 +2728,7 @@ classDiagram
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
         +suggestionRepository() SuggestionRepository
         +suggestionService(SuggestionRepository suggestionRepository) SuggestionService
+        +pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone) PantrySuggestionService
         +dietFilterRepository() DietFilterRepository
         +dietPresets() DietPresets
         +dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds) DietFilterService
@@ -2528,7 +2766,7 @@ classDiagram
     api_ServiceConfig ..> auth_AccountRepository
     api_ServiceConfig ..> auth_AccountService
     api_ServiceConfig ..> suggestions_SuggestionRepository
-    %% 5 more neighbours not drawn
+    %% 6 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -2550,6 +2788,7 @@ classDiagram
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
 | `SuggestionRepository suggestionRepository()` | public |  |
 | `SuggestionService suggestionService(SuggestionRepository suggestionRepository)` | public |  |
+| `PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone)` | public |  |
 | `DietFilterRepository dietFilterRepository()` | public |  |
 | `DietPresets dietPresets()` | public | Presets come from config/diet_presets.json (relative to the working directory, /app in the container). |
 | `DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds)` | public |  |
@@ -2891,27 +3130,41 @@ classDiagram
     class api_SuggestionController["SuggestionController"] {
         <<controller>>
         -SuggestionService suggestionService
-        +SuggestionController(SuggestionService suggestionService)
+        -PantrySuggestionService pantrySuggestions
+        -DietFilterService dietFilter
+        +SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)
         +bySavings() List~RecipeSuggestionDto~
         +byExpiring(int days) List~RecipeSuggestionDto~
+        +pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) PantrySuggestionPageDto
     }
     class suggestions_SuggestionService["SuggestionService"]
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
+    class diet_DietFilterService["DietFilterService"]
     class api_RecipeSuggestionDto["RecipeSuggestionDto"] {
         <<record>>
     }
+    class api_PantrySuggestionPageDto["PantrySuggestionPageDto"] {
+        <<record>>
+    }
     api_SuggestionController --> suggestions_SuggestionService
+    api_SuggestionController --> suggestions_PantrySuggestionService
+    api_SuggestionController --> diet_DietFilterService
     api_SuggestionController ..> api_RecipeSuggestionDto
+    api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
 
 | Field | Type |
 |---|---|
 | `suggestionService` | `SuggestionService` |
+| `pantrySuggestions` | `PantrySuggestionService` |
+| `dietFilter` | `DietFilterService` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `SuggestionController(SuggestionService suggestionService)` | public |  |
+| `SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)` | public |  |
 | `List<RecipeSuggestionDto> bySavings()` | public | Recipes ranked by how many ingredients are currently on sale. |
 | `List<RecipeSuggestionDto> byExpiring(int days)` | public | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
+| `PantrySuggestionPageDto pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
 
 ## TagDto
 

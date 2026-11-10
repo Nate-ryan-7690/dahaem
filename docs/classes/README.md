@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (63)"]
+    api["api (67)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (3)"]
@@ -18,16 +18,16 @@ flowchart TD
     shared["shared (7)"]
     shopping["shopping (11)"]
     stores["stores (47)"]
-    suggestions["suggestions (3)"]
+    suggestions["suggestions (12)"]
     tags["tags (29)"]
     api -->|14| auth
-    api -->|9| diet
+    api -->|12| diet
     api -->|4| finance
     api -->|4| inventory
     api -->|31| mealplanner
     api -->|11| shopping
     api -->|2| stores
-    api -->|4| suggestions
+    api -->|10| suggestions
     api -->|6| tags
     diet -->|12| tags
     finance -->|1| inventory
@@ -37,6 +37,9 @@ flowchart TD
     receipts -->|8| stores
     shopping -->|2| inventory
     shopping -->|4| mealplanner
+    suggestions -->|3| diet
+    suggestions -->|4| mealplanner
+    suggestions -->|1| tags
 ```
 
 Arrows point from the importing package to the imported one; the number is how many import lines. `shared` is left out of the drawing: 11 of the other packages import it, and it imports none of them. A package that imports nothing else here is a leaf.
@@ -45,7 +48,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 63 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 67 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
@@ -55,7 +58,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
 | [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
 | [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
-| [`suggestions`](suggestions.md) | 3 | Recipe suggestions by savings and by expiring stock. |
+| [`suggestions`](suggestions.md) | 12 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
 
 ## Every type
@@ -164,6 +167,19 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`OfferSource`](stores.md#offersource) | stores | interface | One place weekly offers can be pulled from: a chain's own site or one chain on an aggregator. |
 | [`OfferSourceFactory`](stores.md#offersourcefactory) | stores | class | Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for every chain in AggregatorClient.STORES. |
 | [`PageRequest`](shared.md#pagerequest) | shared | record | Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE. |
+| [`PantryCoverage`](suggestions.md#pantrycoverage) | suggestions | record | How well one recipe is covered by what the household already has and by what is on sale. |
+| [`PantryIngredientDto`](api.md#pantryingredientdto) | api | record | One ingredient of a suggested recipe. |
+| [`PantryLine`](suggestions.md#pantryline) | suggestions | record | One ingredient of a suggested recipe and where it stands: in stock, expiring soon, missing, or "to taste". |
+| [`PantryLine.Status`](suggestions.md#pantrylinestatus) | suggestions | enum | EXPIRED: some is in stock but its date has passed. |
+| [`PantryOffer`](suggestions.md#pantryoffer) | suggestions | record | One offer that is on sale today for an ingredient: the store, the pack it is for, and the prices. |
+| [`PantryOfferDto`](api.md#pantryofferdto) | api | record | An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in packUnit, e.g. |
+| [`PantryRanking`](suggestions.md#pantryranking) | suggestions | class | The ranking rules of the pantry-first suggestions, as pure functions (no database). |
+| [`PantrySort`](suggestions.md#pantrysort) | suggestions | enum | The orders offered for the pantry-first suggestions; the user picks one, the default is .BEST. |
+| [`PantrySuggestionDto`](api.md#pantrysuggestiondto) | api | record | A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing ones are on sa |
+| [`PantrySuggestionPageDto`](api.md#pantrysuggestionpagedto) | api | record | One page of GET /api/suggestions/pantry. |
+| [`PantrySuggestionService`](suggestions.md#pantrysuggestionservice) | suggestions | class | Recipe suggestions that serve the purpose of the app: healthy meals (all recipe data is cooked from fresh ingredients) at the lowest shopping cost. |
+| [`PantrySuggestionService.Entry`](suggestions.md#pantrysuggestionserviceentry) | suggestions | record | A suggested recipe with its tag names, its coverage counts, its ingredient lines (offers on missing and expired ones) and, when diet rules were given, its verdict (else null). |
+| [`PantrySuggestionService.Result`](suggestions.md#pantrysuggestionserviceresult) | suggestions | record | One page, the number of recipes in the list in all pages (total, at most .MAX_RESULTS), the number that fit before the cap (totalMatching), and the request that produced it. |
 | [`ParsedReceipt`](receipts.md#parsedreceipt) | receipts | record | Structured result of parsing one receipt's text. |
 | [`PastDayException`](mealplanner.md#pastdayexception) | mealplanner | class | Thrown when a planned meal on a day before today would be added, changed, moved or removed. |
 | [`PennyClient`](stores.md#pennyclient) | stores | class | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |

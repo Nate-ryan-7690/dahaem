@@ -184,7 +184,11 @@ classDiagram
     class api_RecipeController["RecipeController"] {
         <<controller>>
     }
+    class api_SuggestionController["SuggestionController"] {
+        <<controller>>
+    }
     class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class diet_DietRules["DietRules"] {
         <<record>>
     }
@@ -202,7 +206,9 @@ classDiagram
     diet_DietFilterService ..> diet_DietVerdict
     api_RecipeController --> diet_DietFilterService
     api_ServiceConfig ..> diet_DietFilterService
+    api_SuggestionController --> diet_DietFilterService
     mealplanner_RecipeSearchService --> diet_DietFilterService
+    suggestions_PantrySuggestionService --> diet_DietFilterService
 ```
 
 | Field | Type |
@@ -224,7 +230,7 @@ classDiagram
 | `void invalidate()` | public | Drops the cached facts, e.g. |
 | `Judged judge(DietRules rules, int recipeId)` | public | The verdict for one recipe, with its unmatched lines in RecipeDietFacts.unmatched(). |
 
-**Referenced by:** `RecipeController`, `RecipeSearchService`, `ServiceConfig`
+**Referenced by:** `PantrySuggestionService`, `RecipeController`, `RecipeSearchService`, `ServiceConfig`, `SuggestionController`
 
 ## DietFilterService.Snapshot
 
@@ -404,10 +410,12 @@ classDiagram
     class diet_DietFilterService["DietFilterService"]
     class diet_RecipeDietFilter["RecipeDietFilter"]
     class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
     diet_DietRules ..> diet_DietPresets
     diet_DietFilterService ..> diet_DietRules
     diet_RecipeDietFilter ..> diet_DietRules
     mealplanner_RecipeSearchService ..> diet_DietRules
+    suggestions_PantrySuggestionService ..> diet_DietRules
 ```
 
 | Component | Type |
@@ -426,7 +434,7 @@ classDiagram
 | `boolean hasHardRules()` | public | True if any hard rule (exclusion or required tag) is set. |
 | `boolean hasRules()` | public | True if any rule at all is set (includeUnclear alone is no rule). |
 
-**Referenced by:** `DietFilterService`, `RecipeDietFilter`, `RecipeSearchService`
+**Referenced by:** `DietFilterService`, `PantrySuggestionService`, `RecipeDietFilter`, `RecipeSearchService`
 
 ## DietStatus
 
@@ -490,6 +498,9 @@ classDiagram
     class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
         <<record>>
     }
+    class suggestions_PantrySuggestionService_Entry["PantrySuggestionService.Entry"] {
+        <<record>>
+    }
     class api_DietDto["DietDto"] {
         <<record>>
     }
@@ -510,6 +521,7 @@ classDiagram
     diet_RecipeDietFilter ..> diet_DietVerdict
     mealplanner_RecipeSearchService ..> diet_DietVerdict
     mealplanner_RecipeSearchService_Entry --> diet_DietVerdict
+    suggestions_PantrySuggestionService_Entry --> diet_DietVerdict
 ```
 
 | Component | Type |
@@ -522,7 +534,7 @@ classDiagram
 |---|---|---|
 | `boolean hasSoftHits()` | public |  |
 
-**Referenced by:** `DietDto`, `DietDto.Hint`, `DietFilterService`, `RecipeDietFilter`, `RecipeSearchService`, `RecipeSearchService.Entry`
+**Referenced by:** `DietDto`, `DietDto.Hint`, `DietFilterService`, `PantrySuggestionService.Entry`, `RecipeDietFilter`, `RecipeSearchService`, `RecipeSearchService.Entry`
 
 ## DietVerdict.Hint
 
