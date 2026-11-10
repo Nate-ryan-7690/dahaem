@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-69 types in 53 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+70 types in 54 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -206,6 +206,9 @@ classDiagram
         <<record>>
     }
     class api_UnauthorizedException["UnauthorizedException"]
+    class api_UseStockRequest["UseStockRequest"] {
+        <<record>>
+    }
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> api_UnauthorizedException
@@ -221,6 +224,7 @@ classDiagram
     api_HouseholdController ..> api_HouseholdDto
     api_HouseholdController ..> api_SetHouseholdPeopleRequest
     api_InventoryController ..> api_ItemDto
+    api_InventoryController ..> api_UseStockRequest
     api_MealPlanController ..> api_MealPlanDto
     api_MealPlanController ..> api_CreateMealPlanRequest
     api_MealPlanController ..> api_AddPlannedRecipeRequest
@@ -344,6 +348,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`SuggestionController`](#suggestioncontroller) | class | REST controller | Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf, it only ranks and presents (see SuggestionService). |
 | [`TagDto`](#tagdto) | record |  |  |
 | [`UnauthorizedException`](#unauthorizedexception) | class |  | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
+| [`UseStockRequest`](#usestockrequest) | record |  | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 
 ## AddMealRequest
 
@@ -1126,26 +1131,36 @@ classDiagram
     class api_InventoryController["InventoryController"] {
         <<controller>>
         -InventoryService inventoryService
-        +InventoryController(InventoryService inventoryService)
+        -StockService stockService
+        +InventoryController(InventoryService inventoryService, StockService stockService)
+        +use(int id, UseStockRequest request) ItemDto
         +all() List~ItemDto~
         +expiring(int days) List~ItemDto~
         +lowStock(int threshold) List~ItemDto~
     }
     class inventory_InventoryService["InventoryService"]
+    class finance_StockService["StockService"]
     class api_ItemDto["ItemDto"] {
         <<record>>
     }
+    class api_UseStockRequest["UseStockRequest"] {
+        <<record>>
+    }
     api_InventoryController --> inventory_InventoryService
+    api_InventoryController --> finance_StockService
     api_InventoryController ..> api_ItemDto
+    api_InventoryController ..> api_UseStockRequest
 ```
 
 | Field | Type |
 |---|---|
 | `inventoryService` | `InventoryService` |
+| `stockService` | `StockService` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `InventoryController(InventoryService inventoryService)` | public |  |
+| `InventoryController(InventoryService inventoryService, StockService stockService)` | public |  |
+| `ItemDto use(int id, UseStockRequest request)` | public | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
 | `List<ItemDto> all()` | public |  |
 | `List<ItemDto> expiring(int days)` | public | Items expiring within the next days days (default 7). |
 | `List<ItemDto> lowStock(int threshold)` | public | Items at or below threshold units in stock (default 1). |
@@ -2857,6 +2872,7 @@ classDiagram
         +storeRepository() StoreRepository
         +purchaseRepository() PurchaseRepository
         +purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository, InventoryRepository inventoryRepository) PurchaseService
+        +stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository) StockService
         +accountRepository() AccountRepository
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
         +suggestionRepository() SuggestionRepository
@@ -2880,9 +2896,9 @@ classDiagram
     class stores_StoreRepository["StoreRepository"]
     class finance_PurchaseRepository["PurchaseRepository"]
     class finance_PurchaseService["PurchaseService"]
+    class finance_StockService["StockService"]
     class auth_AccountRepository["AccountRepository"]
     class auth_AccountService["AccountService"]
-    class suggestions_SuggestionRepository["SuggestionRepository"]
     api_ServiceConfig ..> inventory_InventoryRepository
     api_ServiceConfig ..> inventory_InventoryService
     api_ServiceConfig ..> mealplanner_RecipeRepository
@@ -2896,10 +2912,10 @@ classDiagram
     api_ServiceConfig ..> stores_StoreRepository
     api_ServiceConfig ..> finance_PurchaseRepository
     api_ServiceConfig ..> finance_PurchaseService
+    api_ServiceConfig ..> finance_StockService
     api_ServiceConfig ..> auth_AccountRepository
     api_ServiceConfig ..> auth_AccountService
-    api_ServiceConfig ..> suggestions_SuggestionRepository
-    %% 6 more neighbours not drawn
+    %% 7 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -2917,6 +2933,7 @@ classDiagram
 | `StoreRepository storeRepository()` | public |  |
 | `PurchaseRepository purchaseRepository()` | public |  |
 | `PurchaseService purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository, InventoryRepository inventoryRepository)` | public |  |
+| `StockService stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)` | public |  |
 | `AccountRepository accountRepository()` | public |  |
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
 | `SuggestionRepository suggestionRepository()` | public |  |
@@ -3356,3 +3373,28 @@ classDiagram
 | `UnauthorizedException(String message)` | public |  |
 
 **Referenced by:** `ApiExceptionHandler`
+
+## UseStockRequest
+
+*record*
+
+Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_UseStockRequest["UseStockRequest"] {
+        <<record>>
+        +Integer quantity
+    }
+    class api_InventoryController["InventoryController"] {
+        <<controller>>
+    }
+    api_InventoryController ..> api_UseStockRequest
+```
+
+| Component | Type |
+|---|---|
+| `quantity` | `Integer` |
+
+**Referenced by:** `InventoryController`

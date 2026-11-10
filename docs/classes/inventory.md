@@ -43,8 +43,11 @@ classDiagram
         +findById(int id) Optional~Item~
         +findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit) int
         +updateQuantity(int id, int newQuantity) void
+        +findByIdForUpdate(Connection con, int id) Optional~Item~
+        +setStock(Connection con, int id, int quantity, LocalDate earliestExpDate) void
     }
     class finance_PurchaseService["PurchaseService"]
+    class finance_StockService["StockService"]
     class inventory_InventoryService["InventoryService"]
     class shopping_ShoppingListService["ShoppingListService"]
     class inventory_Item["Item"]
@@ -54,6 +57,7 @@ classDiagram
     inventory_InventoryRepository ..> inventory_Item
     api_ServiceConfig ..> inventory_InventoryRepository
     finance_PurchaseService --> inventory_InventoryRepository
+    finance_StockService --> inventory_InventoryRepository
     inventory_InventoryService --> inventory_InventoryRepository
     shopping_ShoppingListService --> inventory_InventoryRepository
 ```
@@ -65,8 +69,10 @@ classDiagram
 | `Optional<Item> findById(int id)` | public |  |
 | `int findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit)` | public | Find-or-create a generic inventory_item by (name_english, category), on the caller's transaction (see PurchaseRepository.openTransaction()/StoreRepository.openTransaction()). |
 | `void updateQuantity(int id, int newQuantity)` | public |  |
+| `Optional<Item> findByIdForUpdate(Connection con, int id)` | public | The item, locked for the caller's transaction (see PurchaseRepository.openTransaction()). |
+| `void setStock(Connection con, int id, int quantity, LocalDate earliestExpDate)` | public | Sets the stock and the earliest expiry date together (null date = none known). |
 
-**Referenced by:** `InventoryService`, `PurchaseService`, `ServiceConfig`, `ShoppingListService`
+**Referenced by:** `InventoryService`, `PurchaseService`, `ServiceConfig`, `ShoppingListService`, `StockService`
 
 ## InventoryService
 
@@ -148,9 +154,11 @@ classDiagram
     class api_ItemDto["ItemDto"] {
         <<record>>
     }
+    class finance_StockService["StockService"]
     class inventory_InventoryRepository["InventoryRepository"]
     class inventory_InventoryService["InventoryService"]
     api_ItemDto ..> inventory_Item
+    finance_StockService ..> inventory_Item
     inventory_InventoryRepository ..> inventory_Item
     inventory_InventoryService ..> inventory_Item
 ```
@@ -179,4 +187,4 @@ classDiagram
 | `LocalDate getEarliestExpDate()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `InventoryRepository`, `InventoryService`, `ItemDto`
+**Referenced by:** `InventoryRepository`, `InventoryService`, `ItemDto`, `StockService`

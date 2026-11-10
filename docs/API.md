@@ -53,6 +53,7 @@ Every error has the same shape:
 | GET | [`/api/inventory`](#get-apiinventory) |  |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
+| POST | [`/api/inventory/{id}/use`](#post-apiinventoryiduse) | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
 | GET | [`/api/meal-plans`](#get-apimeal-plans) |  |
 | POST | [`/api/meal-plans`](#post-apimeal-plans) | Creates an empty plan for the week. |
 | POST | [`/api/meal-plans/meals`](#post-apimeal-plansmeals) | Plans a recipe on a day and returns the meal. |
@@ -329,6 +330,40 @@ Items at or below threshold units in stock (default 1).
     "earliestExpDate": "2026-10-14"
   }
 ]
+```
+
+#### POST /api/inventory/{id}/use
+
+Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). Returns the
+item as it is now, with its earliest expiry date worked out again.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `id` | `int` |
+
+**Request body** `UseStockRequest`
+
+```json
+{
+  "quantity": 0
+}
+```
+
+**Answer** 200 `ItemDto`
+
+```json
+{
+  "id": 0,
+  "nameEnglish": "…",
+  "nameDeutsch": "…",
+  "quantity": 0,
+  "unit": "…",
+  "category": "…",
+  "subcategory": "…",
+  "earliestExpDate": "2026-10-14"
+}
 ```
 
 ### MealPlanController
@@ -2112,6 +2147,18 @@ Total spent; from/to are null when the total covers all purchases.
 | `id` | `int` |
 | `name` | `String` |
 | `category` | `String` |
+
+```json
+{ … }
+```
+
+### UseStockRequest
+
+Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same).
+
+| Property | Type |
+|---|---|
+| `quantity` | `Integer` |
 
 ```json
 { … }

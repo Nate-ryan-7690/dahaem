@@ -4,7 +4,7 @@
 
 Purchases and spending analytics.
 
-3 types in 3 source files (`src/main/java/de/dahaem/finance`). Back to the [class index](README.md).
+5 types in 4 source files (`src/main/java/de/dahaem/finance`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -13,10 +13,16 @@ classDiagram
     direction LR
     class finance_Purchase["Purchase"]
     class finance_PurchaseRepository["PurchaseRepository"]
+    class finance_PurchaseRepository_Batch["PurchaseRepository.Batch"] {
+        <<record>>
+    }
     class finance_PurchaseService["PurchaseService"]
+    class finance_StockService["StockService"]
+    finance_PurchaseRepository *-- finance_PurchaseRepository_Batch
     finance_PurchaseRepository ..> finance_Purchase
     finance_PurchaseService --> finance_PurchaseRepository
     finance_PurchaseService ..> finance_Purchase
+    finance_StockService --> finance_PurchaseRepository
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -25,7 +31,9 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 |------|------|------|------------|
 | [`Purchase`](#purchase) | class |  | Plain data holder for one row of the purchase_history table. |
 | [`PurchaseRepository`](#purchaserepository) | class |  | All SQL for the purchase_history table lives here and nowhere else. |
+| [`PurchaseRepository.Batch`](#purchaserepositorybatch) | record |  | What is left of one purchase (a batch of one inventory item). |
 | [`PurchaseService`](#purchaseservice) | class |  | Business logic for purchases. |
+| [`StockService`](#stockservice) | class |  | Takes food out of stock. |
 
 ## Purchase
 
@@ -118,15 +126,24 @@ classDiagram
         +spendingBetween(LocalDate from, LocalDate to) double
         +findInventoryItemIdForStoreItem(Connection con, int storeItemId) Integer
         +applyPurchaseToInventory(Connection con, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate) void
+        +lockBatchesWithStock(Connection con, int inventoryItemId) List~Batch~
+        +setRemaining(Connection con, int purchaseId, int remaining) void
+        +earliestExpiryWithStock(Connection con, int inventoryItemId) LocalDate
+    }
+    class finance_PurchaseRepository_Batch["PurchaseRepository.Batch"] {
+        <<record>>
     }
     class finance_PurchaseService["PurchaseService"]
+    class finance_StockService["StockService"]
     class finance_Purchase["Purchase"]
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
+    finance_PurchaseRepository *-- finance_PurchaseRepository_Batch
     finance_PurchaseRepository ..> finance_Purchase
     api_ServiceConfig ..> finance_PurchaseRepository
     finance_PurchaseService --> finance_PurchaseRepository
+    finance_StockService --> finance_PurchaseRepository
 ```
 
 | Field | Type |
@@ -144,8 +161,36 @@ classDiagram
 | `double spendingBetween(LocalDate from, LocalDate to)` | public | Sum of price paid for purchases dated between from and to, inclusive. |
 | `Integer findInventoryItemIdForStoreItem(Connection con, int storeItemId)` | public | The inventory_item this store_item is linked to (store_item.store_item_item_id), or null if the store_item is unknown. |
 | `void applyPurchaseToInventory(Connection con, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate)` | public | Increases inventory_item_quantity by quantityDelta and pulls inventory_item_earliest_exp_date down to purchaseExpirationDate if that is earlier than what is already stored (or nothing is stored yet). |
+| `List<Batch> lockBatchesWithStock(Connection con, int inventoryItemId)` | public | The purchases of an inventory item that still have something left, earliest expiry first (older purchase first on a tie), locked for the caller's transaction. |
+| `void setRemaining(Connection con, int purchaseId, int remaining)` | public |  |
+| `LocalDate earliestExpiryWithStock(Connection con, int inventoryItemId)` | public | The earliest expiry among the purchases of an inventory item that still have something left, or null if none. |
 
-**Referenced by:** `PurchaseService`, `ServiceConfig`
+**Referenced by:** `PurchaseService`, `ServiceConfig`, `StockService`
+
+## PurchaseRepository.Batch
+
+*record*
+
+What is left of one purchase (a batch of one inventory item).
+
+```mermaid
+classDiagram
+    direction LR
+    class finance_PurchaseRepository_Batch["PurchaseRepository.Batch"] {
+        <<record>>
+        +int purchaseId
+        +int left
+    }
+    class finance_PurchaseRepository["PurchaseRepository"]
+    finance_PurchaseRepository *-- finance_PurchaseRepository_Batch
+```
+
+| Component | Type |
+|---|---|
+| `purchaseId` | `int` |
+| `left` | `int` |
+
+**Referenced by:** `PurchaseRepository`
 
 ## PurchaseService
 
@@ -205,3 +250,48 @@ classDiagram
 | `int recordNewProductPurchase(String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice, int quantityPurchased, double pricePaid, LocalDate purchaseDate, LocalDate expirationDate)` | public | Records a purchase of a product that isn't in the catalog yet — an off-list buy, e.g. |
 
 **Referenced by:** `PurchaseController`, `ServiceConfig`
+
+## StockService
+
+*class*
+
+Takes food out of stock. Using it and throwing it away are the same action: the amount leaves the batch that expires
+first, the item's quantity goes down, and its earliest expiry date is worked out again from the batches that are left.
+No SQL here. Everything runs in one transaction on the item's locked row.
+
+```mermaid
+classDiagram
+    direction LR
+    class finance_StockService["StockService"] {
+        -PurchaseRepository purchaseRepository
+        -InventoryRepository inventoryRepository
+        +StockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)
+        +use(int inventoryItemId, int quantity) Optional~Item~
+    }
+    class finance_PurchaseRepository["PurchaseRepository"]
+    class inventory_InventoryRepository["InventoryRepository"]
+    class api_InventoryController["InventoryController"] {
+        <<controller>>
+    }
+    class inventory_Item["Item"]
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    finance_StockService --> finance_PurchaseRepository
+    finance_StockService --> inventory_InventoryRepository
+    finance_StockService ..> inventory_Item
+    api_InventoryController --> finance_StockService
+    api_ServiceConfig ..> finance_StockService
+```
+
+| Field | Type |
+|---|---|
+| `purchaseRepository` | `PurchaseRepository` |
+| `inventoryRepository` | `InventoryRepository` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `StockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)` | public |  |
+| `Optional<Item> use(int inventoryItemId, int quantity)` | public | Removes quantity of an inventory item from stock and returns the item as it is now, or empty if there is no such item. |
+
+**Referenced by:** `InventoryController`, `ServiceConfig`
