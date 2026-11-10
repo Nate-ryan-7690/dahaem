@@ -42,6 +42,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -673,6 +674,68 @@ class ApiSmokeTest {
 
         mvc.perform(get("/api/shopping-list").param("recipeIds", first + "," + second).param("people", "0"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shoppingListCanBeTickedEditedAddedToRemovedFromCompletedAndReopened() throws Exception {
+        String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", 1).with(csrf())
+                        .param("from", "2000-01-01"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        int listId = Integer.parseInt(created.replaceAll(".*\"shoppingListId\":(\\d+).*", "$1"));
+        int itemId = firstLineSoldByAStore(listId);
+        int inventoryItemId = inventoryItemIdForItem(itemId);
+        String items = "/api/shopping-lists/{listId}/items/{itemId}";
+
+        mvc.perform(put(items + "/purchased", listId, itemId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"purchased\": true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.purchased").value(true));
+        mvc.perform(put(items + "/quantity", listId, itemId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\": 2.5}"))
+                .andExpect(status().isOk());
+        mvc.perform(put(items + "/quantity", listId, itemId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\": 0}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/shopping-lists/{id}", listId))
+                .andExpect(jsonPath("$.status").value(false))
+                .andExpect(jsonPath("$.storeTotals").isArray())
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + itemId + ")].purchased", contains(true)))
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + itemId + ")].quantityNeeded", contains(2.5)));
+
+        String added = mvc.perform(post("/api/shopping-lists/{listId}/items", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": " + inventoryItemId + ", \"quantity\": 1}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        int addedId = Integer.parseInt(added.replaceAll(".*\"shoppingListItemId\":(\\d+).*", "$1"));
+        mvc.perform(get("/api/shopping-lists/{id}", listId))
+                .andExpect(jsonPath("$.items[?(@.shoppingListItemId == " + addedId + ")].isManual", contains(true)));
+        mvc.perform(post("/api/shopping-lists/{listId}/items", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"inventoryItemId\": 999999, \"quantity\": 1}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(delete(items, listId, addedId).with(csrf()))
+                .andExpect(status().isNoContent());
+        mvc.perform(delete(items, listId, addedId).with(csrf()))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(put("/api/shopping-lists/{id}/status", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"completed\": true}"))
+                .andExpect(status().isOk());
+        mvc.perform(put(items + "/purchased", listId, itemId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"purchased\": false}"))
+                .andExpect(status().isConflict());
+        mvc.perform(put("/api/shopping-lists/{id}/status", listId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"completed\": false}"))
+                .andExpect(status().isOk());
+        mvc.perform(put(items + "/purchased", listId, itemId).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"purchased\": false}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(put("/api/shopping-lists/{id}/status", 999_999).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"completed\": true}"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

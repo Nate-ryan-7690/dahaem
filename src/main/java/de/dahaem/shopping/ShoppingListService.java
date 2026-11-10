@@ -261,6 +261,74 @@ public class ShoppingListService {
         repository.setChosenStoreItem(shoppingListItemId, storeItemId);
     }
 
+    /** Throws {@link ListCompletedException} when the list is completed; a list that does not exist passes (callers check). */
+    public void requireOpen(int shoppingListId) {
+        repository.findShoppingListById(shoppingListId).ifPresent(row -> {
+            if (row.status()) {
+                throw new ListCompletedException(shoppingListId);
+            }
+        });
+    }
+
+    /** Ticks a line as bought, or unticks it. Nothing is added to stock: that comes from the receipt / barcode flow. */
+    public void setPurchased(int shoppingListId, int shoppingListItemId, boolean purchased) {
+        requireOpen(shoppingListId);
+        repository.setPurchased(shoppingListItemId, purchased);
+    }
+
+    /** Changes the amount of a line; its unit stays and the amount must be above 0. */
+    public void setQuantity(int shoppingListId, int shoppingListItemId, double quantity) {
+        requireOpen(shoppingListId);
+        repository.setQuantityNeeded(shoppingListItemId, validAmount(quantity));
+    }
+
+    public void removeItem(int shoppingListId, int shoppingListItemId) {
+        requireOpen(shoppingListId);
+        repository.deleteItem(shoppingListItemId);
+    }
+
+    /**
+     * Adds a line the user wants on the list by hand, for a catalogue item (stock is not looked at: the user asked for
+     * it). {@code unit} defaults to the item's own unit. Returns the new line's id.
+     */
+    public int addManualItem(int shoppingListId, int inventoryItemId, double quantity, String unit) {
+        requireOpen(shoppingListId);
+        BigDecimal amount = validAmount(quantity);
+        if (inventoryRepository.findById(inventoryItemId).isEmpty()) {
+            throw new IllegalArgumentException("No inventory item with id " + inventoryItemId);
+        }
+        Connection con = repository.openTransaction();
+        try {
+            int id = repository.insertShoppingListItem(con, shoppingListId, null, inventoryItemId, null, amount,
+                    unit == null || unit.isBlank() ? null : unit.trim(), null, false, true, false);
+            con.commit();
+            return id;
+        } catch (SQLException e) {
+            try {
+                con.rollback();
+            } catch (SQLException ignored) {
+            }
+            throw new RuntimeException("Could not add a line to shopping list " + shoppingListId, e);
+        } finally {
+            try {
+                con.close();
+            } catch (SQLException ignored) {
+            }
+        }
+    }
+
+    /** Completes a list (it becomes read-only) or reopens it. */
+    public void setCompleted(int shoppingListId, boolean completed) {
+        repository.setListStatus(shoppingListId, completed);
+    }
+
+    private static BigDecimal validAmount(double quantity) {
+        if (!(quantity > 0) || quantity >= 10_000_000) {
+            throw new IllegalArgumentException("quantity must be above 0 and below 10000000");
+        }
+        return BigDecimal.valueOf(quantity).setScale(3, RoundingMode.HALF_UP);
+    }
+
     /** The shopping_list a persisted shopping_list_item belongs to, or empty if the item doesn't exist. */
     public Optional<Integer> findShoppingListIdForItem(int shoppingListItemId) {
         return repository.findShoppingListIdForItem(shoppingListItemId);
@@ -304,7 +372,7 @@ public class ShoppingListService {
         boolean available = row.inventoryItemId() == null || !options.isEmpty();
         return new PersistedShoppingListItem(row.itemId(), row.inventoryItemId(), row.nameDeutsch(),
                 row.nameEnglish(), row.quantityNeeded(), row.unit(), available, row.needsReview(),
-                row.stockQuantity(), row.stockUnit(), row.isManual(), recipes, options, row.selectedStoreItemId());
+                row.purchased(), row.stockQuantity(), row.stockUnit(), row.isManual(), recipes, options, row.selectedStoreItemId());
     }
 
     /**

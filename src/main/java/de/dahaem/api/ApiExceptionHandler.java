@@ -1,6 +1,7 @@
 package de.dahaem.api;
 
 import de.dahaem.mealplanner.PastDayException;
+import de.dahaem.shopping.ListCompletedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -32,6 +33,12 @@ public class ApiExceptionHandler {
     /** A meal on a past day cannot be added, changed, moved or removed: the request conflicts with the calendar. */
     @ExceptionHandler(PastDayException.class)
     public ResponseEntity<ErrorResponse> pastDay(PastDayException e) {
+        return error(HttpStatus.CONFLICT, e.getMessage());
+    }
+
+    /** A completed shopping list cannot be edited. */
+    @ExceptionHandler(ListCompletedException.class)
+    public ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e) {
         return error(HttpStatus.CONFLICT, e.getMessage());
     }
 

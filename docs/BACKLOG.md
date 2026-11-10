@@ -443,6 +443,13 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   (Nate reviews until the unit questions are settled). Still open: the estimated totals per store (next small PR), and
   the lifecycle below. The strict unit match sends g vs kg to review too; use `Units` to convert once the conversion
   table exists.
+- **Shopping list lifecycle, first step done** — tick a line (`PUT .../items/{id}/purchased`), change its amount
+  (`.../quantity`), add a line by hand for a catalogue item (`POST .../items`), remove a line (`DELETE`), complete or
+  reopen a list (`PUT .../status`; a completed list is read-only, 409), and per-store totals on the list
+  (`storeTotals`: lines covered and the cheapest-option sum, lines already ticked left out). Ticking does not change
+  stock (that comes from receipts / barcodes). Still open from the entry below: a manual line for something that is
+  not in the catalogue (needs a name column, so a migration), a price snapshot per selection, recording the shop as
+  purchases, warning on expired offers, and the list of open lists per household.
 - **Shopping list lifecycle** — `next`. Nate 2026-11-10: the list shows an estimated total cost (per store); the
   suggestions deliberately do not. Save a list (from a meal-plan week), tick items, record the
   shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn

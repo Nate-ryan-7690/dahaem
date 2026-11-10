@@ -3,6 +3,7 @@ package de.dahaem.api;
 import de.dahaem.shopping.PersistedShoppingList;
 import de.dahaem.shopping.PersistedShoppingListItem;
 import de.dahaem.shopping.ShoppingListSummary;
+import de.dahaem.shopping.StoreTotal;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -19,19 +20,24 @@ import java.util.List;
  * <p>Each line: {@code available} is false when no store currently sells the item (the line is kept, never silently
  * dropped); {@code needsReview} is true when stock exists but in another unit than the line's, so nothing was
  * subtracted and a person checks it ({@code stockQuantity} / {@code stockUnit} show what the household has);
- * {@code recipes} are the recipes that need the line.
+ * {@code recipes} are the recipes that need the line; {@code purchased} is the tick "bought" on the trip.
+ *
+ * <p>{@code status} true = completed (read-only). {@code storeTotals}: for each store that sells something on the list,
+ * how many of the lines still to buy it covers and what those lines cost there (the cheapest pack option per line);
+ * shown side by side, never picked for the user.
  */
 public record PersistedShoppingListDto(int id, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate,
-                                        LocalDate fromDate, boolean status, List<Line> items) {
+                                        LocalDate fromDate, boolean status, List<Line> items,
+                                        List<StoreTotal> storeTotals) {
 
     public record Line(int shoppingListItemId, Integer inventoryItemId, String nameDeutsch, String nameEnglish,
                         double quantityNeeded, String unit, boolean available, boolean needsReview,
-                        Integer stockQuantity, String stockUnit, boolean isManual, List<RecipeRef> recipes,
+                        boolean purchased, Integer stockQuantity, String stockUnit, boolean isManual, List<RecipeRef> recipes,
                         List<ShoppingListDto.StoreOptionDto> storeOptions, Integer selectedStoreItemId) {
         static Line from(PersistedShoppingListItem item) {
             return new Line(item.shoppingListItemId(), item.inventoryItemId(), item.nameDeutsch(),
                     item.nameEnglish(), item.quantityNeeded(), item.unit(), item.available(), item.needsReview(),
-                    item.stockQuantity(), item.stockUnit(), item.isManual(),
+                    item.purchased(), item.stockQuantity(), item.stockUnit(), item.isManual(),
                     item.recipes().stream().map(r -> new RecipeRef(r.id(), r.name())).toList(),
                     item.storeOptions().stream().map(ShoppingListDto.StoreOptionDto::from).toList(),
                     item.selectedStoreItemId());
@@ -52,6 +58,7 @@ public record PersistedShoppingListDto(int id, Integer mealPlanId, LocalDate cre
 
     static PersistedShoppingListDto from(PersistedShoppingList list) {
         return new PersistedShoppingListDto(list.id(), list.mealPlanId(), list.createdDate(), list.shoppingDate(),
-                list.fromDate(), list.status(), list.items().stream().map(Line::from).toList());
+                list.fromDate(), list.status(), list.items().stream().map(Line::from).toList(),
+                StoreTotal.of(list.items()));
     }
 }

@@ -10,7 +10,7 @@ import java.util.List;
  *
  * <p>available is false when no store currently sells the item: the line is kept so the list is never silently
  * shorter than the plan. needsReview is true when stock exists but its unit differs from the line's, so nothing was
- * subtracted and a person checks the line; stockQuantity / stockUnit show what the household has.
+ * subtracted and a person checks the line; purchased is the tick "bought" on the shopping trip; stockQuantity / stockUnit show what the household has.
  */
 public record PersistedShoppingListItem(
         int shoppingListItemId,
@@ -21,6 +21,7 @@ public record PersistedShoppingListItem(
         String unit,
         boolean available,
         boolean needsReview,
+        boolean purchased,
         Integer stockQuantity,
         String stockUnit,
         boolean isManual,
