@@ -8,10 +8,10 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (69)"]
+    api["api (70)"]
     auth["auth (8)"]
     diet["diet (14)"]
-    finance["finance (3)"]
+    finance["finance (5)"]
     inventory["inventory (3)"]
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
@@ -22,7 +22,7 @@ flowchart TD
     tags["tags (29)"]
     api -->|14| auth
     api -->|12| diet
-    api -->|4| finance
+    api -->|6| finance
     api -->|4| inventory
     api -->|31| mealplanner
     api -->|12| shopping
@@ -30,7 +30,7 @@ flowchart TD
     api -->|10| suggestions
     api -->|6| tags
     diet -->|12| tags
-    finance -->|1| inventory
+    finance -->|3| inventory
     finance -->|1| stores
     mealplanner -->|5| diet
     mealplanner -->|1| tags
@@ -48,10 +48,10 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 69 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 70 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
-| [`finance`](finance.md) | 3 | Purchases and spending analytics. |
+| [`finance`](finance.md) | 5 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 3 | The item catalogue and the pantry. |
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
@@ -204,6 +204,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PurchaseController`](api.md#purchasecontroller) | api | class |  |
 | [`PurchaseDto`](api.md#purchasedto) | api | record |  |
 | [`PurchaseRepository`](finance.md#purchaserepository) | finance | class | All SQL for the purchase_history table lives here and nowhere else. |
+| [`PurchaseRepository.Batch`](finance.md#purchaserepositorybatch) | finance | record | What is left of one purchase (a batch of one inventory item). |
 | [`PurchaseService`](finance.md#purchaseservice) | finance | class | Business logic for purchases. |
 | [`ReceiptAdjustment`](receipts.md#receiptadjustment) | receipts | record | A discount or deposit movement, kept apart from products (paid price != listed price != offer; deposit != discount). |
 | [`ReceiptBuilder`](receipts.md#receiptbuilder) | receipts | class | Mutable accumulator shared by the store handlers. |
@@ -292,6 +293,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`StepAmounts.Amount`](mealplanner.md#stepamountsamount) | mealplanner | record | A parsed amount: one value or a range, and its unit (null when none). |
 | [`StepAmounts.Context`](mealplanner.md#stepamountscontext) | mealplanner | record |  |
 | [`StepAmounts.Replacement`](mealplanner.md#stepamountsreplacement) | mealplanner | record | What replaces before[replaceFrom..] + bracket. |
+| [`StockService`](finance.md#stockservice) | finance | class | Takes food out of stock. |
 | [`StoreConfig`](stores.md#storeconfig) | stores | class | Settings for the store importers, read from config/stores.properties (relative to the working directory, like the database path). |
 | [`StoreDiscountService`](stores.md#storediscountservice) | stores | class | Turns pulled flyer offers into the verified layer: each matched offer becomes (or refreshes) a store_item shell for its chain, plus a store_discount holding the flyer price and dates. |
 | [`StoreDiscountService.BrandSplit`](stores.md#storediscountservicebrandsplit) | stores | record | Brand to file the offer under (null = no brand) and the text to match against the catalog. |
@@ -324,4 +326,5 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`Units.Dimension`](shared.md#unitsdimension) | shared | enum |  |
 | [`Units.Parsed`](shared.md#unitsparsed) | shared | record | A parsed unit: its dimension, and the factor that converts a quantity in it to the dimension's base unit. |
 | [`UserAdminRunner`](auth.md#useradminrunner) | auth | class | Command-line entry point for managing logins. |
+| [`UseStockRequest`](api.md#usestockrequest) | api | record | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 | [`VariantParser`](stores.md#variantparser) | stores | class | Splits the "Sorten:" block of an ALDI product description into flavour/size variants. |

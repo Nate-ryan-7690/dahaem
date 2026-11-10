@@ -104,6 +104,19 @@ class ApiSmokeTest {
     }
 
     @Test
+    void usingStockValidatesTheRequestAndUnknownItemIs404() throws Exception {
+        mvc.perform(post("/api/inventory/{id}/use", 1).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/inventory/{id}/use", 1).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":0}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/inventory/{id}/use", 999_999).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":1}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void recipeDetailHasIngredientsAndInstructionsAndUnknownIdIs404() throws Exception {
         int recipeId = recipeId("Klassische Rinder-Bolognese");
 

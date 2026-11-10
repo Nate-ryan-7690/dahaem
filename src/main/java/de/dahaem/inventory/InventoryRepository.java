@@ -109,6 +109,32 @@ public class InventoryRepository {
         }
     }
 
+    /** The item, locked for the caller's transaction (see PurchaseRepository.openTransaction()). */
+    public Optional<Item> findByIdForUpdate(Connection con, int id) throws SQLException {
+        String sql = "SELECT inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, " +
+                "inventory_item_quantity, inventory_item_unit, inventory_item_category, " +
+                "inventory_item_subcategory, inventory_item_earliest_exp_date " +
+                "FROM inventory_item WHERE inventory_item_id = ? FOR UPDATE";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+            }
+        }
+    }
+
+    /** Sets the stock and the earliest expiry date together (null date = none known). */
+    public void setStock(Connection con, int id, int quantity, LocalDate earliestExpDate) throws SQLException {
+        String sql = "UPDATE inventory_item SET inventory_item_quantity = ?, inventory_item_earliest_exp_date = ? " +
+                "WHERE inventory_item_id = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, quantity);
+            ps.setObject(2, earliestExpDate);
+            ps.setInt(3, id);
+            ps.executeUpdate();
+        }
+    }
+
     // Turns the current ResultSet row into an Item. Kept in one place so every query maps the same way.
     private Item mapRow(ResultSet rs) throws SQLException {
         LocalDate exp = rs.getObject("inventory_item_earliest_exp_date", LocalDate.class);

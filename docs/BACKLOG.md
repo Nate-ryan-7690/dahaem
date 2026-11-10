@@ -451,6 +451,13 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   tick a line (`purchase_status` exists, never written), complete a list (`status` exists, never set), keep a
   price snapshot per selection so "price changed" can be told. The save problems found in the API audit (items nobody
   sells dropped, no unit, integer amounts) are fixed in "Shopping list lines".
+- **Inventory writes, first step done** — `POST /api/inventory/{id}/use` `{quantity}` takes food out of stock
+  (used or thrown away: the same action, decided by Nate). It comes off the batch that expires first
+  (`purchase_history_quantity_remaining`, migration 0018; NULL = untouched), the quantity drops and the item's
+  earliest date is worked out again from the batches left. More than in stock is refused (400). Stock no purchase
+  explains is only counted down. Still open: a history of uses, correcting stock up/down without a purchase,
+  fractional amounts (quantity is still whole units), and then the barcode work (barcode table, Open Food Facts
+  lookup, confirm step on the purchase flow; numbers typed first, in-app scanning later).
 - **Inventory writes** — `next`. Add, consume, correct and expiry changes with a history, so low /
   expiring items can lead to "adjust stock", "plan a recipe" or "add to the list". Audit adds: today only a
   purchase changes stock; `GET /api/inventory` returns the whole catalogue incl. zero stock with no search,

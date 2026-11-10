@@ -7,6 +7,7 @@ import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietPresets;
 import de.dahaem.finance.PurchaseRepository;
 import de.dahaem.finance.PurchaseService;
+import de.dahaem.finance.StockService;
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.InventoryService;
 import de.dahaem.mealplanner.MealPlanRepository;
@@ -102,6 +103,11 @@ public class ServiceConfig {
     public PurchaseService purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository,
                                            InventoryRepository inventoryRepository) {
         return new PurchaseService(purchaseRepository, storeRepository, inventoryRepository);
+    }
+
+    @Bean
+    public StockService stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository) {
+        return new StockService(purchaseRepository, inventoryRepository);
     }
 
     @Bean
