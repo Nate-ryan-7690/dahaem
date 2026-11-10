@@ -62,7 +62,6 @@ Every error has the same shape:
 | POST | [`/api/meal-plans/{id}/recipes`](#post-apimeal-plansidrecipes) | Adds a recipe to a plan and returns the updated plan. |
 | DELETE | [`/api/meal-plans/{id}/recipes/{recipeId}`](#delete-apimeal-plansidrecipesrecipeid) | Removes a recipe from a plan and returns the updated plan. |
 | POST | [`/api/meal-plans/{id}/shopping-list`](#post-apimeal-plansidshopping-list) | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
-| GET | [`/api/meal-plans/{id}/shopping-lists`](#get-apimeal-plansidshopping-lists) | The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). |
 | GET | [`/api/purchases`](#get-apipurchases) |  |
 | POST | [`/api/purchases`](#post-apipurchases) | Records a purchase of a known store_item and applies it to inventory (one transaction, in the service). |
 | GET | [`/api/recipes`](#get-apirecipes) | All recipes by name. |
@@ -455,13 +454,6 @@ ShoppingListService.generateFromMealPlanByServings), so a recipe planned twice c
 optional ?householdId=N lets the head count apply. An explicit ?people=N overrides all of
 that: every recipe is scaled to N people, as before.
 
-?shoppingDate=YYYY-MM-DD is the day of the shopping trip (default today, not in the past): the
-offers that run on that day are the ones shown, so a list made today for a trip next week shows next week's
-offers. ?from=YYYY-MM-DD is the first meal day the list counts (default the shopping day; pass the next
-day when the shopping is after dinner). Every call makes a NEW list; earlier lists of the plan stay as they
-were (GET /{id/shopping-lists} shows them). Stock is subtracted only in the same unit and only when it
-has not expired by the shopping day; a unit mismatch leaves the line flagged needsReview.
-
 **Path parameters**
 
 | Name | Type |
@@ -474,8 +466,6 @@ has not expired by the shopping day; a unit mismatch leaves the line flagged nee
 |---|---|---|---|
 | `people` | `Integer` | no |  |
 | `householdId` | `Integer` | no |  |
-| `shoppingDate` | `LocalDate` | no |  |
-| `from` | `LocalDate` | no |  |
 
 
 
@@ -485,31 +475,6 @@ has not expired by the shopping day; a unit mismatch leaves the line flagged nee
 {
   "shoppingListId": 0
 }
-```
-
-#### GET /api/meal-plans/{id}/shopping-lists
-
-The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten).
-
-**Path parameters**
-
-| Name | Type |
-|---|---|
-| `id` | `int` |
-
-**Answer** 200 `List<PersistedShoppingListDto.Summary>`
-
-```json
-[
-  {
-    "id": 0,
-    "createdDate": "2026-10-14",
-    "shoppingDate": "2026-10-14",
-    "fromDate": "2026-10-14",
-    "status": false,
-    "lines": 0
-  }
-]
 ```
 
 ### PlannedMealController
@@ -1067,8 +1032,6 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
   "id": 0,
   "mealPlanId": 0,
   "createdDate": "2026-10-14",
-  "shoppingDate": "2026-10-14",
-  "fromDate": "2026-10-14",
   "status": false,
   "items": [
     {
@@ -1076,14 +1039,8 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
       "inventoryItemId": 0,
       "nameDeutsch": "…",
       "nameEnglish": "…",
-      "quantityNeeded": 0.0,
-      "unit": "…",
-      "available": false,
-      "needsReview": false,
-      "stockQuantity": 0,
-      "stockUnit": "…",
+      "quantityNeeded": 0,
       "isManual": false,
-      "recipes": [{ … }],
       "storeOptions": [{ … }],
       "selectedStoreItemId": 0
     }
@@ -1651,26 +1608,16 @@ pageSize echo the request with its defaults applied; totalPages is ceil(total / 
 
 ### PersistedShoppingListDto
 
-A previously generated shopping list as it was persisted: its items with names, the amount still needed and its
-unit, every current store option for each item (cheapest till price first, but not pre-picked) and the store item
-the user has selected, if any. DAHÄM surfaces the options; it never chooses one for the user.
-
-shoppingDate is the day of the trip the list was made for: the offers in the store options are the ones
-that run on that day (validFrom / validUntil on each option say when). fromDate is the first
-meal day the list counts. Both are null on a list made before they existed.
-
-Each line: available is false when no store currently sells the item (the line is kept, never silently
-dropped); needsReview is true when stock exists but in another unit than the line's, so nothing was
-subtracted and a person checks it (stockQuantity / stockUnit show what the household has);
-recipes are the recipes that need the line.
+A previously generated shopping list as it was persisted: its items with names, quantity still
+needed, every current store option for each item (cheapest till price first, but not pre-picked)
+and the store item the user has selected, if any. DAHÄM surfaces the options; it never chooses
+one for the user.
 
 | Property | Type |
 |---|---|
 | `id` | `int` |
 | `mealPlanId` | `Integer` |
 | `createdDate` | `LocalDate` |
-| `shoppingDate` | `LocalDate` |
-| `fromDate` | `LocalDate` |
 | `status` | `boolean` |
 | `items` | `List<Line>` |
 
@@ -1686,29 +1633,10 @@ recipes are the recipes that need the line.
 | `inventoryItemId` | `Integer` |
 | `nameDeutsch` | `String` |
 | `nameEnglish` | `String` |
-| `quantityNeeded` | `double` |
-| `unit` | `String` |
-| `available` | `boolean` |
-| `needsReview` | `boolean` |
-| `stockQuantity` | `Integer` |
-| `stockUnit` | `String` |
+| `quantityNeeded` | `int` |
 | `isManual` | `boolean` |
-| `recipes` | `List<RecipeRef>` |
 | `storeOptions` | `List<ShoppingListDto.StoreOptionDto>` |
 | `selectedStoreItemId` | `Integer` |
-
-```json
-{ … }
-```
-
-### PersistedShoppingListDto.RecipeRef
-
-A recipe that needs a line.
-
-| Property | Type |
-|---|---|
-| `id` | `int` |
-| `name` | `String` |
 
 ```json
 { … }
@@ -2066,7 +1994,6 @@ when it's true — never a fabricated pack count for an incompatible unit.
 | `salePrice` | `Double` |
 | `dealQuantity` | `int` |
 | `dealPrice` | `Double` |
-| `validFrom` | `LocalDate` |
 | `validUntil` | `LocalDate` |
 | `deposit` | `Double` |
 | `tillPrice` | `Double` |

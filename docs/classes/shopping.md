@@ -4,7 +4,7 @@
 
 Shopping-list generation from recipes and the store options per line.
 
-13 types in 13 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
+11 types in 11 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -34,12 +34,6 @@ classDiagram
         <<record>>
     }
     class shopping_ShoppingListService["ShoppingListService"]
-    class shopping_ShoppingListSummary["ShoppingListSummary"] {
-        <<record>>
-    }
-    class shopping_SourceRecipe["SourceRecipe"] {
-        <<record>>
-    }
     class shopping_StoreItemCandidate["StoreItemCandidate"] {
         <<record>>
     }
@@ -47,7 +41,6 @@ classDiagram
         <<record>>
     }
     shopping_PersistedShoppingList --> shopping_PersistedShoppingListItem
-    shopping_PersistedShoppingListItem --> shopping_SourceRecipe
     shopping_PersistedShoppingListItem --> shopping_StoreOption
     shopping_ShoppingList --> shopping_ShoppingListItem
     shopping_ShoppingListItem --> shopping_StoreOption
@@ -55,12 +48,9 @@ classDiagram
     shopping_ShoppingListRepository ..> shopping_StoreItemCandidate
     shopping_ShoppingListRepository ..> shopping_ShoppingListRow
     shopping_ShoppingListRepository ..> shopping_ShoppingListItemRow
-    shopping_ShoppingListRepository ..> shopping_SourceRecipe
-    shopping_ShoppingListRepository ..> shopping_ShoppingListSummary
     shopping_ShoppingListService --> shopping_ShoppingListRepository
     shopping_ShoppingListService ..> shopping_ShoppingList
     shopping_ShoppingListService ..> shopping_PersistedShoppingList
-    shopping_ShoppingListService ..> shopping_ShoppingListSummary
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -69,15 +59,13 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 |------|------|------|------------|
 | [`AggregatedIngredient`](#aggregatedingredient) | record |  | One inventory item's combined need across a set of recipes, before any store matching. |
 | [`PersistedShoppingList`](#persistedshoppinglist) | record |  | A previously generated shopping_list row, reloaded together with its persisted items. |
-| [`PersistedShoppingListItem`](#persistedshoppinglistitem) | record |  | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed and in which unit, the recipes that need it, every current sto |
+| [`PersistedShoppingListItem`](#persistedshoppinglistitem) | record |  | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed, every current store option for it (the same options a freshly |
 | [`ShoppingList`](#shoppinglist) | record |  | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
 | [`ShoppingListItem`](#shoppinglistitem) | record |  | One line of a shopping list: an inventory item, how much of it is needed in total across the recipes it came from, and every store's current option for it (ordered cheapest-till-price first, but not pre-chosen — DAHÄM surfaces the options a |
-| [`ShoppingListItemRow`](#shoppinglistitemrow) | record |  | Raw shopping_list_item row, joined to its inventory_item. |
+| [`ShoppingListItemRow`](#shoppinglistitemrow) | record |  | Raw shopping_list_item row, joined to its inventory_item's names and unit. |
 | [`ShoppingListRepository`](#shoppinglistrepository) | class |  | All SQL for building a shopping list lives here: summing recipe_ingredient across recipes, finding store_item candidates (with brand/store and any current store_discount) for one inventory item, and persisting a generated list to shopping_l |
 | [`ShoppingListRow`](#shoppinglistrow) | record |  | Raw shopping_list row, before its items are attached. |
 | [`ShoppingListService`](#shoppinglistservice) | class |  | Turns a set of recipes into a shopping list: sums what they need, then for each item collects every store's current option for it. |
-| [`ShoppingListSummary`](#shoppinglistsummary) | record |  | One saved list of a meal plan in short: when it was made, for which shopping day, from which meal day, how many lines. |
-| [`SourceRecipe`](#sourcerecipe) | record |  | A recipe that needs a shopping list line ("für Kartoffelsuppe, Lachs"). |
 | [`StoreItemCandidate`](#storeitemcandidate) | record |  | One store_item that can satisfy an inventory item, with its brand/store and (if one is running today) its current store_discount. |
 | [`StoreOption`](#storeoption) | record |  | The chosen way to buy one shopping-list line item at one store: what it costs today, whether that's a sale price, and the price you'd actually see at the till (sale/deal price where one applies, plus deposit). |
 
@@ -118,8 +106,7 @@ classDiagram
 
 *record*
 
-A previously generated shopping_list row, reloaded together with its persisted items. shoppingDate is the day of the
-trip the list was made for and fromDate the first meal day it counts (both null on a list made before they existed).
+A previously generated shopping_list row, reloaded together with its persisted items.
 
 ```mermaid
 classDiagram
@@ -129,8 +116,6 @@ classDiagram
         +int id
         +Integer mealPlanId
         +LocalDate createdDate
-        +LocalDate shoppingDate
-        +LocalDate fromDate
         +boolean status
         +List~PersistedShoppingListItem~ items
     }
@@ -151,8 +136,6 @@ classDiagram
 | `id` | `int` |
 | `mealPlanId` | `Integer` |
 | `createdDate` | `LocalDate` |
-| `shoppingDate` | `LocalDate` |
-| `fromDate` | `LocalDate` |
 | `status` | `boolean` |
 | `items` | `List<PersistedShoppingListItem>` |
 
@@ -162,14 +145,10 @@ classDiagram
 
 *record*
 
-One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no
-catalog match), its German/English name, how much is still needed and in which unit, the recipes that need it, every
-current store option for it (the same options a freshly built line would show, cheapest till-price first, none
-pre-chosen), and the store_item the user has selected so far, if any.
-
-available is false when no store currently sells the item: the line is kept so the list is never silently
-shorter than the plan. needsReview is true when stock exists but its unit differs from the line's, so nothing was
-subtracted and a person checks the line; stockQuantity / stockUnit show what the household has.
+One persisted shopping_list_item line: the inventory item it is for (null only for a purely
+manual line with no catalog match), its German/English name, how much is still needed, every
+current store option for it (the same options a freshly built line would show, cheapest
+till-price first, none pre-chosen), and the store_item the user has selected so far, if any.
 
 ```mermaid
 classDiagram
@@ -180,19 +159,10 @@ classDiagram
         +Integer inventoryItemId
         +String nameDeutsch
         +String nameEnglish
-        +double quantityNeeded
-        +String unit
-        +boolean available
-        +boolean needsReview
-        +Integer stockQuantity
-        +String stockUnit
+        +int quantityNeeded
         +boolean isManual
-        +List~SourceRecipe~ recipes
         +List~StoreOption~ storeOptions
         +Integer selectedStoreItemId
-    }
-    class shopping_SourceRecipe["SourceRecipe"] {
-        <<record>>
     }
     class shopping_StoreOption["StoreOption"] {
         <<record>>
@@ -203,7 +173,6 @@ classDiagram
     class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
         <<record>>
     }
-    shopping_PersistedShoppingListItem --> shopping_SourceRecipe
     shopping_PersistedShoppingListItem --> shopping_StoreOption
     api_PersistedShoppingListDto_Line ..> shopping_PersistedShoppingListItem
     shopping_PersistedShoppingList --> shopping_PersistedShoppingListItem
@@ -215,14 +184,8 @@ classDiagram
 | `inventoryItemId` | `Integer` |
 | `nameDeutsch` | `String` |
 | `nameEnglish` | `String` |
-| `quantityNeeded` | `double` |
-| `unit` | `String` |
-| `available` | `boolean` |
-| `needsReview` | `boolean` |
-| `stockQuantity` | `Integer` |
-| `stockUnit` | `String` |
+| `quantityNeeded` | `int` |
 | `isManual` | `boolean` |
-| `recipes` | `List<SourceRecipe>` |
 | `storeOptions` | `List<StoreOption>` |
 | `selectedStoreItemId` | `Integer` |
 
@@ -316,10 +279,11 @@ classDiagram
 
 *record*
 
-Raw shopping_list_item row, joined to its inventory_item. inventoryItemId, nameDeutsch, nameEnglish, stockQuantity
-and stockUnit are null for a purely manual line with no catalog match. unit is the unit of the amount: the
-line's own unit, or for a line made before migration 0017 the inventory_item's tracking unit. stockQuantity /
-stockUnit is what the household has now, in the item's own unit (shown when a line needs review).
+Raw shopping_list_item row, joined to its inventory_item's names and unit. inventoryItemId,
+nameDeutsch, nameEnglish and unit are all null for a purely manual line with no catalog match.
+unit is the inventory_item's own tracking unit (inventory_item_unit) — quantityNeeded was
+computed against that unit at generation time, so it doubles as the line's needed unit for
+unit-aware pricing.
 
 ```mermaid
 classDiagram
@@ -331,12 +295,9 @@ classDiagram
         +String nameDeutsch
         +String nameEnglish
         +String unit
-        +double quantityNeeded
+        +int quantityNeeded
         +Integer selectedStoreItemId
         +boolean isManual
-        +boolean needsReview
-        +Integer stockQuantity
-        +String stockUnit
     }
     class shopping_ShoppingListRepository["ShoppingListRepository"]
     shopping_ShoppingListRepository ..> shopping_ShoppingListItemRow
@@ -349,12 +310,9 @@ classDiagram
 | `nameDeutsch` | `String` |
 | `nameEnglish` | `String` |
 | `unit` | `String` |
-| `quantityNeeded` | `double` |
+| `quantityNeeded` | `int` |
 | `selectedStoreItemId` | `Integer` |
 | `isManual` | `boolean` |
-| `needsReview` | `boolean` |
-| `stockQuantity` | `Integer` |
-| `stockUnit` | `String` |
 
 **Referenced by:** `ShoppingListRepository`
 
@@ -376,13 +334,10 @@ classDiagram
         +aggregateIngredientsByServings(java.util.Map~Integer, Integer~ servingsPerRecipe) List~AggregatedIngredient~
         +loadStoreCandidates(int inventoryItemId, LocalDate today) List~StoreItemCandidate~
         +openTransaction() Connection
-        +insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status) int
-        +insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, Integer inventoryItemId, String storeSection, BigDecimal quantityNeeded, String unit, Boolean isDiscounted, boolean purchaseStatus, boolean isManual, boolean needsReview) int
-        +insertItemRecipes(Connection con, int shoppingListItemId, List~Integer~ recipeIds) void
+        +insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, boolean status) int
+        +insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, Integer inventoryItemId, String storeSection, int quantityNeeded, Boolean isDiscounted, boolean purchaseStatus, boolean isManual) void
         +findShoppingListById(int shoppingListId) Optional~ShoppingListRow~
         +findItemsForShoppingList(int shoppingListId) List~ShoppingListItemRow~
-        +recipesByItem(int shoppingListId) Map~Integer, List~SourceRecipe~~
-        +findListsForPlan(int mealPlanId) List~ShoppingListSummary~
         +findInventoryItemIdForItem(int shoppingListItemId) Optional~Integer~
         +findShoppingListIdForItem(int shoppingListItemId) Optional~Integer~
         +setChosenStoreItem(int shoppingListItemId, Integer storeItemId) void
@@ -400,12 +355,6 @@ classDiagram
     class shopping_ShoppingListItemRow["ShoppingListItemRow"] {
         <<record>>
     }
-    class shopping_SourceRecipe["SourceRecipe"] {
-        <<record>>
-    }
-    class shopping_ShoppingListSummary["ShoppingListSummary"] {
-        <<record>>
-    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
@@ -413,8 +362,6 @@ classDiagram
     shopping_ShoppingListRepository ..> shopping_StoreItemCandidate
     shopping_ShoppingListRepository ..> shopping_ShoppingListRow
     shopping_ShoppingListRepository ..> shopping_ShoppingListItemRow
-    shopping_ShoppingListRepository ..> shopping_SourceRecipe
-    shopping_ShoppingListRepository ..> shopping_ShoppingListSummary
     api_ServiceConfig ..> shopping_ShoppingListRepository
     shopping_ShoppingListService --> shopping_ShoppingListRepository
 ```
@@ -426,13 +373,10 @@ classDiagram
 | `List<AggregatedIngredient> aggregateIngredientsByServings(java.util.Map<Integer, Integer> servingsPerRecipe)` | public | Same as .aggregateIngredients(List, int), but every recipe has its own head count: the map gives, per recipe id, the total number of servings planned across all its meals (a recipe planned twice, for 2 and for 4, is 6). |
 | `List<StoreItemCandidate> loadStoreCandidates(int inventoryItemId, LocalDate today)` | public | Every store_item that can supply the given inventory item, with its brand and store name, and its store_discount for today if one is currently running. |
 | `Connection openTransaction()` | public | Opens a connection with auto-commit off, for a caller that needs to combine several writes atomically. |
-| `int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status)` | public | Inserts a new shopping_list row, on the caller's transaction. |
-| `int insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, Integer inventoryItemId, String storeSection, BigDecimal quantityNeeded, String unit, Boolean isDiscounted, boolean purchaseStatus, boolean isManual, boolean needsReview)` | public | Inserts one shopping_list_item row, on the caller's transaction, and returns its id. |
-| `void insertItemRecipes(Connection con, int shoppingListItemId, List<Integer> recipeIds)` | public | Records which recipes need a line, on the caller's transaction. |
+| `int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, boolean status)` | public | Inserts a new shopping_list row, on the caller's transaction. |
+| `void insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, Integer inventoryItemId, String storeSection, int quantityNeeded, Boolean isDiscounted, boolean purchaseStatus, boolean isManual)` | public | Inserts one shopping_list_item row, on the caller's transaction. |
 | `Optional<ShoppingListRow> findShoppingListById(int shoppingListId)` | public | The shopping_list row for a persisted list, or empty if no such list exists. |
 | `List<ShoppingListItemRow> findItemsForShoppingList(int shoppingListId)` | public | Every shopping_list_item on a persisted list, joined to its inventory_item's names (both null for a manual line with no catalog match), ordered by insertion. |
-| `Map<Integer, List<SourceRecipe>> recipesByItem(int shoppingListId)` | public | The recipes that need each line of a list (line id -> recipes, by name). |
-| `List<ShoppingListSummary> findListsForPlan(int mealPlanId)` | public | The saved lists of a meal plan, newest first, each with its number of lines. |
 | `Optional<Integer> findInventoryItemIdForItem(int shoppingListItemId)` | public | The inventory_item_id a shopping_list_item is for, or empty if the item doesn't exist or has no catalog link (a manual line). |
 | `Optional<Integer> findShoppingListIdForItem(int shoppingListItemId)` | public | The shopping_list_id a shopping_list_item belongs to, or empty if no such item exists. |
 | `void setChosenStoreItem(int shoppingListItemId, Integer storeItemId)` | public | Sets (or, with null, clears) the store_item the user chose for this line. |
@@ -443,8 +387,7 @@ classDiagram
 
 *record*
 
-Raw shopping_list row, before its items are attached. shoppingDate (the day of the trip, offers are judged on it) and
-fromDate (the first meal day the list counts) are null on a list made before migration 0017.
+Raw shopping_list row, before its items are attached.
 
 ```mermaid
 classDiagram
@@ -454,8 +397,6 @@ classDiagram
         +int id
         +Integer mealPlanId
         +LocalDate createdDate
-        +LocalDate shoppingDate
-        +LocalDate fromDate
         +boolean status
     }
     class shopping_ShoppingListRepository["ShoppingListRepository"]
@@ -467,8 +408,6 @@ classDiagram
 | `id` | `int` |
 | `mealPlanId` | `Integer` |
 | `createdDate` | `LocalDate` |
-| `shoppingDate` | `LocalDate` |
-| `fromDate` | `LocalDate` |
 | `status` | `boolean` |
 
 **Referenced by:** `ShoppingListRepository`
@@ -496,15 +435,12 @@ classDiagram
         +generateFromMealPlan(int mealPlanId) int
         +generateFromMealPlan(int mealPlanId, LocalDate today) int
         +generateFromMealPlan(int mealPlanId, LocalDate today, int people) int
-        +generateFromMealPlan(int mealPlanId, LocalDate today, int people, LocalDate shoppingDate, LocalDate from) int
         +generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople) int
-        +generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople, LocalDate shoppingDate, LocalDate from) int
         ~servingsPerRecipe(int mealPlanId, Integer householdPeople) Map~Integer, Integer~
         +selectStoreItem(int shoppingListItemId, Integer storeItemId) void
         +findShoppingListIdForItem(int shoppingListItemId) Optional~Integer~
         +loadPersistedList(int shoppingListId) Optional~PersistedShoppingList~
         +loadPersistedList(int shoppingListId, LocalDate today) Optional~PersistedShoppingList~
-        +listsForPlan(int mealPlanId) List~ShoppingListSummary~
     }
     class shopping_ShoppingListRepository["ShoppingListRepository"]
     class mealplanner_MealPlanRepository["MealPlanRepository"]
@@ -524,9 +460,6 @@ classDiagram
     class shopping_PersistedShoppingList["PersistedShoppingList"] {
         <<record>>
     }
-    class shopping_ShoppingListSummary["ShoppingListSummary"] {
-        <<record>>
-    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
@@ -535,7 +468,6 @@ classDiagram
     shopping_ShoppingListService --> inventory_InventoryRepository
     shopping_ShoppingListService ..> shopping_ShoppingList
     shopping_ShoppingListService ..> shopping_PersistedShoppingList
-    shopping_ShoppingListService ..> shopping_ShoppingListSummary
     api_MealPlanController --> shopping_ShoppingListService
     api_ServiceConfig ..> shopping_ShoppingListService
     api_ShoppingListController --> shopping_ShoppingListService
@@ -558,85 +490,14 @@ classDiagram
 | `int generateFromMealPlan(int mealPlanId)` | public |  |
 | `int generateFromMealPlan(int mealPlanId, LocalDate today)` | public | Builds a shopping list from a meal plan's recipes, subtracts what is already in inventory, and persists it: a shopping_list row linked to the plan, plus one shopping_list_item per item still missing (an item already fully in stock is droppe |
 | `int generateFromMealPlan(int mealPlanId, LocalDate today, int people)` | public | Scales each recipe's ingredient quantities by people / recipe_servings before summing (see .buildFromRecipes(List, LocalDate, int)), otherwise identical to .generateFromMealPlan(int, LocalDate). |
-| `int generateFromMealPlan(int mealPlanId, LocalDate today, int people, LocalDate shoppingDate, LocalDate from)` | public | As .generateFromMealPlan(int, LocalDate, int) for a shopping trip on shoppingDate (offers are judged on that day, and stock that has expired by then is not subtracted) counting the meals from from on (null = all meals of the plan). |
 | `int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople)` | public | Builds and persists a shopping list in which every planned meal is scaled by its OWN servings: the meal's own number, then its recipe's preferred servings, then householdPeople, then 2 (see MealServings). |
-| `int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople, LocalDate shoppingDate, LocalDate from)` | public | As .generateFromMealPlanByServings(int, LocalDate, Integer) for a shopping trip on shoppingDate (offers are judged on that day, stock that has expired by then is not subtracted), counting the meals from from on (null = all). |
 | `Map<Integer, Integer> servingsPerRecipe(int mealPlanId, Integer householdPeople)` | package | Per recipe on the plan, the servings of all its meals added up (a recipe planned for 2 and for 4 is 6). |
 | `void selectStoreItem(int shoppingListItemId, Integer storeItemId)` | public | Records the store_item the user picked for a persisted shopping_list_item line, or clears the choice when storeItemId is null. |
 | `Optional<Integer> findShoppingListIdForItem(int shoppingListItemId)` | public | The shopping_list a persisted shopping_list_item belongs to, or empty if the item doesn't exist. |
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId)` | public |  |
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId, LocalDate today)` | public | Reloads a persisted shopping_list by id with its items, or empty if no such list exists. |
-| `List<ShoppingListSummary> listsForPlan(int mealPlanId)` | public | The saved lists of a meal plan, newest first. |
 
 **Referenced by:** `MealPlanController`, `ServiceConfig`, `ShoppingListController`, `ShoppingListItemController`
-
-## ShoppingListSummary
-
-*record*
-
-One saved list of a meal plan in short: when it was made, for which shopping day, from which meal day, how many lines.
-
-```mermaid
-classDiagram
-    direction LR
-    class shopping_ShoppingListSummary["ShoppingListSummary"] {
-        <<record>>
-        +int id
-        +LocalDate createdDate
-        +LocalDate shoppingDate
-        +LocalDate fromDate
-        +boolean status
-        +int lines
-    }
-    class api_PersistedShoppingListDto_Summary["PersistedShoppingListDto.Summary"] {
-        <<record>>
-    }
-    class shopping_ShoppingListRepository["ShoppingListRepository"]
-    class shopping_ShoppingListService["ShoppingListService"]
-    api_PersistedShoppingListDto_Summary ..> shopping_ShoppingListSummary
-    shopping_ShoppingListRepository ..> shopping_ShoppingListSummary
-    shopping_ShoppingListService ..> shopping_ShoppingListSummary
-```
-
-| Component | Type |
-|---|---|
-| `id` | `int` |
-| `createdDate` | `LocalDate` |
-| `shoppingDate` | `LocalDate` |
-| `fromDate` | `LocalDate` |
-| `status` | `boolean` |
-| `lines` | `int` |
-
-**Referenced by:** `PersistedShoppingListDto.Summary`, `ShoppingListRepository`, `ShoppingListService`
-
-## SourceRecipe
-
-*record*
-
-A recipe that needs a shopping list line ("für Kartoffelsuppe, Lachs").
-
-```mermaid
-classDiagram
-    direction LR
-    class shopping_SourceRecipe["SourceRecipe"] {
-        <<record>>
-        +int id
-        +String name
-    }
-    class shopping_PersistedShoppingListItem["PersistedShoppingListItem"] {
-        <<record>>
-    }
-    class shopping_ShoppingListRepository["ShoppingListRepository"]
-    shopping_PersistedShoppingListItem --> shopping_SourceRecipe
-    shopping_ShoppingListRepository ..> shopping_SourceRecipe
-```
-
-| Component | Type |
-|---|---|
-| `id` | `int` |
-| `name` | `String` |
-
-**Referenced by:** `PersistedShoppingListItem`, `ShoppingListRepository`
 
 ## StoreItemCandidate
 
@@ -662,7 +523,6 @@ classDiagram
         +LocalDate productLastSeen
         +Boolean productAvailable
         +Double discountPrice
-        +LocalDate discountValidFrom
         +LocalDate discountValidUntil
         +int dealQuantity
         +Double dealPrice
@@ -684,7 +544,6 @@ classDiagram
 | `productLastSeen` | `LocalDate` |
 | `productAvailable` | `Boolean` |
 | `discountPrice` | `Double` |
-| `discountValidFrom` | `LocalDate` |
 | `discountValidUntil` | `LocalDate` |
 | `dealQuantity` | `int` |
 | `dealPrice` | `Double` |
@@ -720,7 +579,6 @@ classDiagram
         +Double salePrice
         +int dealQuantity
         +Double dealPrice
-        +LocalDate validFrom
         +LocalDate validUntil
         +Double deposit
         +Double tillPrice
@@ -754,7 +612,6 @@ classDiagram
 | `salePrice` | `Double` |
 | `dealQuantity` | `int` |
 | `dealPrice` | `Double` |
-| `validFrom` | `LocalDate` |
 | `validUntil` | `LocalDate` |
 | `deposit` | `Double` |
 | `tillPrice` | `Double` |

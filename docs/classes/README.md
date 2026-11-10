@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (69)"]
+    api["api (67)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (3)"]
@@ -16,7 +16,7 @@ flowchart TD
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
     shared["shared (7)"]
-    shopping["shopping (13)"]
+    shopping["shopping (11)"]
     stores["stores (47)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
@@ -25,7 +25,7 @@ flowchart TD
     api -->|4| finance
     api -->|4| inventory
     api -->|31| mealplanner
-    api -->|12| shopping
+    api -->|11| shopping
     api -->|2| stores
     api -->|10| suggestions
     api -->|6| tags
@@ -36,7 +36,7 @@ flowchart TD
     mealplanner -->|1| tags
     receipts -->|8| stores
     shopping -->|2| inventory
-    shopping -->|3| mealplanner
+    shopping -->|4| mealplanner
     suggestions -->|3| diet
     suggestions -->|4| mealplanner
     suggestions -->|1| tags
@@ -48,7 +48,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 69 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 67 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 3 | Purchases and spending analytics. |
@@ -56,7 +56,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
-| [`shopping`](shopping.md) | 13 | Shopping-list generation from recipes and the store options per line. |
+| [`shopping`](shopping.md) | 11 | Shopping-list generation from recipes and the store options per line. |
 | [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 12 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
@@ -188,11 +188,9 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PennyReceiptFormat.Last`](receipts.md#pennyreceiptformatlast) | receipts | enum | What the last booked line was, so an "n Stk x p" sub-line lands on the right thing. |
 | [`PennySource`](stores.md#pennysource) | stores | class | Penny's own weekly offers; prices depend on the store's region, so the scope must name the store. |
 | [`PersistedShoppingList`](shopping.md#persistedshoppinglist) | shopping | record | A previously generated shopping_list row, reloaded together with its persisted items. |
-| [`PersistedShoppingListDto`](api.md#persistedshoppinglistdto) | api | record | A previously generated shopping list as it was persisted: its items with names, the amount still needed and its unit, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has s |
+| [`PersistedShoppingListDto`](api.md#persistedshoppinglistdto) | api | record | A previously generated shopping list as it was persisted: its items with names, quantity still needed, every current store option for each item (cheapest till price first, but not pre-picked) and the store item the user has selected, if any |
 | [`PersistedShoppingListDto.Line`](api.md#persistedshoppinglistdtoline) | api | record |  |
-| [`PersistedShoppingListDto.RecipeRef`](api.md#persistedshoppinglistdtoreciperef) | api | record | A recipe that needs a line. |
-| [`PersistedShoppingListDto.Summary`](api.md#persistedshoppinglistdtosummary) | api | record | One saved list of a meal plan in short (see GET /api/meal-plans/{id/shopping-lists}). |
-| [`PersistedShoppingListItem`](shopping.md#persistedshoppinglistitem) | shopping | record | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed and in which unit, the recipes that need it, every current sto |
+| [`PersistedShoppingListItem`](shopping.md#persistedshoppinglistitem) | shopping | record | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed, every current store option for it (the same options a freshly |
 | [`PlannedMeal`](mealplanner.md#plannedmeal) | mealplanner | class | Plain data holder for one planned meal: a row of meal_plan_recipe joined to its recipe and its plan. |
 | [`PlannedMealController`](api.md#plannedmealcontroller) | api | class | The meal planner by date: read a week, plan a recipe on a day (as often as wanted), edit or move a planned meal, remove it, and set a recipe's preferred servings. |
 | [`PlannedMealDto`](api.md#plannedmealdto) | api | record | One planned meal. |
@@ -280,13 +278,11 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ShoppingListDto.StoreOptionDto`](api.md#shoppinglistdtostoreoptiondto) | api | record | One store's current price for a line: what it costs at the till (sale/deal price where one applies, plus deposit), plus whether this pack's unit is even comparable to what's needed. |
 | [`ShoppingListItem`](shopping.md#shoppinglistitem) | shopping | record | One line of a shopping list: an inventory item, how much of it is needed in total across the recipes it came from, and every store's current option for it (ordered cheapest-till-price first, but not pre-chosen — DAHÄM surfaces the options a |
 | [`ShoppingListItemController`](api.md#shoppinglistitemcontroller) | api | class |  |
-| [`ShoppingListItemRow`](shopping.md#shoppinglistitemrow) | shopping | record | Raw shopping_list_item row, joined to its inventory_item. |
+| [`ShoppingListItemRow`](shopping.md#shoppinglistitemrow) | shopping | record | Raw shopping_list_item row, joined to its inventory_item's names and unit. |
 | [`ShoppingListItemSelectionDto`](api.md#shoppinglistitemselectiondto) | api | record | Response of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item: the line's new selection. |
 | [`ShoppingListRepository`](shopping.md#shoppinglistrepository) | shopping | class | All SQL for building a shopping list lives here: summing recipe_ingredient across recipes, finding store_item candidates (with brand/store and any current store_discount) for one inventory item, and persisting a generated list to shopping_l |
 | [`ShoppingListRow`](shopping.md#shoppinglistrow) | shopping | record | Raw shopping_list row, before its items are attached. |
 | [`ShoppingListService`](shopping.md#shoppinglistservice) | shopping | class | Turns a set of recipes into a shopping list: sums what they need, then for each item collects every store's current option for it. |
-| [`ShoppingListSummary`](shopping.md#shoppinglistsummary) | shopping | record | One saved list of a meal plan in short: when it was made, for which shopping day, from which meal day, how many lines. |
-| [`SourceRecipe`](shopping.md#sourcerecipe) | shopping | record | A recipe that needs a shopping list line ("für Kartoffelsuppe, Lachs"). |
 | [`SpendingDto`](api.md#spendingdto) | api | record | Total spent; from/to are null when the total covers all purchases. |
 | [`StepAmounts`](mealplanner.md#stepamounts) | mealplanner | class | Renders a cooking step's amounts for a number of people. |
 | [`StepAmounts.Amount`](mealplanner.md#stepamountsamount) | mealplanner | record | A parsed amount: one value or a range, and its unit (null when none). |

@@ -28,38 +28,37 @@ flowchart LR
         u10(["POST /api/meal-plans/{id}/recipes"])
         u11(["DELETE /api/meal-plans/{id}/recipes/{recipeId}"])
         u12(["POST /api/meal-plans/{id}/shopping-list"])
-        u13(["GET /api/meal-plans/{id}/shopping-lists"])
     end
     subgraph g_PlannedMeal["PlannedMeal"]
-        u14(["POST /api/meal-plans/meals"])
-        u15(["DELETE /api/meal-plans/meals/{entryId}"])
-        u16(["PATCH /api/meal-plans/meals/{entryId}"])
-        u17(["GET /api/meal-plans/week"])
-        u18(["PUT /api/recipes/{id}/preferred-servings"])
+        u13(["POST /api/meal-plans/meals"])
+        u14(["DELETE /api/meal-plans/meals/{entryId}"])
+        u15(["PATCH /api/meal-plans/meals/{entryId}"])
+        u16(["GET /api/meal-plans/week"])
+        u17(["PUT /api/recipes/{id}/preferred-servings"])
     end
     subgraph g_Purchase["Purchase"]
-        u19(["GET /api/analytics/spending"])
-        u20(["GET /api/purchases"])
-        u21(["POST /api/purchases"])
+        u18(["GET /api/analytics/spending"])
+        u19(["GET /api/purchases"])
+        u20(["POST /api/purchases"])
     end
     subgraph g_Recipe["Recipe"]
-        u22(["GET /api/recipes"])
-        u23(["GET /api/recipes/search"])
-        u24(["GET /api/recipes/{id}"])
-        u25(["GET /api/recipes/{id}/tags"])
-        u26(["POST /api/recipes/{id}/tags"])
+        u21(["GET /api/recipes"])
+        u22(["GET /api/recipes/search"])
+        u23(["GET /api/recipes/{id}"])
+        u24(["GET /api/recipes/{id}/tags"])
+        u25(["POST /api/recipes/{id}/tags"])
     end
     subgraph g_ShoppingList["ShoppingList"]
-        u27(["GET /api/shopping-list"])
+        u26(["GET /api/shopping-list"])
     end
     subgraph g_ShoppingListItem["ShoppingListItem"]
-        u28(["GET /api/shopping-lists/{listId}"])
-        u29(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
+        u27(["GET /api/shopping-lists/{listId}"])
+        u28(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
     end
     subgraph g_Suggestion["Suggestion"]
-        u30(["GET /api/suggestions/by-expiring"])
-        u31(["GET /api/suggestions/by-savings"])
-        u32(["GET /api/suggestions/pantry"])
+        u29(["GET /api/suggestions/by-expiring"])
+        u30(["GET /api/suggestions/by-savings"])
+        u31(["GET /api/suggestions/pantry"])
     end
     member --> u1
     member --> u2
@@ -92,7 +91,6 @@ flowchart LR
     member --> u29
     member --> u30
     member --> u31
-    member --> u32
 ```
 
 Each use case is one endpoint; the parameters, bodies and answers are in [API.md](API.md). What a member actually does with them:
