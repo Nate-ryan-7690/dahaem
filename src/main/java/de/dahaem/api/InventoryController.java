@@ -29,7 +29,7 @@ public class InventoryController {
      * item as it is now, with its earliest expiry date worked out again.
      */
     @PostMapping("/{id}/use")
-    public ItemDto use(@PathVariable int id, @RequestBody UseStockRequest request) {
+    public ItemDto use(@PathVariable("id") int id, @RequestBody UseStockRequest request) {
         if (request.quantity() == null || request.quantity() <= 0) {
             throw new BadRequestException("'quantity' must be greater than 0");
         }
