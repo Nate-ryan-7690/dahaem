@@ -93,7 +93,7 @@ public class SecurityConfig {
                         .successHandler((request, response, authentication) ->
                                 response.setStatus(HttpStatus.NO_CONTENT.value()))
                         .failureHandler((request, response, exception) ->
-                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "Wrong email or password")))
+                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Wrong email or password")))
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .deleteCookies("JSESSIONID")

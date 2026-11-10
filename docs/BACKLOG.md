@@ -452,7 +452,7 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   purchases, warning on expired offers, and the list of open lists per household.
 - **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list
   summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
-  PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, INVALID_TOKEN, INTERNAL_ERROR),
+  PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN, INTERNAL_ERROR),
   `GET /api/inventory/search` (`q`, `category`, `page`, `pageSize`; the plain `GET /api/inventory` is unchanged), and
   a list without a plan (`POST /api/shopping-lists`, `GET /api/shopping-lists` lists all). Migration 0019 (Nate decided
   archive instead of delete: every list stays in the database): `PUT /api/shopping-lists/{id}/archived` hides a list from
