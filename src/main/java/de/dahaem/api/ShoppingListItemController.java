@@ -1,11 +1,15 @@
 package de.dahaem.api;
 
 import de.dahaem.shopping.ShoppingListService;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -35,12 +39,80 @@ public class ShoppingListItemController {
     public ShoppingListItemSelectionDto selectStoreItem(@PathVariable("listId") int listId,
                                                           @PathVariable("itemId") int itemId,
                                                           @RequestBody SelectStoreItemRequest request) {
+        requireItemOnList(listId, itemId);
+        shoppingListService.requireOpen(listId);
+        shoppingListService.selectStoreItem(itemId, request.storeItemId());
+        return new ShoppingListItemSelectionDto(itemId, request.storeItemId());
+    }
+
+    /** Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. Stock is not changed. */
+    @PutMapping("/{listId}/items/{itemId}/purchased")
+    public ShoppingListEdits.PurchasedDto setPurchased(@PathVariable("listId") int listId,
+                                                       @PathVariable("itemId") int itemId,
+                                                       @RequestBody ShoppingListEdits.PurchasedRequest request) {
+        if (request.purchased() == null) {
+            throw new BadRequestException("'purchased' must be true or false");
+        }
+        requireItemOnList(listId, itemId);
+        shoppingListService.setPurchased(listId, itemId, request.purchased());
+        return new ShoppingListEdits.PurchasedDto(itemId, request.purchased());
+    }
+
+    /** Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. */
+    @PutMapping("/{listId}/items/{itemId}/quantity")
+    public ShoppingListEdits.QuantityDto setQuantity(@PathVariable("listId") int listId,
+                                                     @PathVariable("itemId") int itemId,
+                                                     @RequestBody ShoppingListEdits.QuantityRequest request) {
+        if (request.quantity() == null) {
+            throw new BadRequestException("'quantity' is required");
+        }
+        requireItemOnList(listId, itemId);
+        shoppingListService.setQuantity(listId, itemId, request.quantity());
+        return new ShoppingListEdits.QuantityDto(itemId, request.quantity());
+    }
+
+    /** Removes a line from a list that is not completed. */
+    @DeleteMapping("/{listId}/items/{itemId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeItem(@PathVariable("listId") int listId, @PathVariable("itemId") int itemId) {
+        requireItemOnList(listId, itemId);
+        shoppingListService.removeItem(listId, itemId);
+    }
+
+    /** Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). */
+    @PostMapping("/{listId}/items")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ShoppingListEdits.AddedLineDto addItem(@PathVariable("listId") int listId,
+                                                  @RequestBody ShoppingListEdits.AddLineRequest request) {
+        if (request.inventoryItemId() == null || request.quantity() == null) {
+            throw new BadRequestException("'inventoryItemId' and 'quantity' are required");
+        }
+        if (shoppingListService.loadPersistedList(listId).isEmpty()) {
+            throw new NotFoundException("No shopping list with id " + listId);
+        }
+        return new ShoppingListEdits.AddedLineDto(shoppingListService.addManualItem(listId,
+                request.inventoryItemId(), request.quantity(), request.unit()));
+    }
+
+    /** Completes a list ({"completed": true}: it becomes read-only) or reopens it. */
+    @PutMapping("/{listId}/status")
+    public ShoppingListEdits.StatusDto setStatus(@PathVariable("listId") int listId,
+                                                 @RequestBody ShoppingListEdits.StatusRequest request) {
+        if (request.completed() == null) {
+            throw new BadRequestException("'completed' must be true or false");
+        }
+        if (shoppingListService.loadPersistedList(listId).isEmpty()) {
+            throw new NotFoundException("No shopping list with id " + listId);
+        }
+        shoppingListService.setCompleted(listId, request.completed());
+        return new ShoppingListEdits.StatusDto(listId, request.completed());
+    }
+
+    private void requireItemOnList(int listId, int itemId) {
         int actualListId = shoppingListService.findShoppingListIdForItem(itemId)
                 .orElseThrow(() -> new NotFoundException("No shopping list item with id " + itemId));
         if (actualListId != listId) {
             throw new NotFoundException("No shopping list item " + itemId + " on shopping list " + listId);
         }
-        shoppingListService.selectStoreItem(itemId, request.storeItemId());
-        return new ShoppingListItemSelectionDto(itemId, request.storeItemId());
     }
 }

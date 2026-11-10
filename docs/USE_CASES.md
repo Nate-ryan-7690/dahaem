@@ -55,12 +55,17 @@ flowchart LR
     end
     subgraph g_ShoppingListItem["ShoppingListItem"]
         u29(["GET /api/shopping-lists/{listId}"])
-        u30(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
+        u30(["POST /api/shopping-lists/{listId}/items"])
+        u31(["DELETE /api/shopping-lists/{listId}/items/{itemId}"])
+        u32(["PUT /api/shopping-lists/{listId}/items/{itemId}/purchased"])
+        u33(["PUT /api/shopping-lists/{listId}/items/{itemId}/quantity"])
+        u34(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
+        u35(["PUT /api/shopping-lists/{listId}/status"])
     end
     subgraph g_Suggestion["Suggestion"]
-        u31(["GET /api/suggestions/by-expiring"])
-        u32(["GET /api/suggestions/by-savings"])
-        u33(["GET /api/suggestions/pantry"])
+        u36(["GET /api/suggestions/by-expiring"])
+        u37(["GET /api/suggestions/by-savings"])
+        u38(["GET /api/suggestions/pantry"])
     end
     member --> u1
     member --> u2
@@ -95,6 +100,11 @@ flowchart LR
     member --> u31
     member --> u32
     member --> u33
+    member --> u34
+    member --> u35
+    member --> u36
+    member --> u37
+    member --> u38
 ```
 
 Each use case is one endpoint; the parameters, bodies and answers are in [API.md](API.md). What a member actually does with them:

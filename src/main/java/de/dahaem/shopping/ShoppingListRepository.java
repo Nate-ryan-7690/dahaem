@@ -364,6 +364,7 @@ public class ShoppingListRepository {
                 + "COALESCE(sli.shopping_list_item_unit, ii.inventory_item_unit) AS unit, "
                 + "sli.shopping_list_item_quantity_needed, sli.shopping_list_item_store_item_id, "
                 + "sli.shopping_list_item_is_manual, sli.shopping_list_item_needs_review, "
+                + "sli.shopping_list_item_purchase_status, "
                 + "ii.inventory_item_quantity, ii.inventory_item_unit AS stock_unit "
                 + "FROM shopping_list_item sli "
                 + "LEFT JOIN inventory_item ii ON ii.inventory_item_id = sli.shopping_list_item_inventory_item_id "
@@ -385,6 +386,7 @@ public class ShoppingListRepository {
                             (Integer) rs.getObject("shopping_list_item_store_item_id"),
                             rs.getBoolean("shopping_list_item_is_manual"),
                             rs.getBoolean("shopping_list_item_needs_review"),
+                            rs.getBoolean("shopping_list_item_purchase_status"),
                             (Integer) rs.getObject("inventory_item_quantity"),
                             rs.getString("stock_unit")));
                 }
@@ -475,6 +477,41 @@ public class ShoppingListRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not look up shopping list for item " + shoppingListItemId, e);
+        }
+    }
+
+    /** Ticks a line as bought (or unticks it). */
+    public void setPurchased(int shoppingListItemId, boolean purchased) {
+        update("UPDATE shopping_list_item SET shopping_list_item_purchase_status = ? WHERE shopping_list_item_id = ?",
+                purchased, shoppingListItemId);
+    }
+
+    /** Changes the amount of a line (its unit stays). */
+    public void setQuantityNeeded(int shoppingListItemId, BigDecimal quantity) {
+        update("UPDATE shopping_list_item SET shopping_list_item_quantity_needed = ? WHERE shopping_list_item_id = ?",
+                quantity, shoppingListItemId);
+    }
+
+    /** Opens or completes a list. */
+    public void setListStatus(int shoppingListId, boolean completed) {
+        update("UPDATE shopping_list SET shopping_list_status = ? WHERE shopping_list_id = ?", completed, shoppingListId);
+    }
+
+    /** Removes one line of a list together with the recipe links that belong to it. */
+    public void deleteItem(int shoppingListItemId) {
+        update("DELETE FROM shopping_list_item_recipe WHERE shopping_list_item_recipe_item_id = ?", shoppingListItemId);
+        update("DELETE FROM shopping_list_item WHERE shopping_list_item_id = ?", shoppingListItemId);
+    }
+
+    private static void update(String sql, Object... params) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) {
+                ps.setObject(i + 1, params[i]);
+            }
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not update the shopping list", e);
         }
     }
 

@@ -4,7 +4,7 @@
 
 Shopping-list generation from recipes and the store options per line.
 
-13 types in 13 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
+15 types in 15 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -14,6 +14,7 @@ classDiagram
     class shopping_AggregatedIngredient["AggregatedIngredient"] {
         <<record>>
     }
+    class shopping_ListCompletedException["ListCompletedException"]
     class shopping_PersistedShoppingList["PersistedShoppingList"] {
         <<record>>
     }
@@ -46,6 +47,9 @@ classDiagram
     class shopping_StoreOption["StoreOption"] {
         <<record>>
     }
+    class shopping_StoreTotal["StoreTotal"] {
+        <<record>>
+    }
     shopping_PersistedShoppingList --> shopping_PersistedShoppingListItem
     shopping_PersistedShoppingListItem --> shopping_SourceRecipe
     shopping_PersistedShoppingListItem --> shopping_StoreOption
@@ -61,6 +65,7 @@ classDiagram
     shopping_ShoppingListService ..> shopping_ShoppingList
     shopping_ShoppingListService ..> shopping_PersistedShoppingList
     shopping_ShoppingListService ..> shopping_ShoppingListSummary
+    shopping_StoreTotal ..> shopping_PersistedShoppingListItem
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -68,6 +73,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`AggregatedIngredient`](#aggregatedingredient) | record |  | One inventory item's combined need across a set of recipes, before any store matching. |
+| [`ListCompletedException`](#listcompletedexception) | class |  | A completed shopping list cannot be changed (reopen it first). |
 | [`PersistedShoppingList`](#persistedshoppinglist) | record |  | A previously generated shopping_list row, reloaded together with its persisted items. |
 | [`PersistedShoppingListItem`](#persistedshoppinglistitem) | record |  | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed and in which unit, the recipes that need it, every current sto |
 | [`ShoppingList`](#shoppinglist) | record |  | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
@@ -80,6 +86,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`SourceRecipe`](#sourcerecipe) | record |  | A recipe that needs a shopping list line ("für Kartoffelsuppe, Lachs"). |
 | [`StoreItemCandidate`](#storeitemcandidate) | record |  | One store_item that can satisfy an inventory item, with its brand/store and (if one is running today) its current store_discount. |
 | [`StoreOption`](#storeoption) | record |  | The chosen way to buy one shopping-list line item at one store: what it costs today, whether that's a sale price, and the price you'd actually see at the till (sale/deal price where one applies, plus deposit). |
+| [`StoreTotal`](#storetotal) | record |  | What the lines still to buy would cost at one store, for the user to compare. |
 
 ## AggregatedIngredient
 
@@ -113,6 +120,28 @@ classDiagram
 | `sourceRecipeIds` | `List<Integer>` |
 
 **Referenced by:** `ShoppingListRepository`
+
+## ListCompletedException
+
+*class · extends RuntimeException*
+
+A completed shopping list cannot be changed (reopen it first).
+
+```mermaid
+classDiagram
+    direction LR
+    class shopping_ListCompletedException["ListCompletedException"] {
+        +ListCompletedException(int listId)
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> shopping_ListCompletedException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `ListCompletedException(int listId)` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## PersistedShoppingList
 
@@ -169,7 +198,7 @@ pre-chosen), and the store_item the user has selected so far, if any.
 
 available is false when no store currently sells the item: the line is kept so the list is never silently
 shorter than the plan. needsReview is true when stock exists but its unit differs from the line's, so nothing was
-subtracted and a person checks the line; stockQuantity / stockUnit show what the household has.
+subtracted and a person checks the line; purchased is the tick "bought" on the shopping trip; stockQuantity / stockUnit show what the household has.
 
 ```mermaid
 classDiagram
@@ -184,6 +213,7 @@ classDiagram
         +String unit
         +boolean available
         +boolean needsReview
+        +boolean purchased
         +Integer stockQuantity
         +String stockUnit
         +boolean isManual
@@ -203,10 +233,14 @@ classDiagram
     class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
         <<record>>
     }
+    class shopping_StoreTotal["StoreTotal"] {
+        <<record>>
+    }
     shopping_PersistedShoppingListItem --> shopping_SourceRecipe
     shopping_PersistedShoppingListItem --> shopping_StoreOption
     api_PersistedShoppingListDto_Line ..> shopping_PersistedShoppingListItem
     shopping_PersistedShoppingList --> shopping_PersistedShoppingListItem
+    shopping_StoreTotal ..> shopping_PersistedShoppingListItem
 ```
 
 | Component | Type |
@@ -219,6 +253,7 @@ classDiagram
 | `unit` | `String` |
 | `available` | `boolean` |
 | `needsReview` | `boolean` |
+| `purchased` | `boolean` |
 | `stockQuantity` | `Integer` |
 | `stockUnit` | `String` |
 | `isManual` | `boolean` |
@@ -226,7 +261,7 @@ classDiagram
 | `storeOptions` | `List<StoreOption>` |
 | `selectedStoreItemId` | `Integer` |
 
-**Referenced by:** `PersistedShoppingList`, `PersistedShoppingListDto.Line`
+**Referenced by:** `PersistedShoppingList`, `PersistedShoppingListDto.Line`, `StoreTotal`
 
 ## ShoppingList
 
@@ -335,6 +370,7 @@ classDiagram
         +Integer selectedStoreItemId
         +boolean isManual
         +boolean needsReview
+        +boolean purchased
         +Integer stockQuantity
         +String stockUnit
     }
@@ -353,6 +389,7 @@ classDiagram
 | `selectedStoreItemId` | `Integer` |
 | `isManual` | `boolean` |
 | `needsReview` | `boolean` |
+| `purchased` | `boolean` |
 | `stockQuantity` | `Integer` |
 | `stockUnit` | `String` |
 
@@ -385,6 +422,10 @@ classDiagram
         +findListsForPlan(int mealPlanId) List~ShoppingListSummary~
         +findInventoryItemIdForItem(int shoppingListItemId) Optional~Integer~
         +findShoppingListIdForItem(int shoppingListItemId) Optional~Integer~
+        +setPurchased(int shoppingListItemId, boolean purchased) void
+        +setQuantityNeeded(int shoppingListItemId, BigDecimal quantity) void
+        +setListStatus(int shoppingListId, boolean completed) void
+        +deleteItem(int shoppingListItemId) void
         +setChosenStoreItem(int shoppingListItemId, Integer storeItemId) void
     }
     class shopping_ShoppingListService["ShoppingListService"]
@@ -435,6 +476,10 @@ classDiagram
 | `List<ShoppingListSummary> findListsForPlan(int mealPlanId)` | public | The saved lists of a meal plan, newest first, each with its number of lines. |
 | `Optional<Integer> findInventoryItemIdForItem(int shoppingListItemId)` | public | The inventory_item_id a shopping_list_item is for, or empty if the item doesn't exist or has no catalog link (a manual line). |
 | `Optional<Integer> findShoppingListIdForItem(int shoppingListItemId)` | public | The shopping_list_id a shopping_list_item belongs to, or empty if no such item exists. |
+| `void setPurchased(int shoppingListItemId, boolean purchased)` | public | Ticks a line as bought (or unticks it). |
+| `void setQuantityNeeded(int shoppingListItemId, BigDecimal quantity)` | public | Changes the amount of a line (its unit stays). |
+| `void setListStatus(int shoppingListId, boolean completed)` | public | Opens or completes a list. |
+| `void deleteItem(int shoppingListItemId)` | public | Removes one line of a list together with the recipe links that belong to it. |
 | `void setChosenStoreItem(int shoppingListItemId, Integer storeItemId)` | public | Sets (or, with null, clears) the store_item the user chose for this line. |
 
 **Referenced by:** `ServiceConfig`, `ShoppingListService`
@@ -501,6 +546,12 @@ classDiagram
         +generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople, LocalDate shoppingDate, LocalDate from) int
         ~servingsPerRecipe(int mealPlanId, Integer householdPeople) Map~Integer, Integer~
         +selectStoreItem(int shoppingListItemId, Integer storeItemId) void
+        +requireOpen(int shoppingListId) void
+        +setPurchased(int shoppingListId, int shoppingListItemId, boolean purchased) void
+        +setQuantity(int shoppingListId, int shoppingListItemId, double quantity) void
+        +removeItem(int shoppingListId, int shoppingListItemId) void
+        +addManualItem(int shoppingListId, int inventoryItemId, double quantity, String unit) int
+        +setCompleted(int shoppingListId, boolean completed) void
         +findShoppingListIdForItem(int shoppingListItemId) Optional~Integer~
         +loadPersistedList(int shoppingListId) Optional~PersistedShoppingList~
         +loadPersistedList(int shoppingListId, LocalDate today) Optional~PersistedShoppingList~
@@ -563,6 +614,12 @@ classDiagram
 | `int generateFromMealPlanByServings(int mealPlanId, LocalDate today, Integer householdPeople, LocalDate shoppingDate, LocalDate from)` | public | As .generateFromMealPlanByServings(int, LocalDate, Integer) for a shopping trip on shoppingDate (offers are judged on that day, stock that has expired by then is not subtracted), counting the meals from from on (null = all). |
 | `Map<Integer, Integer> servingsPerRecipe(int mealPlanId, Integer householdPeople)` | package | Per recipe on the plan, the servings of all its meals added up (a recipe planned for 2 and for 4 is 6). |
 | `void selectStoreItem(int shoppingListItemId, Integer storeItemId)` | public | Records the store_item the user picked for a persisted shopping_list_item line, or clears the choice when storeItemId is null. |
+| `void requireOpen(int shoppingListId)` | public | Throws ListCompletedException when the list is completed; a list that does not exist passes (callers check). |
+| `void setPurchased(int shoppingListId, int shoppingListItemId, boolean purchased)` | public | Ticks a line as bought, or unticks it. |
+| `void setQuantity(int shoppingListId, int shoppingListItemId, double quantity)` | public | Changes the amount of a line; its unit stays and the amount must be above 0. |
+| `void removeItem(int shoppingListId, int shoppingListItemId)` | public |  |
+| `int addManualItem(int shoppingListId, int inventoryItemId, double quantity, String unit)` | public | Adds a line the user wants on the list by hand, for a catalogue item (stock is not looked at: the user asked for it). |
+| `void setCompleted(int shoppingListId, boolean completed)` | public | Completes a list (it becomes read-only) or reopens it. |
 | `Optional<Integer> findShoppingListIdForItem(int shoppingListItemId)` | public | The shopping_list a persisted shopping_list_item belongs to, or empty if the item doesn't exist. |
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId)` | public |  |
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId, LocalDate today)` | public | Reloads a persisted shopping_list by id with its items, or empty if no such list exists. |
@@ -763,3 +820,46 @@ classDiagram
 | `packsTotalPrice` | `Double` |
 
 **Referenced by:** `PersistedShoppingListItem`, `ShoppingListDto.StoreOptionDto`, `ShoppingListItem`
+
+## StoreTotal
+
+*record*
+
+What the lines still to buy would cost at one store, for the user to compare. It never picks a store: every store that
+sells something on the list gets a row. linesCovered is how many of the linesToBuy lines the store has
+with a known pack price; total adds the cheapest such option of the store per covered line. A line the store
+does not cover is not in the total, so compare the totals together with the coverage.
+
+```mermaid
+classDiagram
+    direction LR
+    class shopping_StoreTotal["StoreTotal"] {
+        <<record>>
+        +String storeName
+        +int linesCovered
+        +int linesToBuy
+        +double total
+        +of(List~PersistedShoppingListItem~ items) List~StoreTotal~$
+    }
+    class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
+        <<record>>
+    }
+    class shopping_PersistedShoppingListItem["PersistedShoppingListItem"] {
+        <<record>>
+    }
+    shopping_StoreTotal ..> shopping_PersistedShoppingListItem
+    api_PersistedShoppingListDto --> shopping_StoreTotal
+```
+
+| Component | Type |
+|---|---|
+| `storeName` | `String` |
+| `linesCovered` | `int` |
+| `linesToBuy` | `int` |
+| `total` | `double` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `List<StoreTotal> of(List<PersistedShoppingListItem> items)` | public static | One row per store, most lines covered first, then cheapest. |
+
+**Referenced by:** `PersistedShoppingListDto`

@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (70)"]
+    api["api (79)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (5)"]
@@ -16,7 +16,7 @@ flowchart TD
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
     shared["shared (7)"]
-    shopping["shopping (13)"]
+    shopping["shopping (15)"]
     stores["stores (47)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
@@ -25,7 +25,7 @@ flowchart TD
     api -->|6| finance
     api -->|4| inventory
     api -->|31| mealplanner
-    api -->|12| shopping
+    api -->|14| shopping
     api -->|2| stores
     api -->|10| suggestions
     api -->|6| tags
@@ -48,7 +48,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 70 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 79 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 5 | Purchases and spending analytics. |
@@ -56,7 +56,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
-| [`shopping`](shopping.md) | 13 | Shopping-list generation from recipes and the store options per line. |
+| [`shopping`](shopping.md) | 15 | Shopping-list generation from recipes and the store options per line. |
 | [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 12 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
@@ -141,6 +141,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`JsonUtil`](stores.md#jsonutil) | stores | class | Small null-safe helpers for reading store JSON. |
 | [`KnownProduct`](stores.md#knownproduct) | stores | record | What the database already knows about a store product. |
 | [`LikePattern`](shared.md#likepattern) | shared | class | Builds LIKE patterns from user text, so a typed % or _ is searched for literally. |
+| [`ListCompletedException`](shopping.md#listcompletedexception) | shopping | class | A completed shopping list cannot be changed (reopen it first). |
 | [`MatchGate`](stores.md#matchgate) | stores | class | Plausibility gate between "the name matched an inventory_item" and "create a store_item + discount". |
 | [`MatchGate.References`](stores.md#matchgatereferences) | stores | class | Reference prices per base unit, by inventory_item id and unit family. |
 | [`MatchGate.Verdict`](stores.md#matchgateverdict) | stores | record |  |
@@ -279,6 +280,15 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ShoppingListDto`](api.md#shoppinglistdto) | api | record | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |
 | [`ShoppingListDto.Line`](api.md#shoppinglistdtoline) | api | record |  |
 | [`ShoppingListDto.StoreOptionDto`](api.md#shoppinglistdtostoreoptiondto) | api | record | One store's current price for a line: what it costs at the till (sale/deal price where one applies, plus deposit), plus whether this pack's unit is even comparable to what's needed. |
+| [`ShoppingListEdits`](api.md#shoppinglistedits) | api | class | Request and response bodies of the shopping list edits (tick, amount, add a line, complete). |
+| [`ShoppingListEdits.AddedLineDto`](api.md#shoppinglisteditsaddedlinedto) | api | record |  |
+| [`ShoppingListEdits.AddLineRequest`](api.md#shoppinglisteditsaddlinerequest) | api | record | POST .../items: a line added by hand for a catalogue item; unit defaults to the item's own unit. |
+| [`ShoppingListEdits.PurchasedDto`](api.md#shoppinglisteditspurchaseddto) | api | record |  |
+| [`ShoppingListEdits.PurchasedRequest`](api.md#shoppinglisteditspurchasedrequest) | api | record | PUT .../items/{itemId}/purchased: {"purchased": true}. |
+| [`ShoppingListEdits.QuantityDto`](api.md#shoppinglisteditsquantitydto) | api | record |  |
+| [`ShoppingListEdits.QuantityRequest`](api.md#shoppinglisteditsquantityrequest) | api | record | PUT .../items/{itemId}/quantity: {"quantity": 2.5}; the line keeps its unit. |
+| [`ShoppingListEdits.StatusDto`](api.md#shoppinglisteditsstatusdto) | api | record |  |
+| [`ShoppingListEdits.StatusRequest`](api.md#shoppinglisteditsstatusrequest) | api | record | PUT .../status: {"completed": true} makes the list read-only, false reopens it. |
 | [`ShoppingListItem`](shopping.md#shoppinglistitem) | shopping | record | One line of a shopping list: an inventory item, how much of it is needed in total across the recipes it came from, and every store's current option for it (ordered cheapest-till-price first, but not pre-chosen — DAHÄM surfaces the options a |
 | [`ShoppingListItemController`](api.md#shoppinglistitemcontroller) | api | class |  |
 | [`ShoppingListItemRow`](shopping.md#shoppinglistitemrow) | shopping | record | Raw shopping_list_item row, joined to its inventory_item. |
@@ -311,6 +321,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`StorePromotionService`](stores.md#storepromotionservice) | stores | class | Promotes RAW store_product rows into the VERIFIED store_item layer that the shopping list reads. |
 | [`StorePromotionService.Pack`](stores.md#storepromotionservicepack) | stores | record | A pack size reduced to an integer count of a base unit. |
 | [`StoreRepository`](stores.md#storerepository) | stores | class | All SQL for pulled store data: store_product (+ variants, price history), store_offer, store_catalog_change and store_import_run. |
+| [`StoreTotal`](shopping.md#storetotal) | shopping | record | What the lines still to buy would cost at one store, for the user to compare. |
 | [`SuggestionController`](api.md#suggestioncontroller) | api | class | Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf, it only ranks and presents (see SuggestionService). |
 | [`SuggestionRepository`](suggestions.md#suggestionrepository) | suggestions | class | All SQL for ranking recipes by matching ingredients lives here and nowhere else. |
 | [`SuggestionService`](suggestions.md#suggestionservice) | suggestions | class | Business logic for recipe suggestions. |

@@ -16,6 +16,7 @@ public record ShoppingListItemRow(
         Integer selectedStoreItemId,
         boolean isManual,
         boolean needsReview,
+        boolean purchased,
         Integer stockQuantity,
         String stockUnit
 ) {

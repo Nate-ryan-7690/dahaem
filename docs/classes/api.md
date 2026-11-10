@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-70 types in 54 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+79 types in 55 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -190,6 +190,31 @@ classDiagram
     class api_ShoppingListDto_StoreOptionDto["ShoppingListDto.StoreOptionDto"] {
         <<record>>
     }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    class api_ShoppingListEdits_PurchasedRequest["ShoppingListEdits.PurchasedRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_QuantityRequest["ShoppingListEdits.QuantityRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_AddLineRequest["ShoppingListEdits.AddLineRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_StatusRequest["ShoppingListEdits.StatusRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_PurchasedDto["ShoppingListEdits.PurchasedDto"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_QuantityDto["ShoppingListEdits.QuantityDto"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_AddedLineDto["ShoppingListEdits.AddedLineDto"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_StatusDto["ShoppingListEdits.StatusDto"] {
+        <<record>>
+    }
     class api_ShoppingListItemController["ShoppingListItemController"] {
         <<controller>>
     }
@@ -268,9 +293,18 @@ classDiagram
     api_ShoppingListDto *-- api_ShoppingListDto_Line
     api_ShoppingListDto *-- api_ShoppingListDto_StoreOptionDto
     api_ShoppingListDto_Line --> api_ShoppingListDto_StoreOptionDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_AddLineRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_StatusRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_AddedLineDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_StatusDto
     api_ShoppingListItemController ..> api_PersistedShoppingListDto
     api_ShoppingListItemController ..> api_SelectStoreItemRequest
     api_ShoppingListItemController ..> api_ShoppingListItemSelectionDto
+    api_ShoppingListItemController ..> api_ShoppingListEdits
     api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
@@ -342,6 +376,15 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`ShoppingListDto`](#shoppinglistdto) | record |  | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |
 | [`ShoppingListDto.Line`](#shoppinglistdtoline) | record |  |  |
 | [`ShoppingListDto.StoreOptionDto`](#shoppinglistdtostoreoptiondto) | record |  | One store's current price for a line: what it costs at the till (sale/deal price where one applies, plus deposit), plus whether this pack's unit is even comparable to what's needed. |
+| [`ShoppingListEdits`](#shoppinglistedits) | class |  | Request and response bodies of the shopping list edits (tick, amount, add a line, complete). |
+| [`ShoppingListEdits.PurchasedRequest`](#shoppinglisteditspurchasedrequest) | record |  | PUT .../items/{itemId}/purchased: {"purchased": true}. |
+| [`ShoppingListEdits.QuantityRequest`](#shoppinglisteditsquantityrequest) | record |  | PUT .../items/{itemId}/quantity: {"quantity": 2.5}; the line keeps its unit. |
+| [`ShoppingListEdits.AddLineRequest`](#shoppinglisteditsaddlinerequest) | record |  | POST .../items: a line added by hand for a catalogue item; unit defaults to the item's own unit. |
+| [`ShoppingListEdits.StatusRequest`](#shoppinglisteditsstatusrequest) | record |  | PUT .../status: {"completed": true} makes the list read-only, false reopens it. |
+| [`ShoppingListEdits.PurchasedDto`](#shoppinglisteditspurchaseddto) | record |  |  |
+| [`ShoppingListEdits.QuantityDto`](#shoppinglisteditsquantitydto) | record |  |  |
+| [`ShoppingListEdits.AddedLineDto`](#shoppinglisteditsaddedlinedto) | record |  |  |
+| [`ShoppingListEdits.StatusDto`](#shoppinglisteditsstatusdto) | record |  |  |
 | [`ShoppingListItemController`](#shoppinglistitemcontroller) | class | REST controller |  |
 | [`ShoppingListItemSelectionDto`](#shoppinglistitemselectiondto) | record |  | Response of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item: the line's new selection. |
 | [`SpendingDto`](#spendingdto) | record |  | Total spent; from/to are null when the total covers all purchases. |
@@ -457,6 +500,7 @@ classDiagram
         -Logger log$
         +notFound(NotFoundException e) ResponseEntity~ErrorResponse~
         +pastDay(PastDayException e) ResponseEntity~ErrorResponse~
+        +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +badRequest(RuntimeException e) ResponseEntity~ErrorResponse~
         +missingParameter(MissingServletRequestParameterException e) ResponseEntity~ErrorResponse~
@@ -469,10 +513,12 @@ classDiagram
     }
     class api_NotFoundException["NotFoundException"]
     class mealplanner_PastDayException["PastDayException"]
+    class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> mealplanner_PastDayException
+    api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
 ```
 
@@ -484,6 +530,7 @@ classDiagram
 |---|---|---|
 | `ResponseEntity<ErrorResponse> notFound(NotFoundException e)` | public |  |
 | `ResponseEntity<ErrorResponse> pastDay(PastDayException e)` | public | A meal on a past day cannot be added, changed, moved or removed: the request conflicts with the calendar. |
+| `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> badRequest(RuntimeException e)` | public |  |
 | `ResponseEntity<ErrorResponse> missingParameter(MissingServletRequestParameterException e)` | public |  |
@@ -1704,7 +1751,11 @@ meal day the list counts. Both are null on a list made before they existed.
 Each line: available is false when no store currently sells the item (the line is kept, never silently
 dropped); needsReview is true when stock exists but in another unit than the line's, so nothing was
 subtracted and a person checks it (stockQuantity / stockUnit show what the household has);
-recipes are the recipes that need the line.
+recipes are the recipes that need the line; purchased is the tick "bought" on the trip.
+
+status true = completed (read-only). storeTotals: for each store that sells something on the list,
+how many of the lines still to buy it covers and what those lines cost there (the cheapest pack option per line);
+shown side by side, never picked for the user.
 
 ```mermaid
 classDiagram
@@ -1718,6 +1769,7 @@ classDiagram
         +LocalDate fromDate
         +boolean status
         +List~Line~ items
+        +List~StoreTotal~ storeTotals
         ~from(PersistedShoppingList list) PersistedShoppingListDto$
     }
     class api_PersistedShoppingListDto_Line["PersistedShoppingListDto.Line"] {
@@ -1727,6 +1779,9 @@ classDiagram
         <<record>>
     }
     class api_PersistedShoppingListDto_Summary["PersistedShoppingListDto.Summary"] {
+        <<record>>
+    }
+    class shopping_StoreTotal["StoreTotal"] {
         <<record>>
     }
     class shopping_PersistedShoppingList["PersistedShoppingList"] {
@@ -1741,6 +1796,7 @@ classDiagram
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Line
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_RecipeRef
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Summary
+    api_PersistedShoppingListDto --> shopping_StoreTotal
     api_PersistedShoppingListDto ..> shopping_PersistedShoppingList
     api_MealPlanController ..> api_PersistedShoppingListDto
     api_ShoppingListItemController ..> api_PersistedShoppingListDto
@@ -1755,6 +1811,7 @@ classDiagram
 | `fromDate` | `LocalDate` |
 | `status` | `boolean` |
 | `items` | `List<Line>` |
+| `storeTotals` | `List<StoreTotal>` |
 
 | Member | Visibility | What it does |
 |---|---|---|
@@ -1779,6 +1836,7 @@ classDiagram
         +String unit
         +boolean available
         +boolean needsReview
+        +boolean purchased
         +Integer stockQuantity
         +String stockUnit
         +boolean isManual
@@ -1815,6 +1873,7 @@ classDiagram
 | `unit` | `String` |
 | `available` | `boolean` |
 | `needsReview` | `boolean` |
+| `purchased` | `boolean` |
 | `stockQuantity` | `Integer` |
 | `stockUnit` | `String` |
 | `isManual` | `boolean` |
@@ -3173,6 +3232,242 @@ classDiagram
 
 **Referenced by:** `ShoppingListDto`
 
+## ShoppingListEdits
+
+*class*
+
+Request and response bodies of the shopping list edits (tick, amount, add a line, complete).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    class api_ShoppingListEdits_PurchasedRequest["ShoppingListEdits.PurchasedRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_QuantityRequest["ShoppingListEdits.QuantityRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_AddLineRequest["ShoppingListEdits.AddLineRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_StatusRequest["ShoppingListEdits.StatusRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_PurchasedDto["ShoppingListEdits.PurchasedDto"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_QuantityDto["ShoppingListEdits.QuantityDto"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_AddedLineDto["ShoppingListEdits.AddedLineDto"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_StatusDto["ShoppingListEdits.StatusDto"] {
+        <<record>>
+    }
+    class api_ShoppingListItemController["ShoppingListItemController"] {
+        <<controller>>
+    }
+    api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_AddLineRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_StatusRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_AddedLineDto
+    api_ShoppingListEdits *-- api_ShoppingListEdits_StatusDto
+    api_ShoppingListItemController ..> api_ShoppingListEdits
+```
+
+**Referenced by:** `ShoppingListItemController`
+
+## ShoppingListEdits.PurchasedRequest
+
+*record*
+
+PUT .../items/{itemId}/purchased: {"purchased": true}.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_PurchasedRequest["ShoppingListEdits.PurchasedRequest"] {
+        <<record>>
+        +Boolean purchased
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedRequest
+```
+
+| Component | Type |
+|---|---|
+| `purchased` | `Boolean` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.QuantityRequest
+
+*record*
+
+PUT .../items/{itemId}/quantity: {"quantity": 2.5}; the line keeps its unit.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_QuantityRequest["ShoppingListEdits.QuantityRequest"] {
+        <<record>>
+        +Double quantity
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityRequest
+```
+
+| Component | Type |
+|---|---|
+| `quantity` | `Double` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.AddLineRequest
+
+*record*
+
+POST .../items: a line added by hand for a catalogue item; unit defaults to the item's own unit.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_AddLineRequest["ShoppingListEdits.AddLineRequest"] {
+        <<record>>
+        +Integer inventoryItemId
+        +Double quantity
+        +String unit
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_AddLineRequest
+```
+
+| Component | Type |
+|---|---|
+| `inventoryItemId` | `Integer` |
+| `quantity` | `Double` |
+| `unit` | `String` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.StatusRequest
+
+*record*
+
+PUT .../status: {"completed": true} makes the list read-only, false reopens it.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_StatusRequest["ShoppingListEdits.StatusRequest"] {
+        <<record>>
+        +Boolean completed
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_StatusRequest
+```
+
+| Component | Type |
+|---|---|
+| `completed` | `Boolean` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.PurchasedDto
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_PurchasedDto["ShoppingListEdits.PurchasedDto"] {
+        <<record>>
+        +int shoppingListItemId
+        +boolean purchased
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedDto
+```
+
+| Component | Type |
+|---|---|
+| `shoppingListItemId` | `int` |
+| `purchased` | `boolean` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.QuantityDto
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_QuantityDto["ShoppingListEdits.QuantityDto"] {
+        <<record>>
+        +int shoppingListItemId
+        +double quantity
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityDto
+```
+
+| Component | Type |
+|---|---|
+| `shoppingListItemId` | `int` |
+| `quantity` | `double` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.AddedLineDto
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_AddedLineDto["ShoppingListEdits.AddedLineDto"] {
+        <<record>>
+        +int shoppingListItemId
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_AddedLineDto
+```
+
+| Component | Type |
+|---|---|
+| `shoppingListItemId` | `int` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.StatusDto
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_StatusDto["ShoppingListEdits.StatusDto"] {
+        <<record>>
+        +int id
+        +boolean completed
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_StatusDto
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `completed` | `boolean` |
+
+**Referenced by:** `ShoppingListEdits`
+
 ## ShoppingListItemController
 
 *class · REST controller*
@@ -3186,6 +3481,11 @@ classDiagram
         +ShoppingListItemController(ShoppingListService shoppingListService)
         +get(int listId) PersistedShoppingListDto
         +selectStoreItem(int listId, int itemId, SelectStoreItemRequest request) ShoppingListItemSelectionDto
+        +setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request) ShoppingListEdits.PurchasedDto
+        +setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request) ShoppingListEdits.QuantityDto
+        +removeItem(int listId, int itemId) void
+        +addItem(int listId, ShoppingListEdits.AddLineRequest request) ShoppingListEdits.AddedLineDto
+        +setStatus(int listId, ShoppingListEdits.StatusRequest request) ShoppingListEdits.StatusDto
     }
     class shopping_ShoppingListService["ShoppingListService"]
     class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
@@ -3197,10 +3497,12 @@ classDiagram
     class api_ShoppingListItemSelectionDto["ShoppingListItemSelectionDto"] {
         <<record>>
     }
+    class api_ShoppingListEdits["ShoppingListEdits"]
     api_ShoppingListItemController --> shopping_ShoppingListService
     api_ShoppingListItemController ..> api_PersistedShoppingListDto
     api_ShoppingListItemController ..> api_SelectStoreItemRequest
     api_ShoppingListItemController ..> api_ShoppingListItemSelectionDto
+    api_ShoppingListItemController ..> api_ShoppingListEdits
 ```
 
 | Field | Type |
@@ -3212,6 +3514,11 @@ classDiagram
 | `ShoppingListItemController(ShoppingListService shoppingListService)` | public |  |
 | `PersistedShoppingListDto get(int listId)` | public | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
 | `ShoppingListItemSelectionDto selectStoreItem(int listId, int itemId, SelectStoreItemRequest request)` | public | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
+| `ShoppingListEdits.PurchasedDto setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request)` | public | Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. |
+| `ShoppingListEdits.QuantityDto setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request)` | public | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
+| `void removeItem(int listId, int itemId)` | public | Removes a line from a list that is not completed. |
+| `ShoppingListEdits.AddedLineDto addItem(int listId, ShoppingListEdits.AddLineRequest request)` | public | Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). |
+| `ShoppingListEdits.StatusDto setStatus(int listId, ShoppingListEdits.StatusRequest request)` | public | Completes a list ({"completed": true}: it becomes read-only) or reopens it. |
 
 ## ShoppingListItemSelectionDto
 
