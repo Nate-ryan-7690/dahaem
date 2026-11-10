@@ -53,6 +53,7 @@ Every error has the same shape:
 | GET | [`/api/inventory`](#get-apiinventory) |  |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
+| GET | [`/api/inventory/search`](#get-apiinventorysearch) | Search the catalogue, one page of items plus the total. |
 | POST | [`/api/inventory/{id}/use`](#post-apiinventoryiduse) | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
 | GET | [`/api/meal-plans`](#get-apimeal-plans) |  |
 | POST | [`/api/meal-plans`](#post-apimeal-plans) | Creates an empty plan for the week. |
@@ -73,6 +74,8 @@ Every error has the same shape:
 | GET | [`/api/recipes/{id}/tags`](#get-apirecipesidtags) |  |
 | POST | [`/api/recipes/{id}/tags`](#post-apirecipesidtags) | Tags the recipe, creating the tag first if no tag with that name exists. |
 | GET | [`/api/shopping-list`](#get-apishopping-list) | Builds (does not save) a shopping list for ?recipeIds=1,2,3 or ?recipeIds=1&recipeIds=2. |
+| GET | [`/api/shopping-lists`](#get-apishopping-lists) | Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan. |
+| POST | [`/api/shopping-lists`](#post-apishopping-lists) | Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand (POST /{listId/items}). |
 | GET | [`/api/shopping-lists/{listId}`](#get-apishopping-listslistid) | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
 | POST | [`/api/shopping-lists/{listId}/items`](#post-apishopping-listslistiditems) | Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). |
 | DELETE | [`/api/shopping-lists/{listId}/items/{itemId}`](#delete-apishopping-listslistiditemsitemid) | Removes a line from a list that is not completed. |
@@ -337,6 +340,46 @@ Items at or below threshold units in stock (default 1).
 ]
 ```
 
+#### GET /api/inventory/search
+
+Search the catalogue, one page of items plus the total. q matches the English or German name as a
+case-insensitive substring, category must equal the item's category (both optional); page (from 1,
+default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. Out-of-range paging is a 400.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `q` | `String` | no |  |
+| `category` | `String` | no |  |
+| `page` | `Integer` | no |  |
+| `pageSize` | `Integer` | no |  |
+
+
+
+**Answer** 200 `ItemPageDto`
+
+```json
+{
+  "items": [
+    {
+      "id": 0,
+      "nameEnglish": "…",
+      "nameDeutsch": "…",
+      "quantity": 0,
+      "unit": "…",
+      "category": "…",
+      "subcategory": "…",
+      "earliestExpDate": "2026-10-14"
+    }
+  ],
+  "total": 0,
+  "page": 0,
+  "pageSize": 0,
+  "totalPages": 0
+}
+```
+
 #### POST /api/inventory/{id}/use
 
 Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). Returns the
@@ -543,11 +586,13 @@ The saved shopping lists of a plan, newest first (each generation is its own lis
 [
   {
     "id": 0,
+    "mealPlanId": 0,
     "createdDate": "2026-10-14",
     "shoppingDate": "2026-10-14",
     "fromDate": "2026-10-14",
     "status": false,
-    "lines": 0
+    "lines": 0,
+    "purchasedLines": 0
   }
 ]
 ```
@@ -1089,6 +1134,48 @@ A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`exc
 
 ### ShoppingListItemController
 
+
+#### GET /api/shopping-lists
+
+Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan.
+
+**Answer** 200 `List<PersistedShoppingListDto.Summary>`
+
+```json
+[
+  {
+    "id": 0,
+    "mealPlanId": 0,
+    "createdDate": "2026-10-14",
+    "shoppingDate": "2026-10-14",
+    "fromDate": "2026-10-14",
+    "status": false,
+    "lines": 0,
+    "purchasedLines": 0
+  }
+]
+```
+
+#### POST /api/shopping-lists
+
+Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand
+(POST /{listId/items}). ?shoppingDate=YYYY-MM-DD is the day of the trip (default today, not in the past).
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `shoppingDate` | `LocalDate` | no |  |
+
+
+
+**Answer** 201 `GeneratedShoppingListDto`
+
+```json
+{
+  "shoppingListId": 0
+}
+```
 
 #### GET /api/shopping-lists/{listId}
 
@@ -1671,6 +1758,24 @@ One inventory item as returned by /api/inventory.
 | `category` | `String` |
 | `subcategory` | `String` |
 | `earliestExpDate` | `LocalDate` |
+
+```json
+{ … }
+```
+
+### ItemPageDto
+
+One page of GET /api/inventory/search. total is the number of items that match in ALL pages;
+page (from 1) and pageSize echo the request with its defaults applied; totalPages is
+ceil(total / pageSize), 0 when nothing matches. A page past the end has empty items.
+
+| Property | Type |
+|---|---|
+| `items` | `List<ItemDto>` |
+| `total` | `long` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
 
 ```json
 { … }
