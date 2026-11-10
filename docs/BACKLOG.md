@@ -391,6 +391,28 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   never change the plan by themselves. Today a suggestion is only `recipeId`, name, score and matching item ids;
   by-savings reads the curated `store_discount` only, not the flyer `store_offer` rows; nothing suggests from
   low stock. Add the recipe image so Home needs no extra call.
+- **Suggestions: limit, paging and filters** — `next`. Found 2026-11-10 while building the Home page and the full
+  suggestions page (dahaem-frontend PR 17). `GET /api/suggestions/by-savings` answers with every recipe that has at
+  least one discounted ingredient: with the live data over 10,000 recipes, about 1.6 MB and 0.85 s per call, and the
+  PHP loads it on every Home and suggestions page view. Today the PHP works around it: it filters and sorts the whole
+  list itself (name words, at least n ingredients on sale with a default of 3, store, maximum minutes, sort by best
+  match / name / time) and keeps the answer for 5 minutes in a temp file. The real fix is in the API: `limit` and
+  `offset` (or `page` / `pageSize` with a `total`), `minScore`, `q`, `store`, `maxTime` and `sort`, applied in SQL like
+  `GET /api/recipes/search`. Same for `/by-expiring`. Open for Nate: the ranking counts every discounted ingredient
+  equally, so pantry staples (salt, oil) on sale rank a recipe as high as a main ingredient; decide whether staples
+  are ignored or weighted. Also check the date: the ranking uses `LocalDate.now()` in the JVM time zone while the
+  PHP uses Europe/Berlin; use the household zone (`dahaem.mealplan.zone`) so both agree around midnight.
+  Extends "Recipe opportunities with evidence" below it.
+- **Offers per recipe ingredient in the API** — `next`. Found 2026-11-10 (dahaem-frontend PR 17). The recipe page
+  marks the ingredients that are on sale with store, pack, price and last day, and Home / the suggestions page show
+  the same as badges, but the API has no such call, so the PHP reads `store_discount` / `store_item` directly. Needed:
+  current offers per ingredient on `GET /api/recipes/{id}` (or a batch call for several recipes): store, brand, pack
+  size and unit (`store_item_package_size`, `store_item_package_unit`; a price without the pack misleads, e.g. 1,69 EUR
+  is a 600 g pack and 4,44 EUR a 7.5 kg bag), sale price, regular price, valid until, and optionally the price per
+  kg / l; and the picture, time, servings and rating on each suggestion so Home needs no extra read. Offers are listed
+  by store, never ranked: the user chooses. The live data also holds identical offer rows (e.g. Butter at Aldi twice,
+  same price and dates); the PHP now collapses them, but the importer or `store_discount` should not store them twice
+  (unique key on store item, start and end date, price?). Decide with the "Offers read API" item.
 - **Shopping list lifecycle** — `next`. Save a list (from a meal-plan week), tick items, record the
   shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn
   when a chosen offer has expired or a price changed, never substitute silently. Audit adds: list the lists (open
@@ -509,6 +531,13 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   of meals" and "Recipe search and paging".
 - **Recipes page** — `next`. Search, paging, filters, cards, detail with `?people=N`,
   `scaledQuantity` and `scaledInstruction`; actions "add to plan" and "add to shopping list".
+
+- **Home, suggestions and recipe page: first version built** — `in progress` (dahaem-frontend PR 17, 2026-11-10).
+  Home shows the real week and 5 recipes that fit the offers; "Alle Vorschläge" opens a page with search, store,
+  time and sort filters; the recipe page highlights ingredients on sale with the pack. Still open: the "in stock /
+  still missing" badges (needs the stock-versus-ingredients comparison from "Recipe opportunities with evidence"),
+  and `recipe.php?id=abc` answers 200 with the not-found view while a missing numeric id answers 404 (found in
+  review; small fix in the PHP, not done).
 
 - **Mobile = PHP frontend as a mobile-first PWA** — decided 2026-10-10. Installable on the
   home screen, offline shopping list via a service worker (the old Java static app had this:
