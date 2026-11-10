@@ -1148,8 +1148,20 @@ are optional and combine with AND:
 - paging: page (from 1) and pageSize (1 - 100, default 24). Out-of-range values are a
       400.
 
-An ingredient counts as in stock when the household has any of it; the amount is not compared with the amount
-the recipe needs yet. This replaces the whole-list /by-savings for pages: that call is unchanged.
+The diet rules of GET /api/recipes/search apply here too, on the server: hard rules
+(diet, excludeTags, excludeItems) hide a recipe the household does not eat and it is
+not counted, soft rules (avoidTags, avoidItems) sort it after the others, and
+includeUnclear (default false) lets recipes with an unmatched line through. With rules each recipe
+card carries diet, and the order is: no soft hit first, then OK before ANPASSBAR before UNCLEAR, the
+requested sort within each group.
+
+The list holds at most 200 recipes, the best ones in the requested order (total is at most 200;
+totalMatching says how many fit before the cap and capped whether it was cut); more are found
+with GET /api/recipes/search.
+
+An ingredient counts as in stock when the household has any of it and it has not expired; the amount is not
+compared with the amount the recipe needs yet. Stock past its date is shown as EXPIRED and counts as
+still to buy. This replaces the whole-list /by-savings for pages: that call is unchanged.
 
 **Query parameters**
 
@@ -1163,8 +1175,14 @@ the recipe needs yet. This replaces the whole-list /by-savings for pages: that c
 | `sort` | `String` | no |  |
 | `page` | `Integer` | no |  |
 | `pageSize` | `Integer` | no |  |
+| `diet` | `List<String>` | no |  |
+| `excludeTags` | `List<String>` | no |  |
+| `excludeItems` | `List<Integer>` | no |  |
+| `avoidTags` | `List<String>` | no |  |
+| `avoidItems` | `List<Integer>` | no |  |
+| `includeUnclear` | `boolean` | no | `false` |
 
-
+A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`excludeTags=a,b`).
 
 **Answer** 200 `PantrySuggestionPageDto`
 
@@ -1196,6 +1214,8 @@ the recipe needs yet. This replaces the whole-list /by-savings for pages: that c
     }
   ],
   "total": 0,
+  "totalMatching": 0,
+  "capped": false,
   "page": 0,
   "pageSize": 0,
   "totalPages": 0
@@ -1496,10 +1516,11 @@ household head count that was used to resolve the servings (null when no househo
 ### PantryIngredientDto
 
 One ingredient of a suggested recipe. status is IN_STOCK, EXPIRING (in stock and expires
-within the look-ahead), MISSING or TO_TASTE. neededQuantity / neededUnit is what
+within the look-ahead), EXPIRED (some is in stock but its date has passed: shown with the amount and the
+date, not counted as usable stock), MISSING or TO_TASTE. neededQuantity / neededUnit is what
 the recipe asks for (quantity null for "to taste"); stockQuantity / stockUnit is what the household
 has, in the item's own unit; expiresOn is the earliest expiry date of the stock (null when unknown).
-offers lists, for a missing ingredient, every offer that is on sale today (see PantryOfferDto);
+offers lists, for a missing or expired ingredient, every offer that is on sale today (see PantryOfferDto);
 empty otherwise.
 
 | Property | Type |
@@ -1544,7 +1565,9 @@ size, not by price: the user chooses.
 A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not
 counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing
 ones are on sale, and every ingredient with its state. Counts are of ingredients, not of amounts: an ingredient is
-in stock when the household has any of it. Nothing here is a choice made for the user.
+in stock when the household has any of it that has not expired; stock past its date is shown as EXPIRED and
+counts as still to buy (missing). With diet rules the recipe card carries diet (status OK / ANPASSBAR
+/ UNCLEAR, hints, softHits), as in the recipe search. Nothing here is a choice made for the user.
 
 | Property | Type |
 |---|---|
@@ -1563,7 +1586,9 @@ in stock when the household has any of it. Nothing here is a choice made for the
 ### PantrySuggestionPageDto
 
 One page of GET /api/suggestions/pantry. items are the suggested recipes of this page in the
-requested order; total is the number of recipes that fit in ALL pages; page (from 1) and
+requested order; total is the number of recipes in ALL pages of this list, at most 200 (the best ones in the
+requested order); totalMatching is how many fit before that cap and capped says whether the list was
+cut: the rest is found with the recipe search (GET /api/recipes/search); page (from 1) and
 pageSize echo the request with its defaults applied; totalPages is ceil(total / pageSize),
 0 when nothing fits. A page past the end has empty items.
 
@@ -1571,6 +1596,8 @@ pageSize echo the request with its defaults applied; totalPages is ceil(total / 
 |---|---|
 | `items` | `List<PantrySuggestionDto>` |
 | `total` | `long` |
+| `totalMatching` | `long` |
+| `capped` | `boolean` |
 | `page` | `int` |
 | `pageSize` | `int` |
 | `totalPages` | `int` |

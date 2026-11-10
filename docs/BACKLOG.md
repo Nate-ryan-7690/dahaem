@@ -400,8 +400,17 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   Needs a unit-aware "in stock" check first (see "Unit check when stock is subtracted from a list"). Add the recipe
   image so Home needs no extra call. Decided by Nate 2026-11-10: the cost
   stays as it is, the offers listed per store with their pack and price, no total per recipe; an estimated total cost
-  comes later on the shopping list. Still open: the "in stock" check only asks whether the household has any of the
+  comes later on the shopping list. **Review changes, same PR (Nate, 2026-11-10):** (1) the household's diet rules
+  (`diet`, `excludeTags`, `excludeItems`, `avoidTags`, `avoidItems`, `includeUnclear`) apply to this endpoint exactly
+  as in `/api/recipes/search` (hard rules hide and do not count a recipe, soft rules sort it after the others, each
+  card carries `diet`), so the PHP only passes the household's rules on; (2) stock past its date is `EXPIRED`: shown
+  with its amount and date, not counted as usable stock (the ingredient counts as still to buy and carries the offers on
+  sale), and never weighted as "use it up"; (3) the list holds at most 200 recipes, the best ones in the requested order
+  (`total` <= 200, `totalMatching` = how many fit before the cap, `capped`), and more are found with
+  `/api/recipes/search`. Still open: the "in stock" check only asks whether the household has any of the
   item, the amount is not compared with the amount the recipe needs (unit-aware check, see the item named above).
+  An open product question: whether expired stock should rather count as usable (best-before dates are soft);
+  it is one SQL condition and the status in `SuggestionRepository` if Nate wants it the other way.
 - **Suggestions: limit, paging and filters** — `in progress`, replaced by `GET /api/suggestions/pantry` (see "Recipe
   opportunities with evidence"); `/by-savings` and `/by-expiring` stay unchanged until the PHP has moved. Found 2026-11-10 while building the Home page and the full
   suggestions page (dahaem-frontend PR 17). `GET /api/suggestions/by-savings` answers with every recipe that has at

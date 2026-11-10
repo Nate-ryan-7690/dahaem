@@ -1110,7 +1110,7 @@ classDiagram
         -DietFilterService diet
         +RecipeSearchService(RecipeRepository recipes, TagService tags, DietFilterService diet)
         +search(RecipeQuery query, DietRules rules, PageRequest page) Result
-        ~visibleInDisplayOrder(List~Integer~ candidates, Map~Integer, DietVerdict~ verdicts, DietRules rules) List~Integer~$
+        +visibleInDisplayOrder(List~Integer~ candidates, Map~Integer, DietVerdict~ verdicts, DietRules rules) List~Integer~$
         ~slice(List~Integer~ ids, PageRequest page) List~Integer~$
     }
     class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
@@ -1163,7 +1163,7 @@ classDiagram
 |---|---|---|
 | `RecipeSearchService(RecipeRepository recipes, TagService tags, DietFilterService diet)` | public |  |
 | `Result search(RecipeQuery query, DietRules rules, PageRequest page)` | public |  |
-| `List<Integer> visibleInDisplayOrder(List<Integer> candidates, Map<Integer, DietVerdict> verdicts, DietRules rules)` | package static | The candidates that are shown under the rules, in display order: no soft hit before soft hits, then OK, ANPASSBAR, UNCLEAR; the candidates' own (sort) order is kept within a group. |
+| `List<Integer> visibleInDisplayOrder(List<Integer> candidates, Map<Integer, DietVerdict> verdicts, DietRules rules)` | public static | The candidates that are shown under the rules, in display order: no soft hit before soft hits, then OK, ANPASSBAR, UNCLEAR; the candidates' own (sort) order is kept within a group. |
 | `List<Integer> slice(List<Integer> ids, PageRequest page)` | package static | The ids of the requested page; empty when the page is past the end. |
 
 **Referenced by:** `RecipeController`, `ServiceConfig`

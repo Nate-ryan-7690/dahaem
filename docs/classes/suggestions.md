@@ -61,13 +61,13 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 |------|------|------|------------|
 | [`PantryCoverage`](#pantrycoverage) | record |  | How well one recipe is covered by what the household already has and by what is on sale. |
 | [`PantryLine`](#pantryline) | record |  | One ingredient of a suggested recipe and where it stands: in stock, expiring soon, missing, or "to taste". |
-| [`PantryLine.Status`](#pantrylinestatus) | enum |  |  |
+| [`PantryLine.Status`](#pantrylinestatus) | enum |  | EXPIRED: some is in stock but its date has passed. |
 | [`PantryOffer`](#pantryoffer) | record |  | One offer that is on sale today for an ingredient: the store, the pack it is for, and the prices. |
 | [`PantryRanking`](#pantryranking) | class |  | The ranking rules of the pantry-first suggestions, as pure functions (no database). |
 | [`PantrySort`](#pantrysort) | enum |  | The orders offered for the pantry-first suggestions; the user picks one, the default is .BEST. |
 | [`PantrySuggestionService`](#pantrysuggestionservice) | class |  | Recipe suggestions that serve the purpose of the app: healthy meals (all recipe data is cooked from fresh ingredients) at the lowest shopping cost. |
-| [`PantrySuggestionService.Entry`](#pantrysuggestionserviceentry) | record |  | A suggested recipe with its tag names, its coverage counts and its ingredient lines (offers on missing ones). |
-| [`PantrySuggestionService.Result`](#pantrysuggestionserviceresult) | record |  | One page, the number of recipes that fit in all pages, and the request that produced it. |
+| [`PantrySuggestionService.Entry`](#pantrysuggestionserviceentry) | record |  | A suggested recipe with its tag names, its coverage counts, its ingredient lines (offers on missing and expired ones) and, when diet rules were given, its verdict (else null). |
+| [`PantrySuggestionService.Result`](#pantrysuggestionserviceresult) | record |  | One page, the number of recipes in the list in all pages (total, at most .MAX_RESULTS), the number that fit before the cap (totalMatching), and the request that produced it. |
 | [`RecipeSuggestion`](#recipesuggestion) | class |  | Plain data holder for one ranked recipe suggestion: the recipe, how many of its ingredients matched the signal (expiring soon / on sale), and which inventory items matched. |
 | [`SuggestionRepository`](#suggestionrepository) | class |  | All SQL for ranking recipes by matching ingredients lives here and nowhere else. |
 | [`SuggestionService`](#suggestionservice) | class |  | Business logic for recipe suggestions. |
@@ -189,6 +189,10 @@ classDiagram
 
 *enum*
 
+EXPIRED: some is in stock but its date has passed. It is shown (with the stock amount and the date, the user
+decides), but it does not count as usable stock for the ranking: the ingredient counts as still to buy, and
+carries the offers on sale like a missing one.
+
 ```mermaid
 classDiagram
     direction LR
@@ -196,6 +200,7 @@ classDiagram
         <<enumeration>>
         IN_STOCK
         EXPIRING
+        EXPIRED
         MISSING
         TO_TASTE
     }
@@ -205,7 +210,7 @@ classDiagram
     suggestions_PantryLine *-- suggestions_PantryLine_Status
 ```
 
-**Values:** `IN_STOCK`, `EXPIRING`, `MISSING`, `TO_TASTE`
+**Values:** `IN_STOCK`, `EXPIRING`, `EXPIRED`, `MISSING`, `TO_TASTE`
 
 **Referenced by:** `PantryLine`
 
@@ -350,12 +355,14 @@ classDiagram
     class suggestions_PantrySuggestionService["PantrySuggestionService"] {
         +int DEFAULT_EXPIRY_DAYS$
         +int DEFAULT_MIN_MATCHES$
+        +int MAX_RESULTS$
         -SuggestionRepository suggestions
         -RecipeRepository recipes
         -TagService tags
+        -DietFilterService diet
         -Clock clock
-        +PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, Clock clock)
-        +suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, PageRequest page) Result
+        +PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock)
+        +suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page) Result
         ~slice(List~Integer~ ids, PageRequest page) List~Integer~$
     }
     class suggestions_PantrySuggestionService_Entry["PantrySuggestionService.Entry"] {
@@ -367,8 +374,12 @@ classDiagram
     class suggestions_SuggestionRepository["SuggestionRepository"]
     class mealplanner_RecipeRepository["RecipeRepository"]
     class tags_TagService["TagService"]
+    class diet_DietFilterService["DietFilterService"]
     class api_SuggestionController["SuggestionController"] {
         <<controller>>
+    }
+    class diet_DietRules["DietRules"] {
+        <<record>>
     }
     class shared_PageRequest["PageRequest"] {
         <<record>>
@@ -384,6 +395,8 @@ classDiagram
     suggestions_PantrySuggestionService --> suggestions_SuggestionRepository
     suggestions_PantrySuggestionService --> mealplanner_RecipeRepository
     suggestions_PantrySuggestionService --> tags_TagService
+    suggestions_PantrySuggestionService --> diet_DietFilterService
+    suggestions_PantrySuggestionService ..> diet_DietRules
     suggestions_PantrySuggestionService ..> shared_PageRequest
     api_PantrySuggestionDto ..> suggestions_PantrySuggestionService
     api_ServiceConfig ..> suggestions_PantrySuggestionService
@@ -394,15 +407,17 @@ classDiagram
 |---|---|
 | `DEFAULT_EXPIRY_DAYS` | `int` |
 | `DEFAULT_MIN_MATCHES` | `int` |
+| `MAX_RESULTS` | `int` |
 | `suggestions` | `SuggestionRepository` |
 | `recipes` | `RecipeRepository` |
 | `tags` | `TagService` |
+| `diet` | `DietFilterService` |
 | `clock` | `Clock` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, Clock clock)` | public |  |
-| `Result suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, PageRequest page)` | public | Bad values are an IllegalArgumentException (the API answers 400). |
+| `PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock)` | public |  |
+| `Result suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page)` | public | exactly as in the recipe search); null or no rules = no filtering Bad values are an IllegalArgumentException (the API answers 400). |
 | `List<Integer> slice(List<Integer> ids, PageRequest page)` | package static | The ids of the requested page; empty when the page is past the end. |
 
 **Referenced by:** `PantrySuggestionDto`, `ServiceConfig`, `SuggestionController`
@@ -411,7 +426,8 @@ classDiagram
 
 *record*
 
-A suggested recipe with its tag names, its coverage counts and its ingredient lines (offers on missing ones).
+A suggested recipe with its tag names, its coverage counts, its ingredient lines (offers on missing and expired
+ones) and, when diet rules were given, its verdict (else null).
 
 ```mermaid
 classDiagram
@@ -422,6 +438,7 @@ classDiagram
         +List~String~ tags
         +PantryCoverage coverage
         +List~PantryLine~ lines
+        +DietVerdict diet
     }
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class mealplanner_Recipe["Recipe"]
@@ -431,12 +448,16 @@ classDiagram
     class suggestions_PantryLine["PantryLine"] {
         <<record>>
     }
+    class diet_DietVerdict["DietVerdict"] {
+        <<record>>
+    }
     class suggestions_PantrySuggestionService_Result["PantrySuggestionService.Result"] {
         <<record>>
     }
     suggestions_PantrySuggestionService_Entry --> mealplanner_Recipe
     suggestions_PantrySuggestionService_Entry --> suggestions_PantryCoverage
     suggestions_PantrySuggestionService_Entry --> suggestions_PantryLine
+    suggestions_PantrySuggestionService_Entry --> diet_DietVerdict
     suggestions_PantrySuggestionService *-- suggestions_PantrySuggestionService_Entry
     suggestions_PantrySuggestionService_Result --> suggestions_PantrySuggestionService_Entry
 ```
@@ -447,6 +468,7 @@ classDiagram
 | `tags` | `List<String>` |
 | `coverage` | `PantryCoverage` |
 | `lines` | `List<PantryLine>` |
+| `diet` | `DietVerdict` |
 
 **Referenced by:** `PantrySuggestionService`
 
@@ -454,7 +476,8 @@ classDiagram
 
 *record*
 
-One page, the number of recipes that fit in all pages, and the request that produced it.
+One page, the number of recipes in the list in all pages (total, at most .MAX_RESULTS), the
+number that fit before the cap (totalMatching), and the request that produced it.
 
 ```mermaid
 classDiagram
@@ -463,8 +486,10 @@ classDiagram
         <<record>>
         +List~Entry~ items
         +long total
+        +long totalMatching
         +PageRequest request
         +totalPages() int
+        +capped() boolean
     }
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class suggestions_PantrySuggestionService_Entry["PantrySuggestionService.Entry"] {
@@ -482,11 +507,13 @@ classDiagram
 |---|---|
 | `items` | `List<Entry>` |
 | `total` | `long` |
+| `totalMatching` | `long` |
 | `request` | `PageRequest` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `int totalPages()` | public |  |
+| `boolean capped()` | public | True when more recipes fit than the list holds; the rest is found with the recipe search. |
 
 **Referenced by:** `PantrySuggestionService`
 
@@ -556,7 +583,7 @@ classDiagram
         +findRankedByExpiring(LocalDate limit) List~RecipeSuggestion~
         +findRankedByDiscount(LocalDate today) List~RecipeSuggestion~
         +coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store) List~PantryCoverage~
-        +pantryLines(Collection~Integer~ recipeIds, LocalDate expiryLimit) Map~Integer, List~PantryLine~~
+        +pantryLines(Collection~Integer~ recipeIds, LocalDate expiryLimit, LocalDate today) Map~Integer, List~PantryLine~~
         +offersOnSale(Collection~Integer~ itemIds, LocalDate today) Map~Integer, List~PantryOffer~~
     }
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
@@ -588,7 +615,7 @@ classDiagram
 | `List<RecipeSuggestion> findRankedByExpiring(LocalDate limit)` | public | Recipes ranked by how many ingredients are inventory items expiring on or before `limit`. |
 | `List<RecipeSuggestion> findRankedByDiscount(LocalDate today)` | public | Recipes ranked by how many ingredients map to a store_item with a discount current on `today`. |
 | `List<PantryCoverage> coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store)` | public | For every recipe: how many ingredients it needs, how many are in stock, how many of those expire on or before expiryLimit, how many of the missing ones are on sale on today, and how many of them at the store named store (null = no store ask |
-| `Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit)` | public | The ingredients of these recipes with the stock of each (recipe id -> lines, by name). |
+| `Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit, LocalDate today)` | public | The ingredients of these recipes with the stock of each (recipe id -> lines, by name). |
 | `Map<Integer, List<PantryOffer>> offersOnSale(Collection<Integer> itemIds, LocalDate today)` | public | The offers that are on sale on today for these inventory items (item id -> offers), by store name, then pack size. |
 
 **Referenced by:** `PantrySuggestionService`, `ServiceConfig`, `SuggestionService`

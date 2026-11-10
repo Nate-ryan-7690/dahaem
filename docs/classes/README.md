@@ -21,7 +21,7 @@ flowchart TD
     suggestions["suggestions (12)"]
     tags["tags (29)"]
     api -->|14| auth
-    api -->|9| diet
+    api -->|12| diet
     api -->|4| finance
     api -->|4| inventory
     api -->|31| mealplanner
@@ -37,7 +37,8 @@ flowchart TD
     receipts -->|8| stores
     shopping -->|2| inventory
     shopping -->|4| mealplanner
-    suggestions -->|3| mealplanner
+    suggestions -->|3| diet
+    suggestions -->|4| mealplanner
     suggestions -->|1| tags
 ```
 
@@ -169,7 +170,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PantryCoverage`](suggestions.md#pantrycoverage) | suggestions | record | How well one recipe is covered by what the household already has and by what is on sale. |
 | [`PantryIngredientDto`](api.md#pantryingredientdto) | api | record | One ingredient of a suggested recipe. |
 | [`PantryLine`](suggestions.md#pantryline) | suggestions | record | One ingredient of a suggested recipe and where it stands: in stock, expiring soon, missing, or "to taste". |
-| [`PantryLine.Status`](suggestions.md#pantrylinestatus) | suggestions | enum |  |
+| [`PantryLine.Status`](suggestions.md#pantrylinestatus) | suggestions | enum | EXPIRED: some is in stock but its date has passed. |
 | [`PantryOffer`](suggestions.md#pantryoffer) | suggestions | record | One offer that is on sale today for an ingredient: the store, the pack it is for, and the prices. |
 | [`PantryOfferDto`](api.md#pantryofferdto) | api | record | An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in packUnit, e.g. |
 | [`PantryRanking`](suggestions.md#pantryranking) | suggestions | class | The ranking rules of the pantry-first suggestions, as pure functions (no database). |
@@ -177,8 +178,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PantrySuggestionDto`](api.md#pantrysuggestiondto) | api | record | A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing ones are on sa |
 | [`PantrySuggestionPageDto`](api.md#pantrysuggestionpagedto) | api | record | One page of GET /api/suggestions/pantry. |
 | [`PantrySuggestionService`](suggestions.md#pantrysuggestionservice) | suggestions | class | Recipe suggestions that serve the purpose of the app: healthy meals (all recipe data is cooked from fresh ingredients) at the lowest shopping cost. |
-| [`PantrySuggestionService.Entry`](suggestions.md#pantrysuggestionserviceentry) | suggestions | record | A suggested recipe with its tag names, its coverage counts and its ingredient lines (offers on missing ones). |
-| [`PantrySuggestionService.Result`](suggestions.md#pantrysuggestionserviceresult) | suggestions | record | One page, the number of recipes that fit in all pages, and the request that produced it. |
+| [`PantrySuggestionService.Entry`](suggestions.md#pantrysuggestionserviceentry) | suggestions | record | A suggested recipe with its tag names, its coverage counts, its ingredient lines (offers on missing and expired ones) and, when diet rules were given, its verdict (else null). |
+| [`PantrySuggestionService.Result`](suggestions.md#pantrysuggestionserviceresult) | suggestions | record | One page, the number of recipes in the list in all pages (total, at most .MAX_RESULTS), the number that fit before the cap (totalMatching), and the request that produced it. |
 | [`ParsedReceipt`](receipts.md#parsedreceipt) | receipts | record | Structured result of parsing one receipt's text. |
 | [`PastDayException`](mealplanner.md#pastdayexception) | mealplanner | class | Thrown when a planned meal on a day before today would be added, changed, moved or removed. |
 | [`PennyClient`](stores.md#pennyclient) | stores | class | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |

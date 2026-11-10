@@ -98,12 +98,16 @@ public class SuggestionRepository {
      * counts come back (about one small row per recipe), so the ranking never loads 100,000 ingredient rows.
      */
     public List<PantryCoverage> coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store) {
+        // Usable stock: some is there and it has not expired (no date = unknown, counted as usable). Stock whose
+        // date has passed is NOT usable: the ingredient counts as still to buy (shown as EXPIRED, see pantryLines).
+        String usable = "(ii.inventory_item_quantity > 0 AND (ii.inventory_item_earliest_exp_date IS NULL " +
+                "OR ii.inventory_item_earliest_exp_date >= ?))";
         String sql = "SELECT ri.recipe_ingredient_recipe_id AS recipe_id, COUNT(*) AS needed, " +
-                "SUM(ii.inventory_item_quantity > 0) AS in_stock, " +
-                "SUM(ii.inventory_item_quantity > 0 AND ii.inventory_item_earliest_exp_date IS NOT NULL " +
+                "SUM(" + usable + ") AS in_stock, " +
+                "SUM(" + usable + " AND ii.inventory_item_earliest_exp_date IS NOT NULL " +
                 "    AND ii.inventory_item_earliest_exp_date <= ?) AS expiring, " +
-                "SUM(ii.inventory_item_quantity <= 0 AND sale.item_id IS NOT NULL) AS missing_on_sale, " +
-                "SUM(ii.inventory_item_quantity <= 0 AND store_sale.item_id IS NOT NULL) AS missing_at_store " +
+                "SUM(NOT " + usable + " AND sale.item_id IS NOT NULL) AS missing_on_sale, " +
+                "SUM(NOT " + usable + " AND store_sale.item_id IS NOT NULL) AS missing_at_store " +
                 "FROM recipe_ingredient ri " +
                 "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id " +
                 "LEFT JOIN (SELECT DISTINCT si.store_item_item_id AS item_id " +
@@ -123,12 +127,19 @@ public class SuggestionRepository {
         List<PantryCoverage> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, expiryLimit.toString());
-            ps.setString(2, today.toString());
-            ps.setString(3, today.toString());
-            ps.setString(4, store == null ? "" : store);   // "" matches no store: nothing is counted at a store
-            ps.setString(5, today.toString());
-            ps.setString(6, today.toString());
+            // placeholders in the order they appear: in_stock, expiring (usable, then limit), the two missing sums,
+            // the sale join (start, end), the store sale join (store, start, end)
+            String todayText = today.toString();
+            ps.setString(1, todayText);
+            ps.setString(2, todayText);
+            ps.setString(3, expiryLimit.toString());
+            ps.setString(4, todayText);
+            ps.setString(5, todayText);
+            ps.setString(6, todayText);
+            ps.setString(7, todayText);
+            ps.setString(8, store == null ? "" : store);   // "" matches no store: nothing is counted at a store
+            ps.setString(9, todayText);
+            ps.setString(10, todayText);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new PantryCoverage(rs.getInt("recipe_id"), rs.getInt("needed"), rs.getInt("in_stock"),
@@ -143,10 +154,12 @@ public class SuggestionRepository {
 
     /**
      * The ingredients of these recipes with the stock of each (recipe id -> lines, by name). A line is IN_STOCK when the
-     * inventory quantity is above zero, EXPIRING when it also expires on or before {@code expiryLimit}, TO_TASTE for
-     * "nach Geschmack", otherwise MISSING. Offers are not filled in here (see {@link #offersOnSale}).
+     * inventory quantity is above zero, EXPIRING when it also expires on or before {@code expiryLimit}, EXPIRED when
+     * some is there but its date is before {@code today} (not counted as usable stock), TO_TASTE for "nach
+     * Geschmack", otherwise MISSING. Offers are not filled in here (see {@link #offersOnSale}).
      */
-    public Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit) {
+    public Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit,
+                                                      LocalDate today) {
         if (recipeIds.isEmpty()) {
             return Map.of();
         }
@@ -175,6 +188,8 @@ public class SuggestionRepository {
                     PantryLine.Status status;
                     if (rs.getBoolean("recipe_ingredient_to_taste")) {
                         status = PantryLine.Status.TO_TASTE;
+                    } else if (quantity > 0 && expires != null && expires.isBefore(today)) {
+                        status = PantryLine.Status.EXPIRED;
                     } else if (quantity > 0) {
                         status = expires != null && !expires.isAfter(expiryLimit)
                                 ? PantryLine.Status.EXPIRING : PantryLine.Status.IN_STOCK;

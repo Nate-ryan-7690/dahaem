@@ -11,7 +11,12 @@ public record PantryLine(int itemId, String nameDeutsch, String nameEnglish, Sta
                          String neededUnit, int stockQuantity, String stockUnit, LocalDate expiresOn,
                          List<PantryOffer> offers) {
 
-    public enum Status { IN_STOCK, EXPIRING, MISSING, TO_TASTE }
+    /**
+     * EXPIRED: some is in stock but its date has passed. It is shown (with the stock amount and the date, the user
+     * decides), but it does not count as usable stock for the ranking: the ingredient counts as still to buy, and
+     * carries the offers on sale like a missing one.
+     */
+    public enum Status { IN_STOCK, EXPIRING, EXPIRED, MISSING, TO_TASTE }
 
     public PantryLine withOffers(List<PantryOffer> newOffers) {
         return new PantryLine(itemId, nameDeutsch, nameEnglish, status, neededQuantity, neededUnit, stockQuantity,

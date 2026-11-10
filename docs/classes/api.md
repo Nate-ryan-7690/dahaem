@@ -1449,10 +1449,11 @@ classDiagram
 *record*
 
 One ingredient of a suggested recipe. status is IN_STOCK, EXPIRING (in stock and expires
-within the look-ahead), MISSING or TO_TASTE. neededQuantity / neededUnit is what
+within the look-ahead), EXPIRED (some is in stock but its date has passed: shown with the amount and the
+date, not counted as usable stock), MISSING or TO_TASTE. neededQuantity / neededUnit is what
 the recipe asks for (quantity null for "to taste"); stockQuantity / stockUnit is what the household
 has, in the item's own unit; expiresOn is the earliest expiry date of the stock (null when unknown).
-offers lists, for a missing ingredient, every offer that is on sale today (see PantryOfferDto);
+offers lists, for a missing or expired ingredient, every offer that is on sale today (see PantryOfferDto);
 empty otherwise.
 
 ```mermaid
@@ -1559,7 +1560,9 @@ classDiagram
 A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not
 counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing
 ones are on sale, and every ingredient with its state. Counts are of ingredients, not of amounts: an ingredient is
-in stock when the household has any of it. Nothing here is a choice made for the user.
+in stock when the household has any of it that has not expired; stock past its date is shown as EXPIRED and
+counts as still to buy (missing). With diet rules the recipe card carries diet (status OK / ANPASSBAR
+/ UNCLEAR, hints, softHits), as in the recipe search. Nothing here is a choice made for the user.
 
 ```mermaid
 classDiagram
@@ -1612,7 +1615,9 @@ classDiagram
 *record*
 
 One page of GET /api/suggestions/pantry. items are the suggested recipes of this page in the
-requested order; total is the number of recipes that fit in ALL pages; page (from 1) and
+requested order; total is the number of recipes in ALL pages of this list, at most 200 (the best ones in the
+requested order); totalMatching is how many fit before that cap and capped says whether the list was
+cut: the rest is found with the recipe search (GET /api/recipes/search); page (from 1) and
 pageSize echo the request with its defaults applied; totalPages is ceil(total / pageSize),
 0 when nothing fits. A page past the end has empty items.
 
@@ -1623,6 +1628,8 @@ classDiagram
         <<record>>
         +List~PantrySuggestionDto~ items
         +long total
+        +long totalMatching
+        +boolean capped
         +int page
         +int pageSize
         +int totalPages
@@ -1641,6 +1648,8 @@ classDiagram
 |---|---|
 | `items` | `List<PantrySuggestionDto>` |
 | `total` | `long` |
+| `totalMatching` | `long` |
+| `capped` | `boolean` |
 | `page` | `int` |
 | `pageSize` | `int` |
 | `totalPages` | `int` |
@@ -2719,7 +2728,7 @@ classDiagram
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
         +suggestionRepository() SuggestionRepository
         +suggestionService(SuggestionRepository suggestionRepository) SuggestionService
-        +pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, String zone) PantrySuggestionService
+        +pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone) PantrySuggestionService
         +dietFilterRepository() DietFilterRepository
         +dietPresets() DietPresets
         +dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds) DietFilterService
@@ -2779,7 +2788,7 @@ classDiagram
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
 | `SuggestionRepository suggestionRepository()` | public |  |
 | `SuggestionService suggestionService(SuggestionRepository suggestionRepository)` | public |  |
-| `PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, String zone)` | public |  |
+| `PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone)` | public |  |
 | `DietFilterRepository dietFilterRepository()` | public |  |
 | `DietPresets dietPresets()` | public | Presets come from config/diet_presets.json (relative to the working directory, /app in the container). |
 | `DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds)` | public |  |
@@ -3122,13 +3131,15 @@ classDiagram
         <<controller>>
         -SuggestionService suggestionService
         -PantrySuggestionService pantrySuggestions
-        +SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions)
+        -DietFilterService dietFilter
+        +SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)
         +bySavings() List~RecipeSuggestionDto~
         +byExpiring(int days) List~RecipeSuggestionDto~
-        +pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize) PantrySuggestionPageDto
+        +pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) PantrySuggestionPageDto
     }
     class suggestions_SuggestionService["SuggestionService"]
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
+    class diet_DietFilterService["DietFilterService"]
     class api_RecipeSuggestionDto["RecipeSuggestionDto"] {
         <<record>>
     }
@@ -3137,6 +3148,7 @@ classDiagram
     }
     api_SuggestionController --> suggestions_SuggestionService
     api_SuggestionController --> suggestions_PantrySuggestionService
+    api_SuggestionController --> diet_DietFilterService
     api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
@@ -3145,13 +3157,14 @@ classDiagram
 |---|---|
 | `suggestionService` | `SuggestionService` |
 | `pantrySuggestions` | `PantrySuggestionService` |
+| `dietFilter` | `DietFilterService` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions)` | public |  |
+| `SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)` | public |  |
 | `List<RecipeSuggestionDto> bySavings()` | public | Recipes ranked by how many ingredients are currently on sale. |
 | `List<RecipeSuggestionDto> byExpiring(int days)` | public | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
-| `PantrySuggestionPageDto pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize)` | public | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
+| `PantrySuggestionPageDto pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
 
 ## TagDto
 

@@ -1,5 +1,7 @@
 package de.dahaem.api;
 
+import de.dahaem.diet.DietFilterService;
+import de.dahaem.diet.DietRules;
 import de.dahaem.shared.PageRequest;
 import de.dahaem.suggestions.PantrySuggestionService;
 import de.dahaem.suggestions.SuggestionService;
@@ -20,10 +22,13 @@ public class SuggestionController {
 
     private final SuggestionService suggestionService;
     private final PantrySuggestionService pantrySuggestions;
+    private final DietFilterService dietFilter;
 
-    public SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions) {
+    public SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions,
+                                DietFilterService dietFilter) {
         this.suggestionService = suggestionService;
         this.pantrySuggestions = pantrySuggestions;
+        this.dietFilter = dietFilter;
     }
 
     /** Recipes ranked by how many ingredients are currently on sale. */
@@ -59,8 +64,18 @@ public class SuggestionController {
      *   <li>paging: {@code page} (from 1) and {@code pageSize} (1 - 100, default 24). Out-of-range values are a
      *       400.</li>
      * </ul>
-     * An ingredient counts as in stock when the household has any of it; the amount is not compared with the amount
-     * the recipe needs yet. This replaces the whole-list {@code /by-savings} for pages: that call is unchanged.
+     * The diet rules of {@code GET /api/recipes/search} apply here too, on the server: hard rules
+     * ({@code diet}, {@code excludeTags}, {@code excludeItems}) hide a recipe the household does not eat and it is
+     * not counted, soft rules ({@code avoidTags}, {@code avoidItems}) sort it after the others, and
+     * {@code includeUnclear} (default false) lets recipes with an unmatched line through. With rules each recipe
+     * card carries {@code diet}, and the order is: no soft hit first, then OK before ANPASSBAR before UNCLEAR, the
+     * requested {@code sort} within each group.
+     * <p>The list holds at most 200 recipes, the best ones in the requested order ({@code total} is at most 200;
+     * {@code totalMatching} says how many fit before the cap and {@code capped} whether it was cut); more are found
+     * with {@code GET /api/recipes/search}.
+     * <p>An ingredient counts as in stock when the household has any of it and it has not expired; the amount is not
+     * compared with the amount the recipe needs yet. Stock past its date is shown as {@code EXPIRED} and counts as
+     * still to buy. This replaces the whole-list {@code /by-savings} for pages: that call is unchanged.
      */
     @GetMapping("/pantry")
     public PantrySuggestionPageDto pantry(@RequestParam(name = "q", required = false) String q,
@@ -70,10 +85,19 @@ public class SuggestionController {
                                           @RequestParam(name = "days", required = false) Integer days,
                                           @RequestParam(name = "sort", required = false) String sort,
                                           @RequestParam(name = "page", required = false) Integer page,
-                                          @RequestParam(name = "pageSize", required = false) Integer pageSize) {
+                                          @RequestParam(name = "pageSize", required = false) Integer pageSize,
+                                          @RequestParam(name = "diet", required = false) List<String> diet,
+                                          @RequestParam(name = "excludeTags", required = false) List<String> excludeTags,
+                                          @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
+                                          @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
+                                          @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
+                                          @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
         PageRequest request = PageRequest.of(page, pageSize);
-        PantrySuggestionService.Result result = pantrySuggestions.suggest(q, maxTime, store, minMatches, days, sort, request);
+        DietRules rules = dietFilter.rules(diet, excludeTags, excludeItems, avoidTags, avoidItems, includeUnclear);
+        PantrySuggestionService.Result result = pantrySuggestions.suggest(q, maxTime, store, minMatches, days, sort,
+                rules, request);
         return new PantrySuggestionPageDto(result.items().stream().map(PantrySuggestionDto::from).toList(),
-                result.total(), request.page(), request.pageSize(), result.totalPages());
+                result.total(), result.totalMatching(), result.capped(), request.page(), request.pageSize(),
+                result.totalPages());
     }
 }

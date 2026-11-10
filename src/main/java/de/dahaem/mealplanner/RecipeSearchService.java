@@ -68,7 +68,7 @@ public class RecipeSearchService {
      * ANPASSBAR, UNCLEAR; the candidates' own (sort) order is kept within a group. HIDDEN recipes are dropped, and
      * UNCLEAR ones unless {@code includeUnclear}.
      */
-    static List<Integer> visibleInDisplayOrder(List<Integer> candidates, Map<Integer, DietVerdict> verdicts,
+    public static List<Integer> visibleInDisplayOrder(List<Integer> candidates, Map<Integer, DietVerdict> verdicts,
                                                DietRules rules) {
         List<Integer> shown = new ArrayList<>();
         for (int id : candidates) {

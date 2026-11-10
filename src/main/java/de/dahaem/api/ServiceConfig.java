@@ -127,9 +127,10 @@ public class ServiceConfig {
     @Bean
     public PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository,
                                                            RecipeRepository recipeRepository, TagService tagService,
+                                                           DietFilterService dietFilterService,
                                                            @org.springframework.beans.factory.annotation.Value("${dahaem.mealplan.zone:Europe/Berlin}") String zone) {
         // "today" (what is on sale, what expires) is the date in the household's time zone, not the server's
-        return new PantrySuggestionService(suggestionRepository, recipeRepository, tagService,
+        return new PantrySuggestionService(suggestionRepository, recipeRepository, tagService, dietFilterService,
                 java.time.Clock.system(java.time.ZoneId.of(zone)));
     }
 
