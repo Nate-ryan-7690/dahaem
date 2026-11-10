@@ -77,7 +77,8 @@ Every error has the same shape:
 | GET | [`/api/shopping-lists`](#get-apishopping-lists) | Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan. |
 | POST | [`/api/shopping-lists`](#post-apishopping-lists) | Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand (POST /{listId/items}). |
 | GET | [`/api/shopping-lists/{listId}`](#get-apishopping-listslistid) | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
-| POST | [`/api/shopping-lists/{listId}/items`](#post-apishopping-listslistiditems) | Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). |
+| PUT | [`/api/shopping-lists/{listId}/archived`](#put-apishopping-listslistidarchived) | Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back. |
+| POST | [`/api/shopping-lists/{listId}/items`](#post-apishopping-listslistiditems) | Adds a line by hand: for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional) or as free text ({"name": "Backpapier", "quantity": 1}, unit optional). |
 | DELETE | [`/api/shopping-lists/{listId}/items/{itemId}`](#delete-apishopping-listslistiditemsitemid) | Removes a line from a list that is not completed. |
 | PUT | [`/api/shopping-lists/{listId}/items/{itemId}/purchased`](#put-apishopping-listslistiditemsitemidpurchased) | Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. |
 | PUT | [`/api/shopping-lists/{listId}/items/{itemId}/quantity`](#put-apishopping-listslistiditemsitemidquantity) | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
@@ -573,12 +574,21 @@ has not expired by the shopping day; a unit mismatch leaves the line flagged nee
 #### GET /api/meal-plans/{id}/shopping-lists
 
 The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten).
+Archived lists are left out; ?archived=true shows only the archived ones.
 
 **Path parameters**
 
 | Name | Type |
 |---|---|
 | `id` | `int` |
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `archived` | `boolean` | no | `false` |
+
+
 
 **Answer** 200 `List<PersistedShoppingListDto.Summary>`
 
@@ -591,6 +601,7 @@ The saved shopping lists of a plan, newest first (each generation is its own lis
     "shoppingDate": "2026-10-14",
     "fromDate": "2026-10-14",
     "status": false,
+    "archived": false,
     "lines": 0,
     "purchasedLines": 0
   }
@@ -1137,7 +1148,16 @@ A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`exc
 
 #### GET /api/shopping-lists
 
-Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan.
+Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list
+without a plan. Archived lists are left out; ?archived=true shows only the archived ones.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `archived` | `boolean` | no | `false` |
+
+
 
 **Answer** 200 `List<PersistedShoppingListDto.Summary>`
 
@@ -1150,6 +1170,7 @@ Every saved list, newest first, with its lines and how many are ticked; mealPlan
     "shoppingDate": "2026-10-14",
     "fromDate": "2026-10-14",
     "status": false,
+    "archived": false,
     "lines": 0,
     "purchasedLines": 0
   }
@@ -1197,6 +1218,7 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
   "shoppingDate": "2026-10-14",
   "fromDate": "2026-10-14",
   "status": false,
+  "archived": false,
   "items": [
     {
       "shoppingListItemId": 0,
@@ -1227,9 +1249,37 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
 }
 ```
 
+#### PUT /api/shopping-lists/{listId}/archived
+
+Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `listId` | `int` |
+
+**Request body** `ShoppingListEdits.ArchivedRequest`
+
+```json
+{
+  "archived": false
+}
+```
+
+**Answer** 200 `ShoppingListEdits.ArchivedDto`
+
+```json
+{
+  "id": 0,
+  "archived": false
+}
+```
+
 #### POST /api/shopping-lists/{listId}/items
 
-Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional).
+Adds a line by hand: for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional) or as
+free text ({"name": "Backpapier", "quantity": 1}, unit optional). Exactly one of inventoryItemId and name.
 
 **Path parameters**
 
@@ -1242,6 +1292,7 @@ Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, 
 ```json
 {
   "inventoryItemId": 0,
+  "name": "…",
   "quantity": 0.0,
   "unit": "…"
 }
@@ -1943,6 +1994,9 @@ dropped); needsReview is true when stock exists but in another unit than the lin
 subtracted and a person checks it (stockQuantity / stockUnit show what the household has);
 recipes are the recipes that need the line; purchased is the tick "bought" on the trip.
 
+archived true = hidden from the overview (nothing is deleted); a free-text line (added with a name)
+has no inventoryItemId, its text is in nameDeutsch and nameEnglish, and it has no store options.
+
 status true = completed (read-only). storeTotals: for each store that sells something on the list,
 how many of the lines still to buy it covers and what those lines cost there (the cheapest pack option per line);
 shown side by side, never picked for the user.
@@ -1955,6 +2009,7 @@ shown side by side, never picked for the user.
 | `shoppingDate` | `LocalDate` |
 | `fromDate` | `LocalDate` |
 | `status` | `boolean` |
+| `archived` | `boolean` |
 | `items` | `List<Line>` |
 | `storeTotals` | `List<StoreTotal>` |
 

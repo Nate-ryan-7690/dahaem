@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (80)"]
+    api["api (82)"]
     auth["auth (8)"]
     diet["diet (14)"]
     finance["finance (5)"]
@@ -48,7 +48,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 80 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 82 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 5 | Purchases and spending analytics. |
@@ -284,7 +284,9 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ShoppingListDto.StoreOptionDto`](api.md#shoppinglistdtostoreoptiondto) | api | record | One store's current price for a line: what it costs at the till (sale/deal price where one applies, plus deposit), plus whether this pack's unit is even comparable to what's needed. |
 | [`ShoppingListEdits`](api.md#shoppinglistedits) | api | class | Request and response bodies of the shopping list edits (tick, amount, add a line, complete). |
 | [`ShoppingListEdits.AddedLineDto`](api.md#shoppinglisteditsaddedlinedto) | api | record |  |
-| [`ShoppingListEdits.AddLineRequest`](api.md#shoppinglisteditsaddlinerequest) | api | record | POST .../items: a line added by hand for a catalogue item; unit defaults to the item's own unit. |
+| [`ShoppingListEdits.AddLineRequest`](api.md#shoppinglisteditsaddlinerequest) | api | record | POST .../items: a line added by hand, either for a catalogue item (inventoryItemId; unit defaults to the item's own unit) or as free text (name, for things like "Backpapier"). |
+| [`ShoppingListEdits.ArchivedDto`](api.md#shoppinglisteditsarchiveddto) | api | record |  |
+| [`ShoppingListEdits.ArchivedRequest`](api.md#shoppinglisteditsarchivedrequest) | api | record | PUT .../archived: {"archived": true} hides the list from the overview (nothing is deleted), false brings it back. |
 | [`ShoppingListEdits.PurchasedDto`](api.md#shoppinglisteditspurchaseddto) | api | record |  |
 | [`ShoppingListEdits.PurchasedRequest`](api.md#shoppinglisteditspurchasedrequest) | api | record | PUT .../items/{itemId}/purchased: {"purchased": true}. |
 | [`ShoppingListEdits.QuantityDto`](api.md#shoppinglisteditsquantitydto) | api | record |  |
