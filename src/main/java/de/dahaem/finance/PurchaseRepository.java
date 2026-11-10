@@ -148,6 +148,57 @@ public class PurchaseRepository {
         }
     }
 
+    /** What is left of one purchase (a batch of one inventory item). */
+    public record Batch(int purchaseId, int left) {
+    }
+
+    /**
+     * The purchases of an inventory item that still have something left, earliest expiry first (older purchase first on
+     * a tie), locked for the caller's transaction. A purchase whose remaining column is NULL has all of it left.
+     */
+    public List<Batch> lockBatchesWithStock(Connection con, int inventoryItemId) throws SQLException {
+        String sql = "SELECT ph.purchase_history_purchase_id, " +
+                "COALESCE(ph.purchase_history_quantity_remaining, ph.purchase_history_quantity_purchased) AS amount_left " +
+                "FROM purchase_history ph JOIN store_item si ON si.store_item_id = ph.purchase_history_store_item_id " +
+                "WHERE si.store_item_item_id = ? " +
+                "AND COALESCE(ph.purchase_history_quantity_remaining, ph.purchase_history_quantity_purchased) > 0 " +
+                "ORDER BY ph.purchase_history_expiration_date, ph.purchase_history_purchase_id FOR UPDATE";
+        List<Batch> batches = new ArrayList<>();
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, inventoryItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    batches.add(new Batch(rs.getInt(1), rs.getInt(2)));
+                }
+            }
+        }
+        return batches;
+    }
+
+    public void setRemaining(Connection con, int purchaseId, int remaining) throws SQLException {
+        String sql = "UPDATE purchase_history SET purchase_history_quantity_remaining = ? " +
+                "WHERE purchase_history_purchase_id = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, remaining);
+            ps.setInt(2, purchaseId);
+            ps.executeUpdate();
+        }
+    }
+
+    /** The earliest expiry among the purchases of an inventory item that still have something left, or null if none. */
+    public LocalDate earliestExpiryWithStock(Connection con, int inventoryItemId) throws SQLException {
+        String sql = "SELECT MIN(ph.purchase_history_expiration_date) FROM purchase_history ph " +
+                "JOIN store_item si ON si.store_item_id = ph.purchase_history_store_item_id " +
+                "WHERE si.store_item_item_id = ? " +
+                "AND COALESCE(ph.purchase_history_quantity_remaining, ph.purchase_history_quantity_purchased) > 0";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, inventoryItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getObject(1, LocalDate.class) : null;
+            }
+        }
+    }
+
     private Purchase mapRow(ResultSet rs) throws SQLException {
         int discountId = rs.getInt("purchase_history_discount_id");
         Integer discount = rs.wasNull() ? null : discountId;
