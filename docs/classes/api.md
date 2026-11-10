@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-80 types in 56 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+82 types in 56 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -203,6 +203,12 @@ classDiagram
     class api_ShoppingListEdits_AddLineRequest["ShoppingListEdits.AddLineRequest"] {
         <<record>>
     }
+    class api_ShoppingListEdits_ArchivedRequest["ShoppingListEdits.ArchivedRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_ArchivedDto["ShoppingListEdits.ArchivedDto"] {
+        <<record>>
+    }
     class api_ShoppingListEdits_StatusRequest["ShoppingListEdits.StatusRequest"] {
         <<record>>
     }
@@ -301,6 +307,8 @@ classDiagram
     api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedRequest
     api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityRequest
     api_ShoppingListEdits *-- api_ShoppingListEdits_AddLineRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_ArchivedRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_ArchivedDto
     api_ShoppingListEdits *-- api_ShoppingListEdits_StatusRequest
     api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedDto
     api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityDto
@@ -386,7 +394,9 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`ShoppingListEdits`](#shoppinglistedits) | class |  | Request and response bodies of the shopping list edits (tick, amount, add a line, complete). |
 | [`ShoppingListEdits.PurchasedRequest`](#shoppinglisteditspurchasedrequest) | record |  | PUT .../items/{itemId}/purchased: {"purchased": true}. |
 | [`ShoppingListEdits.QuantityRequest`](#shoppinglisteditsquantityrequest) | record |  | PUT .../items/{itemId}/quantity: {"quantity": 2.5}; the line keeps its unit. |
-| [`ShoppingListEdits.AddLineRequest`](#shoppinglisteditsaddlinerequest) | record |  | POST .../items: a line added by hand for a catalogue item; unit defaults to the item's own unit. |
+| [`ShoppingListEdits.AddLineRequest`](#shoppinglisteditsaddlinerequest) | record |  | POST .../items: a line added by hand, either for a catalogue item (inventoryItemId; unit defaults to the item's own unit) or as free text (name, for things like "Backpapier"). |
+| [`ShoppingListEdits.ArchivedRequest`](#shoppinglisteditsarchivedrequest) | record |  | PUT .../archived: {"archived": true} hides the list from the overview (nothing is deleted), false brings it back. |
+| [`ShoppingListEdits.ArchivedDto`](#shoppinglisteditsarchiveddto) | record |  |  |
 | [`ShoppingListEdits.StatusRequest`](#shoppinglisteditsstatusrequest) | record |  | PUT .../status: {"completed": true} makes the list read-only, false reopens it. |
 | [`ShoppingListEdits.PurchasedDto`](#shoppinglisteditspurchaseddto) | record |  |  |
 | [`ShoppingListEdits.QuantityDto`](#shoppinglisteditsquantitydto) | record |  |  |
@@ -1343,7 +1353,7 @@ classDiagram
         +addRecipe(int id, AddPlannedRecipeRequest request) MealPlanDto
         +removeRecipe(int id, int recipeId) MealPlanDto
         +generateShoppingList(int id, Integer people, Integer householdId, LocalDate shoppingDate, LocalDate from) GeneratedShoppingListDto
-        +shoppingLists(int id) List~PersistedShoppingListDto.Summary~
+        +shoppingLists(int id, boolean archived) List~PersistedShoppingListDto.Summary~
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class mealplanner_RecipeService["RecipeService"]
@@ -1390,7 +1400,7 @@ classDiagram
 | `MealPlanDto addRecipe(int id, AddPlannedRecipeRequest request)` | public | Adds a recipe to a plan and returns the updated plan. |
 | `MealPlanDto removeRecipe(int id, int recipeId)` | public | Removes a recipe from a plan and returns the updated plan. |
 | `GeneratedShoppingListDto generateShoppingList(int id, Integer people, Integer householdId, LocalDate shoppingDate, LocalDate from)` | public | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
-| `List<PersistedShoppingListDto.Summary> shoppingLists(int id)` | public | The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). |
+| `List<PersistedShoppingListDto.Summary> shoppingLists(int id, boolean archived)` | public | The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). |
 
 ## MealPlanDto
 
@@ -1819,6 +1829,9 @@ dropped); needsReview is true when stock exists but in another unit than the lin
 subtracted and a person checks it (stockQuantity / stockUnit show what the household has);
 recipes are the recipes that need the line; purchased is the tick "bought" on the trip.
 
+archived true = hidden from the overview (nothing is deleted); a free-text line (added with a name)
+has no inventoryItemId, its text is in nameDeutsch and nameEnglish, and it has no store options.
+
 status true = completed (read-only). storeTotals: for each store that sells something on the list,
 how many of the lines still to buy it covers and what those lines cost there (the cheapest pack option per line);
 shown side by side, never picked for the user.
@@ -1834,6 +1847,7 @@ classDiagram
         +LocalDate shoppingDate
         +LocalDate fromDate
         +boolean status
+        +boolean archived
         +List~Line~ items
         +List~StoreTotal~ storeTotals
         ~from(PersistedShoppingList list) PersistedShoppingListDto$
@@ -1876,6 +1890,7 @@ classDiagram
 | `shoppingDate` | `LocalDate` |
 | `fromDate` | `LocalDate` |
 | `status` | `boolean` |
+| `archived` | `boolean` |
 | `items` | `List<Line>` |
 | `storeTotals` | `List<StoreTotal>` |
 
@@ -2001,6 +2016,7 @@ classDiagram
         +LocalDate shoppingDate
         +LocalDate fromDate
         +boolean status
+        +boolean archived
         +int lines
         +int purchasedLines
         ~from(ShoppingListSummary s) Summary$
@@ -2023,6 +2039,7 @@ classDiagram
 | `shoppingDate` | `LocalDate` |
 | `fromDate` | `LocalDate` |
 | `status` | `boolean` |
+| `archived` | `boolean` |
 | `lines` | `int` |
 | `purchasedLines` | `int` |
 
@@ -3321,6 +3338,12 @@ classDiagram
     class api_ShoppingListEdits_AddLineRequest["ShoppingListEdits.AddLineRequest"] {
         <<record>>
     }
+    class api_ShoppingListEdits_ArchivedRequest["ShoppingListEdits.ArchivedRequest"] {
+        <<record>>
+    }
+    class api_ShoppingListEdits_ArchivedDto["ShoppingListEdits.ArchivedDto"] {
+        <<record>>
+    }
     class api_ShoppingListEdits_StatusRequest["ShoppingListEdits.StatusRequest"] {
         <<record>>
     }
@@ -3342,6 +3365,8 @@ classDiagram
     api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedRequest
     api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityRequest
     api_ShoppingListEdits *-- api_ShoppingListEdits_AddLineRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_ArchivedRequest
+    api_ShoppingListEdits *-- api_ShoppingListEdits_ArchivedDto
     api_ShoppingListEdits *-- api_ShoppingListEdits_StatusRequest
     api_ShoppingListEdits *-- api_ShoppingListEdits_PurchasedDto
     api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityDto
@@ -3402,7 +3427,8 @@ classDiagram
 
 *record*
 
-POST .../items: a line added by hand for a catalogue item; unit defaults to the item's own unit.
+POST .../items: a line added by hand, either for a catalogue item (inventoryItemId; unit defaults to
+the item's own unit) or as free text (name, for things like "Backpapier"). Exactly one of the two.
 
 ```mermaid
 classDiagram
@@ -3410,6 +3436,7 @@ classDiagram
     class api_ShoppingListEdits_AddLineRequest["ShoppingListEdits.AddLineRequest"] {
         <<record>>
         +Integer inventoryItemId
+        +String name
         +Double quantity
         +String unit
     }
@@ -3420,8 +3447,55 @@ classDiagram
 | Component | Type |
 |---|---|
 | `inventoryItemId` | `Integer` |
+| `name` | `String` |
 | `quantity` | `Double` |
 | `unit` | `String` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.ArchivedRequest
+
+*record*
+
+PUT .../archived: {"archived": true} hides the list from the overview (nothing is deleted), false brings it back.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_ArchivedRequest["ShoppingListEdits.ArchivedRequest"] {
+        <<record>>
+        +Boolean archived
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_ArchivedRequest
+```
+
+| Component | Type |
+|---|---|
+| `archived` | `Boolean` |
+
+**Referenced by:** `ShoppingListEdits`
+
+## ShoppingListEdits.ArchivedDto
+
+*record*
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ShoppingListEdits_ArchivedDto["ShoppingListEdits.ArchivedDto"] {
+        <<record>>
+        +int id
+        +boolean archived
+    }
+    class api_ShoppingListEdits["ShoppingListEdits"]
+    api_ShoppingListEdits *-- api_ShoppingListEdits_ArchivedDto
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `archived` | `boolean` |
 
 **Referenced by:** `ShoppingListEdits`
 
@@ -3550,7 +3624,7 @@ classDiagram
         -ShoppingListService shoppingListService
         -MealPlanService mealPlanService
         +ShoppingListItemController(ShoppingListService shoppingListService, MealPlanService mealPlanService)
-        +all() List~PersistedShoppingListDto.Summary~
+        +all(boolean archived) List~PersistedShoppingListDto.Summary~
         +create(LocalDate shoppingDate) GeneratedShoppingListDto
         +get(int listId) PersistedShoppingListDto
         +selectStoreItem(int listId, int itemId, SelectStoreItemRequest request) ShoppingListItemSelectionDto
@@ -3558,6 +3632,7 @@ classDiagram
         +setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request) ShoppingListEdits.QuantityDto
         +removeItem(int listId, int itemId) void
         +addItem(int listId, ShoppingListEdits.AddLineRequest request) ShoppingListEdits.AddedLineDto
+        +setArchived(int listId, ShoppingListEdits.ArchivedRequest request) ShoppingListEdits.ArchivedDto
         +setStatus(int listId, ShoppingListEdits.StatusRequest request) ShoppingListEdits.StatusDto
     }
     class shopping_ShoppingListService["ShoppingListService"]
@@ -3592,14 +3667,15 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `ShoppingListItemController(ShoppingListService shoppingListService, MealPlanService mealPlanService)` | public |  |
-| `List<PersistedShoppingListDto.Summary> all()` | public | Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan. |
+| `List<PersistedShoppingListDto.Summary> all(boolean archived)` | public | Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan. |
 | `GeneratedShoppingListDto create(LocalDate shoppingDate)` | public | Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand (POST /{listId/items}). |
 | `PersistedShoppingListDto get(int listId)` | public | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
 | `ShoppingListItemSelectionDto selectStoreItem(int listId, int itemId, SelectStoreItemRequest request)` | public | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
 | `ShoppingListEdits.PurchasedDto setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request)` | public | Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. |
 | `ShoppingListEdits.QuantityDto setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request)` | public | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
 | `void removeItem(int listId, int itemId)` | public | Removes a line from a list that is not completed. |
-| `ShoppingListEdits.AddedLineDto addItem(int listId, ShoppingListEdits.AddLineRequest request)` | public | Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). |
+| `ShoppingListEdits.AddedLineDto addItem(int listId, ShoppingListEdits.AddLineRequest request)` | public | Adds a line by hand: for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional) or as free text ({"name": "Backpapier", "quantity": 1}, unit optional). |
+| `ShoppingListEdits.ArchivedDto setArchived(int listId, ShoppingListEdits.ArchivedRequest request)` | public | Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back. |
 | `ShoppingListEdits.StatusDto setStatus(int listId, ShoppingListEdits.StatusRequest request)` | public | Completes a list ({"completed": true}: it becomes read-only) or reopens it. |
 
 ## ShoppingListItemSelectionDto
