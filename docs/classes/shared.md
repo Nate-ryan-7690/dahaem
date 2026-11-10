@@ -133,9 +133,15 @@ classDiagram
     class mealplanner_RecipeSearchService_Result["RecipeSearchService.Result"] {
         <<record>>
     }
+    class suggestions_PantrySuggestionService_Result["PantrySuggestionService.Result"] {
+        <<record>>
+    }
     class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
     mealplanner_RecipeSearchService ..> shared_PageRequest
     mealplanner_RecipeSearchService_Result --> shared_PageRequest
+    suggestions_PantrySuggestionService ..> shared_PageRequest
+    suggestions_PantrySuggestionService_Result --> shared_PageRequest
 ```
 
 | Component | Type |
@@ -151,7 +157,7 @@ classDiagram
 | `long offset()` | public | Number of rows before this page. |
 | `int totalPages(long total)` | public | Pages needed for total rows (0 for none). |
 
-**Referenced by:** `RecipeSearchService`, `RecipeSearchService.Result`
+**Referenced by:** `PantrySuggestionService`, `PantrySuggestionService.Result`, `RecipeSearchService`, `RecipeSearchService.Result`
 
 ## Portions
 

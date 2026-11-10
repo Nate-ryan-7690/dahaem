@@ -751,6 +751,9 @@ classDiagram
     class mealplanner_RecipeSearchService_Entry["RecipeSearchService.Entry"] {
         <<record>>
     }
+    class suggestions_PantrySuggestionService_Entry["PantrySuggestionService.Entry"] {
+        <<record>>
+    }
     class api_RecipeCardDto["RecipeCardDto"] {
         <<record>>
     }
@@ -776,6 +779,7 @@ classDiagram
     mealplanner_RecipeRepository ..> mealplanner_Recipe
     mealplanner_RecipeSearchService_Entry --> mealplanner_Recipe
     mealplanner_RecipeService ..> mealplanner_Recipe
+    suggestions_PantrySuggestionService_Entry --> mealplanner_Recipe
 ```
 
 | Field | Type |
@@ -826,7 +830,7 @@ classDiagram
 | `LocalDate getPublishedDate()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `RecipeCardDto`, `RecipeController`, `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`, `RecipeSummaryDto`
+**Referenced by:** `PantrySuggestionService.Entry`, `RecipeCardDto`, `RecipeController`, `RecipeDetailDto`, `RecipeDetailDto.Instruction`, `RecipeRepository`, `RecipeService`, `RecipeSummaryDto`
 
 ## RecipeIngredient
 
@@ -1042,6 +1046,7 @@ classDiagram
     }
     class mealplanner_RecipeSearchService["RecipeSearchService"]
     class mealplanner_RecipeService["RecipeService"]
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class mealplanner_Recipe["Recipe"]
     class mealplanner_RecipeIngredient["RecipeIngredient"]
     class mealplanner_RecipeInstruction["RecipeInstruction"]
@@ -1058,6 +1063,7 @@ classDiagram
     api_ServiceConfig ..> mealplanner_RecipeRepository
     mealplanner_RecipeSearchService --> mealplanner_RecipeRepository
     mealplanner_RecipeService --> mealplanner_RecipeRepository
+    suggestions_PantrySuggestionService --> mealplanner_RecipeRepository
 ```
 
 | Field | Type |
@@ -1078,7 +1084,7 @@ classDiagram
 | `Optional<Recipe> findById(int id)` | public |  |
 | `boolean setPreferredServings(int recipeId, Integer servings)` | public | Sets the recipe's permanent preferred servings ("this meal is always for X people"); null clears it. |
 
-**Referenced by:** `RecipeSearchService`, `RecipeService`, `ServiceConfig`
+**Referenced by:** `PantrySuggestionService`, `RecipeSearchService`, `RecipeService`, `ServiceConfig`
 
 ## RecipeSearchService
 

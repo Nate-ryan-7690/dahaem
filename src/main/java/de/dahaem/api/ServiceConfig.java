@@ -17,6 +17,7 @@ import de.dahaem.mealplanner.RecipeService;
 import de.dahaem.shopping.ShoppingListRepository;
 import de.dahaem.shopping.ShoppingListService;
 import de.dahaem.stores.StoreRepository;
+import de.dahaem.suggestions.PantrySuggestionService;
 import de.dahaem.suggestions.SuggestionRepository;
 import de.dahaem.suggestions.SuggestionService;
 import de.dahaem.tags.TagRepository;
@@ -121,6 +122,15 @@ public class ServiceConfig {
     @Bean
     public SuggestionService suggestionService(SuggestionRepository suggestionRepository) {
         return new SuggestionService(suggestionRepository);
+    }
+
+    @Bean
+    public PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository,
+                                                           RecipeRepository recipeRepository, TagService tagService,
+                                                           @org.springframework.beans.factory.annotation.Value("${dahaem.mealplan.zone:Europe/Berlin}") String zone) {
+        // "today" (what is on sale, what expires) is the date in the household's time zone, not the server's
+        return new PantrySuggestionService(suggestionRepository, recipeRepository, tagService,
+                java.time.Clock.system(java.time.ZoneId.of(zone)));
     }
 
     @Bean

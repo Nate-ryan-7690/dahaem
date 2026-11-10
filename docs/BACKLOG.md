@@ -385,7 +385,9 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 - **Kosher fish (fins and scales)** — `idea`. The Tier tag is just "Fisch"; fish without fins and scales
   (Aal, Wels, Stör, Hai …) are not kosher but cannot be told apart yet. Needs a fish-species value (or a
   flag) per item and a rule in the koscher preset; until then the preset's note says so.
-- **Recipe opportunities with evidence** — `next`. **Purpose, stated by Nate 2026-11-10:** healthy meals at the lowest
+- **Recipe opportunities with evidence** — `in progress`. **Built 2026-11-10: `GET /api/suggestions/pantry`** (paged, with
+  search, store, time and sort filters; ranking in `PantryRanking`, weights are constants to tune; the page then switches
+  from `/by-savings` to it, dahaem-frontend). **Purpose, stated by Nate 2026-11-10:** healthy meals at the lowest
   shopping cost. "Healthy" means cooking from fresh ingredients; all recipe data counts as healthy by definition (it
   contains no ready-made or pre-processed meals), so no health filter is needed. **Ranking:** use up what is already
   in the pantry first, items closest to their expiry date weigh most (pantry and staple ingredients rank a recipe
@@ -396,9 +398,12 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   ingredients (a suggestion is `recipeId`, name, score and matching item ids; by-savings reads the curated
   `store_discount` only, not the flyer `store_offer` rows) and ignore the inventory; nothing suggests from low stock.
   Needs a unit-aware "in stock" check first (see "Unit check when stock is subtracted from a list"). Add the recipe
-  image so Home needs no extra call. Open for Nate: how the extra cost is shown (proposal: a price range per missing
-  item with the stores listed, no cheapest one picked; or one estimated total per recipe).
-- **Suggestions: limit, paging and filters** — `next`. Found 2026-11-10 while building the Home page and the full
+  image so Home needs no extra call. Decided by Nate 2026-11-10: the cost
+  stays as it is, the offers listed per store with their pack and price, no total per recipe; an estimated total cost
+  comes later on the shopping list. Still open: the "in stock" check only asks whether the household has any of the
+  item, the amount is not compared with the amount the recipe needs (unit-aware check, see the item named above).
+- **Suggestions: limit, paging and filters** — `in progress`, replaced by `GET /api/suggestions/pantry` (see "Recipe
+  opportunities with evidence"); `/by-savings` and `/by-expiring` stay unchanged until the PHP has moved. Found 2026-11-10 while building the Home page and the full
   suggestions page (dahaem-frontend PR 17). `GET /api/suggestions/by-savings` answers with every recipe that has at
   least one discounted ingredient: with the live data over 10,000 recipes, about 1.6 MB and 0.85 s per call, and the
   PHP loads it on every Home and suggestions page view. Today the PHP works around it: it filters and sorts the whole
@@ -420,7 +425,8 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   by store, never ranked: the user chooses. The live data also holds identical offer rows (e.g. Butter at Aldi twice,
   same price and dates); the PHP now collapses them, but the importer or `store_discount` should not store them twice
   (unique key on store item, start and end date, price?). Decide with the "Offers read API" item.
-- **Shopping list lifecycle** — `next`. Save a list (from a meal-plan week), tick items, record the
+- **Shopping list lifecycle** — `next`. Nate 2026-11-10: the list shows an estimated total cost (per store); the
+  suggestions deliberately do not. Save a list (from a meal-plan week), tick items, record the
   shop as purchases (ties in with the receipt import and "Receipts + shopping list"); on refresh warn
   when a chosen offer has expired or a price changed, never substitute silently. Audit adds: list the lists (open
   list of a week / household), add a manual line (`is_manual` column exists), change quantity, remove a line,

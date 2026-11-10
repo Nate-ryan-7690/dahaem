@@ -8,7 +8,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,5 +87,157 @@ public class SuggestionRepository {
         suggestions.sort(Comparator.comparingInt(RecipeSuggestion::getScore).reversed()
                 .thenComparing(RecipeSuggestion::getRecipeName));
         return suggestions;
+    }
+
+    // ------------------------------------------------------------------ pantry-first suggestions
+
+    /**
+     * For every recipe: how many ingredients it needs, how many are in stock, how many of those expire on or before
+     * {@code expiryLimit}, how many of the missing ones are on sale on {@code today}, and how many of them at the
+     * store named {@code store} (null = no store asked, counted as 0). "To taste" ingredients are left out. Only
+     * counts come back (about one small row per recipe), so the ranking never loads 100,000 ingredient rows.
+     */
+    public List<PantryCoverage> coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store) {
+        String sql = "SELECT ri.recipe_ingredient_recipe_id AS recipe_id, COUNT(*) AS needed, " +
+                "SUM(ii.inventory_item_quantity > 0) AS in_stock, " +
+                "SUM(ii.inventory_item_quantity > 0 AND ii.inventory_item_earliest_exp_date IS NOT NULL " +
+                "    AND ii.inventory_item_earliest_exp_date <= ?) AS expiring, " +
+                "SUM(ii.inventory_item_quantity <= 0 AND sale.item_id IS NOT NULL) AS missing_on_sale, " +
+                "SUM(ii.inventory_item_quantity <= 0 AND store_sale.item_id IS NOT NULL) AS missing_at_store " +
+                "FROM recipe_ingredient ri " +
+                "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id " +
+                "LEFT JOIN (SELECT DISTINCT si.store_item_item_id AS item_id " +
+                "           FROM store_item si " +
+                "           JOIN store_discount sd ON sd.store_discount_store_item_id = si.store_item_id " +
+                "           WHERE sd.store_discount_start_date <= ? AND sd.store_discount_end_date >= ?) sale " +
+                "  ON sale.item_id = ii.inventory_item_id " +
+                "LEFT JOIN (SELECT DISTINCT si.store_item_item_id AS item_id " +
+                "           FROM store_item si " +
+                "           JOIN store s ON s.store_id = si.store_item_store_id " +
+                "           JOIN store_discount sd ON sd.store_discount_store_item_id = si.store_item_id " +
+                "           WHERE s.store_name = ? AND sd.store_discount_start_date <= ? " +
+                "             AND sd.store_discount_end_date >= ?) store_sale " +
+                "  ON store_sale.item_id = ii.inventory_item_id " +
+                "WHERE ri.recipe_ingredient_to_taste = 0 " +
+                "GROUP BY ri.recipe_ingredient_recipe_id";
+        List<PantryCoverage> out = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, expiryLimit.toString());
+            ps.setString(2, today.toString());
+            ps.setString(3, today.toString());
+            ps.setString(4, store == null ? "" : store);   // "" matches no store: nothing is counted at a store
+            ps.setString(5, today.toString());
+            ps.setString(6, today.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new PantryCoverage(rs.getInt("recipe_id"), rs.getInt("needed"), rs.getInt("in_stock"),
+                            rs.getInt("expiring"), rs.getInt("missing_on_sale"), rs.getInt("missing_at_store")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the pantry coverage of the recipes", e);
+        }
+        return out;
+    }
+
+    /**
+     * The ingredients of these recipes with the stock of each (recipe id -> lines, by name). A line is IN_STOCK when the
+     * inventory quantity is above zero, EXPIRING when it also expires on or before {@code expiryLimit}, TO_TASTE for
+     * "nach Geschmack", otherwise MISSING. Offers are not filled in here (see {@link #offersOnSale}).
+     */
+    public Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit) {
+        if (recipeIds.isEmpty()) {
+            return Map.of();
+        }
+        // Only the number of placeholders is built here; the ids are bound.
+        String sql = "SELECT ri.recipe_ingredient_recipe_id AS recipe_id, ii.inventory_item_id, " +
+                "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, " +
+                "ri.recipe_ingredient_quantity_needed, ri.recipe_ingredient_unit, ri.recipe_ingredient_to_taste, " +
+                "ii.inventory_item_quantity, ii.inventory_item_unit, ii.inventory_item_earliest_exp_date " +
+                "FROM recipe_ingredient ri " +
+                "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id " +
+                "WHERE ri.recipe_ingredient_recipe_id IN (" + placeholders(recipeIds.size()) + ") " +
+                "ORDER BY ri.recipe_ingredient_recipe_id, " +
+                "COALESCE(ii.inventory_item_name_deutsch, ii.inventory_item_name_english), ii.inventory_item_id";
+        Map<Integer, List<PantryLine>> out = new HashMap<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            int i = 1;
+            for (int id : recipeIds) {
+                ps.setInt(i++, id);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int quantity = rs.getInt("inventory_item_quantity");
+                    String expiresText = rs.getString("inventory_item_earliest_exp_date");
+                    LocalDate expires = expiresText == null ? null : LocalDate.parse(expiresText);
+                    PantryLine.Status status;
+                    if (rs.getBoolean("recipe_ingredient_to_taste")) {
+                        status = PantryLine.Status.TO_TASTE;
+                    } else if (quantity > 0) {
+                        status = expires != null && !expires.isAfter(expiryLimit)
+                                ? PantryLine.Status.EXPIRING : PantryLine.Status.IN_STOCK;
+                    } else {
+                        status = PantryLine.Status.MISSING;
+                    }
+                    java.math.BigDecimal needed = rs.getBigDecimal("recipe_ingredient_quantity_needed");
+                    out.computeIfAbsent(rs.getInt("recipe_id"), k -> new ArrayList<>()).add(new PantryLine(
+                            rs.getInt("inventory_item_id"), rs.getString("inventory_item_name_deutsch"),
+                            rs.getString("inventory_item_name_english"), status,
+                            needed == null ? null : needed.doubleValue(), rs.getString("recipe_ingredient_unit"),
+                            quantity, rs.getString("inventory_item_unit"), expires, List.of()));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the ingredients of the suggested recipes", e);
+        }
+        return out;
+    }
+
+    /**
+     * The offers that are on sale on {@code today} for these inventory items (item id -> offers), by store name,
+     * then pack size. Identical rows (same store, pack, prices and end date) are returned once.
+     */
+    public Map<Integer, List<PantryOffer>> offersOnSale(Collection<Integer> itemIds, LocalDate today) {
+        if (itemIds.isEmpty()) {
+            return Map.of();
+        }
+        String sql = "SELECT DISTINCT si.store_item_item_id AS item_id, s.store_name, " +
+                "si.store_item_package_size, si.store_item_package_unit, sd.store_discount_price, " +
+                "si.store_item_price, sd.store_discount_end_date " +
+                "FROM store_discount sd " +
+                "JOIN store_item si ON si.store_item_id = sd.store_discount_store_item_id " +
+                "JOIN store s ON s.store_id = si.store_item_store_id " +
+                "WHERE si.store_item_item_id IN (" + placeholders(itemIds.size()) + ") " +
+                "AND sd.store_discount_start_date <= ? AND sd.store_discount_end_date >= ? " +
+                "ORDER BY s.store_name, si.store_item_package_size, sd.store_discount_price";
+        Map<Integer, List<PantryOffer>> out = new HashMap<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            int i = 1;
+            for (int id : itemIds) {
+                ps.setInt(i++, id);
+            }
+            ps.setString(i++, today.toString());
+            ps.setString(i, today.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    java.math.BigDecimal regular = rs.getBigDecimal("store_item_price");
+                    out.computeIfAbsent(rs.getInt("item_id"), k -> new ArrayList<>()).add(new PantryOffer(
+                            rs.getString("store_name"), rs.getInt("store_item_package_size"),
+                            rs.getString("store_item_package_unit"), rs.getBigDecimal("store_discount_price").doubleValue(),
+                            regular == null ? null : regular.doubleValue(),
+                            LocalDate.parse(rs.getString("store_discount_end_date"))));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the offers for the ingredients", e);
+        }
+        return out;
+    }
+
+    private static String placeholders(int n) {
+        return String.join(",", Collections.nCopies(n, "?"));
     }
 }

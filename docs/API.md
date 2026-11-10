@@ -75,6 +75,7 @@ Every error has the same shape:
 | PUT | [`/api/shopping-lists/{listId}/items/{itemId}/store-item`](#put-apishopping-listslistiditemsitemidstore-item) | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
 | GET | [`/api/suggestions/by-expiring`](#get-apisuggestionsby-expiring) | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
 | GET | [`/api/suggestions/by-savings`](#get-apisuggestionsby-savings) | Recipes ranked by how many ingredients are currently on sale. |
+| GET | [`/api/suggestions/pantry`](#get-apisuggestionspantry) | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
 
 ### PurchaseController
 
@@ -1125,6 +1126,82 @@ Recipes ranked by how many ingredients are currently on sale.
 ]
 ```
 
+#### GET /api/suggestions/pantry
+
+GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of
+suggestions plus the total. The purpose is healthy meals (all recipe data is cooked from fresh ingredients) at
+the lowest shopping cost, so the default order best uses up the pantry first (ingredients that expire
+soon weigh most), then needs the fewest ingredients bought at full price; pantry ingredients rank a recipe
+higher, never lower. Every suggestion says which ingredients are in stock, which expire soon and which are
+missing, and lists the offers on sale today for each missing one, every store, never one picked. All filters
+are optional and combine with AND:
+
+- q= (every word is in the recipe name), maxTime (total minutes at most; recipes
+      without a time are left out), store= (a missing ingredient is on sale at that store);
+
+- minMatches (ingredients in stock or on sale needed to show a recipe, default 1) and
+      days (look-ahead for "expiring soon", default 7);
+
+- sort=best|fewest-to-buy|expiring|name|time (default best; ties end by recipe id, so paging is
+      stable);
+
+- paging: page (from 1) and pageSize (1 - 100, default 24). Out-of-range values are a
+      400.
+
+An ingredient counts as in stock when the household has any of it; the amount is not compared with the amount
+the recipe needs yet. This replaces the whole-list /by-savings for pages: that call is unchanged.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `q` | `String` | no |  |
+| `maxTime` | `Integer` | no |  |
+| `store` | `String` | no |  |
+| `minMatches` | `Integer` | no |  |
+| `days` | `Integer` | no |  |
+| `sort` | `String` | no |  |
+| `page` | `Integer` | no |  |
+| `pageSize` | `Integer` | no |  |
+
+
+
+**Answer** 200 `PantrySuggestionPageDto`
+
+```json
+{
+  "items": [
+    {
+      "recipe": {
+        "id": 0,
+        "name": "…",
+        "imageUrl": "…",
+        "thumbnailUrl": "…",
+        "prepTime": 0,
+        "cookTime": 0,
+        "totalTime": 0,
+        "servings": 0,
+        "servingsMax": 0,
+        "cuisine": "…",
+        "ratingAvg": 0.00,
+        "tags": ["…"],
+        "diet": { … }
+      },
+      "ingredientsNeeded": 0,
+      "inStock": 0,
+      "expiringSoon": 0,
+      "missing": 0,
+      "missingOnSale": 0,
+      "ingredients": [{ … }]
+    }
+  ],
+  "total": 0,
+  "page": 0,
+  "pageSize": 0,
+  "totalPages": 0
+}
+```
+
 ## Schemas
 
 The records the endpoints above send or receive. Field names are the JSON property names; `null` is possible for boxed types (`Integer`, `Double` ...) and for objects that are optional.
@@ -1411,6 +1488,92 @@ household head count that was used to resolve the servings (null when no househo
 |---|---|
 | `date` | `LocalDate` |
 | `meals` | `List<PlannedMealDto>` |
+
+```json
+{ … }
+```
+
+### PantryIngredientDto
+
+One ingredient of a suggested recipe. status is IN_STOCK, EXPIRING (in stock and expires
+within the look-ahead), MISSING or TO_TASTE. neededQuantity / neededUnit is what
+the recipe asks for (quantity null for "to taste"); stockQuantity / stockUnit is what the household
+has, in the item's own unit; expiresOn is the earliest expiry date of the stock (null when unknown).
+offers lists, for a missing ingredient, every offer that is on sale today (see PantryOfferDto);
+empty otherwise.
+
+| Property | Type |
+|---|---|
+| `itemId` | `int` |
+| `nameDeutsch` | `String` |
+| `nameEnglish` | `String` |
+| `status` | `String` |
+| `neededQuantity` | `Double` |
+| `neededUnit` | `String` |
+| `stockQuantity` | `int` |
+| `stockUnit` | `String` |
+| `expiresOn` | `LocalDate` |
+| `offers` | `List<PantryOfferDto>` |
+
+```json
+{ … }
+```
+
+### PantryOfferDto
+
+An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in
+packUnit, e.g. 600 g; a price without its pack misleads), the sale price and the regular price (null when
+unknown), both for that pack in euros, and the last day of the offer. Offers are listed by store name and pack
+size, not by price: the user chooses.
+
+| Property | Type |
+|---|---|
+| `storeName` | `String` |
+| `packSize` | `int` |
+| `packUnit` | `String` |
+| `salePrice` | `double` |
+| `regularPrice` | `Double` |
+| `validUntil` | `LocalDate` |
+
+```json
+{ … }
+```
+
+### PantrySuggestionDto
+
+A suggested recipe and why it fits: the recipe card, how many of its ingredients are needed ("to taste" ones not
+counted), how many are in stock, how many of those expire soon, how many are missing and how many of the missing
+ones are on sale, and every ingredient with its state. Counts are of ingredients, not of amounts: an ingredient is
+in stock when the household has any of it. Nothing here is a choice made for the user.
+
+| Property | Type |
+|---|---|
+| `recipe` | `RecipeCardDto` |
+| `ingredientsNeeded` | `int` |
+| `inStock` | `int` |
+| `expiringSoon` | `int` |
+| `missing` | `int` |
+| `missingOnSale` | `int` |
+| `ingredients` | `List<PantryIngredientDto>` |
+
+```json
+{ … }
+```
+
+### PantrySuggestionPageDto
+
+One page of GET /api/suggestions/pantry. items are the suggested recipes of this page in the
+requested order; total is the number of recipes that fit in ALL pages; page (from 1) and
+pageSize echo the request with its defaults applied; totalPages is ceil(total / pageSize),
+0 when nothing fits. A page past the end has empty items.
+
+| Property | Type |
+|---|---|
+| `items` | `List<PantrySuggestionDto>` |
+| `total` | `long` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
 
 ```json
 { … }

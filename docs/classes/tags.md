@@ -1426,6 +1426,7 @@ classDiagram
         <<controller>>
     }
     class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class tags_Tag["Tag"]
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
@@ -1435,6 +1436,7 @@ classDiagram
     api_RecipeController --> tags_TagService
     api_ServiceConfig ..> tags_TagService
     mealplanner_RecipeSearchService --> tags_TagService
+    suggestions_PantrySuggestionService --> tags_TagService
 ```
 
 | Field | Type |
@@ -1451,7 +1453,7 @@ classDiagram
 | `java.util.Map<Integer, List<String>> tagNamesForRecipes(java.util.Collection<Integer> recipeIds)` | public |  |
 | `List<Integer> recipesWithTag(String name)` | public |  |
 
-**Referenced by:** `RecipeController`, `RecipeSearchService`, `ServiceConfig`
+**Referenced by:** `PantrySuggestionService`, `RecipeController`, `RecipeSearchService`, `ServiceConfig`
 
 ## TagSettings
 
