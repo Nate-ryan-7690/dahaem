@@ -422,7 +422,7 @@ public class ShoppingListRepository {
     public List<ShoppingListSummary> findListsForPlan(int mealPlanId) {
         String sql = "SELECT sl.shopping_list_id, sl.shopping_list_created_date, sl.shopping_list_shopping_date, "
                 + "sl.shopping_list_from_date, sl.shopping_list_status, "
-                + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS lines "
+                + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS line_count "
                 + "FROM shopping_list sl WHERE sl.shopping_list_meal_plan_id = ? ORDER BY sl.shopping_list_id DESC";
         List<ShoppingListSummary> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
@@ -436,7 +436,7 @@ public class ShoppingListRepository {
                             rs.getObject("shopping_list_shopping_date", LocalDate.class),
                             rs.getObject("shopping_list_from_date", LocalDate.class),
                             rs.getBoolean("shopping_list_status"),
-                            rs.getInt("lines")));
+                            rs.getInt("line_count")));
                 }
             }
         } catch (SQLException e) {
