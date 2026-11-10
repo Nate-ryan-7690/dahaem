@@ -15,8 +15,8 @@ flowchart TD
     inventory["inventory (4)"]
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
-    shared["shared (7)"]
-    shopping["shopping (15)"]
+    shared["shared (9)"]
+    shopping["shopping (16)"]
     stores["stores (47)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
@@ -25,7 +25,7 @@ flowchart TD
     api -->|6| finance
     api -->|5| inventory
     api -->|32| mealplanner
-    api -->|14| shopping
+    api -->|15| shopping
     api -->|2| stores
     api -->|10| suggestions
     api -->|6| tags
@@ -55,8 +55,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`inventory`](inventory.md) | 4 | The item catalogue and the pantry. |
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
-| [`shared`](shared.md) | 7 | The database connection pool, units and portion arithmetic. |
-| [`shopping`](shopping.md) | 15 | Shopping-list generation from recipes and the store options per line. |
+| [`shared`](shared.md) | 9 | The database connection pool, units and portion arithmetic. |
+| [`shopping`](shopping.md) | 16 | Shopping-list generation from recipes and the store options per line. |
 | [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 12 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
@@ -87,6 +87,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`AppUser`](auth.md#appuser) | auth | class | Plain data holder for one row of the app_user table. |
 | [`AuthController`](api.md#authcontroller) | api | class | The parts of the login flow that are plain endpoints. |
 | [`BadRequestException`](api.md#badrequestexception) | api | class | Thrown by a controller when request input fails validation; mapped to 400. |
+| [`BasePrice`](shared.md#baseprice) | shared | class | The price of a pack as a price per kilogram, per litre or per piece, so the comparison (and wrong pack data) shows up in one place instead of in every client. |
+| [`BasePrice.Base`](shared.md#basepricebase) | shared | record | value euros per unit ("kg", "l" or "Stück"). |
 | [`CatalogChange`](stores.md#catalogchange) | stores | record | One difference found by the range comparator between the last pull and this one. |
 | [`CatalogChange.Type`](stores.md#catalogchangetype) | stores | enum |  |
 | [`CatalogItem`](stores.md#catalogitem) | stores | record | One inventory_item catalog row, with its normalized names cached for matching. |
@@ -118,7 +120,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`DietVerdict.Hint`](diet.md#dietverdicthint) | diet | record | An item with possible animals of which at least one is excluded; allowedAnimals is what remains. |
 | [`DietVerdict.Item`](diet.md#dietverdictitem) | diet | record | A matched item (id and name). |
 | [`DietVerdict.SoftHits`](diet.md#dietverdictsofthits) | diet | record | Soft-rule hits: tags the recipe has, ingredient items it has, and items that MAY be an avoided animal (for an avoided animal tag). |
-| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED, CSRF_INVALID, B |
+| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIR |
 | [`GeneratedShoppingListDto`](api.md#generatedshoppinglistdto) | api | record | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
 | [`HouseholdController`](api.md#householdcontroller) | api | class | The household's head count, so the app can scale portions to the people it feeds. |
@@ -185,6 +187,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PantrySuggestionService.Result`](suggestions.md#pantrysuggestionserviceresult) | suggestions | record | One page, the number of recipes in the list in all pages (total, at most .MAX_RESULTS), the number that fit before the cap (totalMatching), and the request that produced it. |
 | [`ParsedReceipt`](receipts.md#parsedreceipt) | receipts | record | Structured result of parsing one receipt's text. |
 | [`PastDayException`](mealplanner.md#pastdayexception) | mealplanner | class | Thrown when a planned meal on a day before today would be added, changed, moved or removed. |
+| [`PastShoppingDayException`](shopping.md#pastshoppingdayexception) | shopping | class | The shopping day of a list is before today. |
 | [`PennyClient`](stores.md#pennyclient) | stores | class | Reads Penny's weekly offers from the JSON API behind www.penny.de/angebote. |
 | [`PennyClient.Market`](stores.md#pennyclientmarket) | stores | record | A Penny store and the price regions it belongs to this week and next week. |
 | [`PennyReceiptFormat`](receipts.md#pennyreceiptformat) | receipts | class | PENNY (REWE Group) layout. |

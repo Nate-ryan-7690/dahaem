@@ -4,13 +4,17 @@
 
 The database connection pool, units and portion arithmetic.
 
-7 types in 5 source files (`src/main/java/de/dahaem/shared`). Back to the [class index](README.md).
+9 types in 6 source files (`src/main/java/de/dahaem/shared`). Back to the [class index](README.md).
 
 ## Overview
 
 ```mermaid
 classDiagram
     direction LR
+    class shared_BasePrice["BasePrice"]
+    class shared_BasePrice_Base["BasePrice.Base"] {
+        <<record>>
+    }
     class shared_Database["Database"]
     class shared_LikePattern["LikePattern"]
     class shared_PageRequest["PageRequest"] {
@@ -24,6 +28,7 @@ classDiagram
     class shared_Units_Parsed["Units.Parsed"] {
         <<record>>
     }
+    shared_BasePrice *-- shared_BasePrice_Base
     shared_Units *-- shared_Units_Dimension
     shared_Units *-- shared_Units_Parsed
     shared_Units_Parsed --> shared_Units_Dimension
@@ -33,6 +38,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
+| [`BasePrice`](#baseprice) | class |  | The price of a pack as a price per kilogram, per litre or per piece, so the comparison (and wrong pack data) shows up in one place instead of in every client. |
+| [`BasePrice.Base`](#basepricebase) | record |  | value euros per unit ("kg", "l" or "Stück"). |
 | [`Database`](#database) | class |  | Single place that knows how to open a database connection. |
 | [`LikePattern`](#likepattern) | class |  | Builds LIKE patterns from user text, so a typed % or _ is searched for literally. |
 | [`PageRequest`](#pagerequest) | record |  | Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE. |
@@ -40,6 +47,54 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`Units`](#units) | class |  | Parses a recipe/store unit string into a physical dimension plus a factor to its base unit, so quantities can be compared or converted only when it is actually meaningful. |
 | [`Units.Dimension`](#unitsdimension) | enum |  |  |
 | [`Units.Parsed`](#unitsparsed) | record |  | A parsed unit: its dimension, and the factor that converts a quantity in it to the dimension's base unit. |
+
+## BasePrice
+
+*class*
+
+The price of a pack as a price per kilogram, per litre or per piece, so the comparison (and wrong pack data) shows up
+in one place instead of in every client. Only for units that are recognised; a mass is shown per kg, a volume per l.
+
+```mermaid
+classDiagram
+    direction LR
+    class shared_BasePrice["BasePrice"] {
+        +of(double price, int packSize, String packUnit) Base$
+    }
+    class shared_BasePrice_Base["BasePrice.Base"] {
+        <<record>>
+    }
+    shared_BasePrice *-- shared_BasePrice_Base
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `Base of(double price, int packSize, String packUnit)` | public static | The base price of a pack of packSize packUnit at price, or null when it cannot be told. |
+
+## BasePrice.Base
+
+*record*
+
+value euros per unit ("kg", "l" or "Stück").
+
+```mermaid
+classDiagram
+    direction LR
+    class shared_BasePrice_Base["BasePrice.Base"] {
+        <<record>>
+        +double value
+        +String unit
+    }
+    class shared_BasePrice["BasePrice"]
+    shared_BasePrice *-- shared_BasePrice_Base
+```
+
+| Component | Type |
+|---|---|
+| `value` | `double` |
+| `unit` | `String` |
+
+**Referenced by:** `BasePrice`
 
 ## Database
 

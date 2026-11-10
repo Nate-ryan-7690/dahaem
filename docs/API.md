@@ -27,8 +27,13 @@ each controller method is the source of the descriptions.
 Every error has the same shape:
 
 ```json
-{ "status": 404, "error": "Not Found", "message": "No meal plan with id 99999" }
+{ "status": 404, "error": "Not Found", "message": "No meal plan with id 99999", "code": "NOT_FOUND" }
 ```
+
+`message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
+`BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY` (400); `UNAUTHORIZED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`,
+`CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
 |---|---|
@@ -1242,6 +1247,7 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
     {
       "storeName": "…",
       "linesCovered": 0,
+      "linesNotCounted": 0,
       "linesToBuy": 0,
       "total": 0.0
     }
@@ -1918,7 +1924,8 @@ empty otherwise.
 An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in
 packUnit, e.g. 600 g; a price without its pack misleads), the sale price and the regular price (null when
 unknown), both for that pack in euros, and the last day of the offer. Offers are listed by store name and pack
-size, not by price: the user chooses.
+size, not by price: the user chooses. salePricePerBase / regularPricePerBase are the same prices per kg,
+per l or per piece (basePriceUnit "kg", "l", "Stück"), null when the unit is not recognised.
 
 | Property | Type |
 |---|---|
@@ -1928,6 +1935,9 @@ size, not by price: the user chooses.
 | `salePrice` | `double` |
 | `regularPrice` | `Double` |
 | `validUntil` | `LocalDate` |
+| `salePricePerBase` | `Double` |
+| `regularPricePerBase` | `Double` |
+| `basePriceUnit` | `String` |
 
 ```json
 { … }
@@ -2413,6 +2423,9 @@ when it's true — never a fabricated pack count for an incompatible unit.
 | `unitCompatible` | `boolean` |
 | `packsNeeded` | `Integer` |
 | `packsTotalPrice` | `Double` |
+| `basePrice` | `Double` |
+| `basePriceUnit` | `String` |
+| `packsPlausible` | `boolean` |
 
 ```json
 { … }
@@ -2449,13 +2462,16 @@ Total spent; from/to are null when the total covers all purchases.
 
 What the lines still to buy would cost at one store, for the user to compare. It never picks a store: every store that
 sells something on the list gets a row. linesCovered is how many of the linesToBuy lines the store has
-with a known pack price; total adds the cheapest such option of the store per covered line. A line the store
-does not cover is not in the total, so compare the totals together with the coverage.
+with a known, believable pack price; total adds the cheapest such option of the store per covered line.
+linesNotCounted are lines the store only has with an implausible pack count (see
+StoreOption.MAX_PLAUSIBLE_PACKS: almost certainly a wrong pack size): they are NOT in the total. A line the
+store does not cover is not in the total either, so compare the totals together with the coverage.
 
 | Property | Type |
 |---|---|
 | `storeName` | `String` |
 | `linesCovered` | `int` |
+| `linesNotCounted` | `int` |
 | `linesToBuy` | `int` |
 | `total` | `double` |
 
