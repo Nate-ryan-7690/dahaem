@@ -74,7 +74,12 @@ Every error has the same shape:
 | POST | [`/api/recipes/{id}/tags`](#post-apirecipesidtags) | Tags the recipe, creating the tag first if no tag with that name exists. |
 | GET | [`/api/shopping-list`](#get-apishopping-list) | Builds (does not save) a shopping list for ?recipeIds=1,2,3 or ?recipeIds=1&recipeIds=2. |
 | GET | [`/api/shopping-lists/{listId}`](#get-apishopping-listslistid) | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
+| POST | [`/api/shopping-lists/{listId}/items`](#post-apishopping-listslistiditems) | Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional). |
+| DELETE | [`/api/shopping-lists/{listId}/items/{itemId}`](#delete-apishopping-listslistiditemsitemid) | Removes a line from a list that is not completed. |
+| PUT | [`/api/shopping-lists/{listId}/items/{itemId}/purchased`](#put-apishopping-listslistiditemsitemidpurchased) | Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. |
+| PUT | [`/api/shopping-lists/{listId}/items/{itemId}/quantity`](#put-apishopping-listslistiditemsitemidquantity) | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
 | PUT | [`/api/shopping-lists/{listId}/items/{itemId}/store-item`](#put-apishopping-listslistiditemsitemidstore-item) | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
+| PUT | [`/api/shopping-lists/{listId}/status`](#put-apishopping-listslistidstatus) | Completes a list ({"completed": true}: it becomes read-only) or reopens it. |
 | GET | [`/api/suggestions/by-expiring`](#get-apisuggestionsby-expiring) | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
 | GET | [`/api/suggestions/by-savings`](#get-apisuggestionsby-savings) | Recipes ranked by how many ingredients are currently on sale. |
 | GET | [`/api/suggestions/pantry`](#get-apisuggestionspantry) | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
@@ -1115,6 +1120,7 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
       "unit": "…",
       "available": false,
       "needsReview": false,
+      "purchased": false,
       "stockQuantity": 0,
       "stockUnit": "…",
       "isManual": false,
@@ -1122,7 +1128,113 @@ Reloads a previously generated/persisted shopping list, with each item's names, 
       "storeOptions": [{ … }],
       "selectedStoreItemId": 0
     }
+  ],
+  "storeTotals": [
+    {
+      "storeName": "…",
+      "linesCovered": 0,
+      "linesToBuy": 0,
+      "total": 0.0
+    }
   ]
+}
+```
+
+#### POST /api/shopping-lists/{listId}/items
+
+Adds a line by hand for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional).
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `listId` | `int` |
+
+**Request body** `ShoppingListEdits.AddLineRequest`
+
+```json
+{
+  "inventoryItemId": 0,
+  "quantity": 0.0,
+  "unit": "…"
+}
+```
+
+**Answer** 201 `ShoppingListEdits.AddedLineDto`
+
+```json
+{
+  "shoppingListItemId": 0
+}
+```
+
+#### DELETE /api/shopping-lists/{listId}/items/{itemId}
+
+Removes a line from a list that is not completed.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `listId` | `int` |
+| `itemId` | `int` |
+
+**Answer** 204 `void`
+
+
+#### PUT /api/shopping-lists/{listId}/items/{itemId}/purchased
+
+Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. Stock is not changed.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `listId` | `int` |
+| `itemId` | `int` |
+
+**Request body** `ShoppingListEdits.PurchasedRequest`
+
+```json
+{
+  "purchased": false
+}
+```
+
+**Answer** 200 `ShoppingListEdits.PurchasedDto`
+
+```json
+{
+  "shoppingListItemId": 0,
+  "purchased": false
+}
+```
+
+#### PUT /api/shopping-lists/{listId}/items/{itemId}/quantity
+
+Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `listId` | `int` |
+| `itemId` | `int` |
+
+**Request body** `ShoppingListEdits.QuantityRequest`
+
+```json
+{
+  "quantity": 0.0
+}
+```
+
+**Answer** 200 `ShoppingListEdits.QuantityDto`
+
+```json
+{
+  "shoppingListItemId": 0,
+  "quantity": 0.0
 }
 ```
 
@@ -1153,6 +1265,33 @@ unknown storeItemId violates the store_item foreign key and comes back as 409.
 {
   "shoppingListItemId": 0,
   "storeItemId": 0
+}
+```
+
+#### PUT /api/shopping-lists/{listId}/status
+
+Completes a list ({"completed": true}: it becomes read-only) or reopens it.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `listId` | `int` |
+
+**Request body** `ShoppingListEdits.StatusRequest`
+
+```json
+{
+  "completed": false
+}
+```
+
+**Answer** 200 `ShoppingListEdits.StatusDto`
+
+```json
+{
+  "id": 0,
+  "completed": false
 }
 ```
 
@@ -1697,7 +1836,11 @@ meal day the list counts. Both are null on a list made before they existed.
 Each line: available is false when no store currently sells the item (the line is kept, never silently
 dropped); needsReview is true when stock exists but in another unit than the line's, so nothing was
 subtracted and a person checks it (stockQuantity / stockUnit show what the household has);
-recipes are the recipes that need the line.
+recipes are the recipes that need the line; purchased is the tick "bought" on the trip.
+
+status true = completed (read-only). storeTotals: for each store that sells something on the list,
+how many of the lines still to buy it covers and what those lines cost there (the cheapest pack option per line);
+shown side by side, never picked for the user.
 
 | Property | Type |
 |---|---|
@@ -1708,6 +1851,7 @@ recipes are the recipes that need the line.
 | `fromDate` | `LocalDate` |
 | `status` | `boolean` |
 | `items` | `List<Line>` |
+| `storeTotals` | `List<StoreTotal>` |
 
 ```json
 { … }
@@ -1725,6 +1869,7 @@ recipes are the recipes that need the line.
 | `unit` | `String` |
 | `available` | `boolean` |
 | `needsReview` | `boolean` |
+| `purchased` | `boolean` |
 | `stockQuantity` | `Integer` |
 | `stockUnit` | `String` |
 | `isManual` | `boolean` |
@@ -2134,6 +2279,24 @@ Total spent; from/to are null when the total covers all purchases.
 |---|---|
 | `from` | `LocalDate` |
 | `to` | `LocalDate` |
+| `total` | `double` |
+
+```json
+{ … }
+```
+
+### StoreTotal
+
+What the lines still to buy would cost at one store, for the user to compare. It never picks a store: every store that
+sells something on the list gets a row. linesCovered is how many of the linesToBuy lines the store has
+with a known pack price; total adds the cheapest such option of the store per covered line. A line the store
+does not cover is not in the total, so compare the totals together with the coverage.
+
+| Property | Type |
+|---|---|
+| `storeName` | `String` |
+| `linesCovered` | `int` |
+| `linesToBuy` | `int` |
 | `total` | `double` |
 
 ```json
