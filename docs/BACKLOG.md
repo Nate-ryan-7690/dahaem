@@ -450,6 +450,17 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   stock (that comes from receipts / barcodes). Still open from the entry below: a manual line for something that is
   not in the catalogue (needs a name column, so a migration), a price snapshot per selection, recording the shop as
   purchases, warning on expired offers, and the list of open lists per household.
+- **Wrong pack sizes (found 2026-11-10: Aldi total 777 EUR, a basmati rice stored as 1 g)** — guard and base price
+  done: an option needing more than 10 packs (`StoreOption.MAX_PLAUSIBLE_PACKS`, Nate decides the number) has
+  `packsPlausible: false` and is left out of `storeTotals` (counted in `linesNotCounted`); options and pantry offers carry
+  a price per kg / l / piece (`basePrice` + `basePriceUnit`, `salePricePerBase`). Source of the tiny sizes: not proven.
+  The only code that writes pack sizes is the range promotion and the offer promotion (both `parseSize`), and
+  `recordNewProductPurchase` (no endpoint calls it). Until 2026-10-09 (commit 7864a80) `parseSize` read "1.000 g" as
+  1 g (the German thousands dot), so rows made before that and not refreshed since are the likely cause; the current
+  parser has a test for it. To confirm, Nate runs the read-only query with `store_product_sales_unit` (it shows the
+  text the size was read from). Open: correct the existing rows (live data: snapshot + Nate's approval first; re-running
+  the promotion refreshes every row whose store_product is still in the feed, the rest need a reviewed one-off script),
+  and decide the plausible-pack threshold.
 - **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list
   summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
   PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN, INTERNAL_ERROR),

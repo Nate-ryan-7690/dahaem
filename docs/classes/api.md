@@ -344,7 +344,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`DietDto.Item`](#dietdtoitem) | record |  |  |
 | [`DietDto.SoftHits`](#dietdtosofthits) | record |  |  |
 | [`DietDto.Unmatched`](#dietdtounmatched) | record |  |  |
-| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED, CSRF_INVALID, B |
+| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIR |
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
@@ -521,6 +521,7 @@ classDiagram
         +pastDay(PastDayException e) ResponseEntity~ErrorResponse~
         +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
+        +pastShoppingDay(PastShoppingDayException e) ResponseEntity~ErrorResponse~
         +badRequest(RuntimeException e) ResponseEntity~ErrorResponse~
         +missingParameter(MissingServletRequestParameterException e) ResponseEntity~ErrorResponse~
         +typeMismatch(MethodArgumentTypeMismatchException e) ResponseEntity~ErrorResponse~
@@ -534,11 +535,13 @@ classDiagram
     class mealplanner_PastDayException["PastDayException"]
     class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
+    class shopping_PastShoppingDayException["PastShoppingDayException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> mealplanner_PastDayException
     api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
+    api_ApiExceptionHandler ..> shopping_PastShoppingDayException
 ```
 
 | Field | Type |
@@ -551,6 +554,7 @@ classDiagram
 | `ResponseEntity<ErrorResponse> pastDay(PastDayException e)` | public | A meal on a past day cannot be added, changed, moved or removed: the request conflicts with the calendar. |
 | `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
+| `ResponseEntity<ErrorResponse> pastShoppingDay(PastShoppingDayException e)` | public | The shopping day of a list is in the past: a bad request with a code of its own. |
 | `ResponseEntity<ErrorResponse> badRequest(RuntimeException e)` | public |  |
 | `ResponseEntity<ErrorResponse> missingParameter(MissingServletRequestParameterException e)` | public |  |
 | `ResponseEntity<ErrorResponse> typeMismatch(MethodArgumentTypeMismatchException e)` | public |  |
@@ -1015,7 +1019,7 @@ classDiagram
 *record*
 
 JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable
-machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
+machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
 CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN) that a client can map to its own text.
 
 ```mermaid
@@ -1669,7 +1673,8 @@ classDiagram
 An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in
 packUnit, e.g. 600 g; a price without its pack misleads), the sale price and the regular price (null when
 unknown), both for that pack in euros, and the last day of the offer. Offers are listed by store name and pack
-size, not by price: the user chooses.
+size, not by price: the user chooses. salePricePerBase / regularPricePerBase are the same prices per kg,
+per l or per piece (basePriceUnit "kg", "l", "Stück"), null when the unit is not recognised.
 
 ```mermaid
 classDiagram
@@ -1682,6 +1687,9 @@ classDiagram
         +double salePrice
         +Double regularPrice
         +LocalDate validUntil
+        +Double salePricePerBase
+        +Double regularPricePerBase
+        +String basePriceUnit
         ~from(PantryOffer offer) PantryOfferDto$
     }
     class api_PantryIngredientDto["PantryIngredientDto"] {
@@ -1702,6 +1710,9 @@ classDiagram
 | `salePrice` | `double` |
 | `regularPrice` | `Double` |
 | `validUntil` | `LocalDate` |
+| `salePricePerBase` | `Double` |
+| `regularPricePerBase` | `Double` |
+| `basePriceUnit` | `String` |
 
 | Member | Visibility | What it does |
 |---|---|---|
@@ -3277,6 +3288,9 @@ classDiagram
         +boolean unitCompatible
         +Integer packsNeeded
         +Double packsTotalPrice
+        +Double basePrice
+        +String basePriceUnit
+        +boolean packsPlausible
         ~from(StoreOption option) StoreOptionDto$
     }
     class api_ShoppingListDto["ShoppingListDto"] {
@@ -3312,6 +3326,9 @@ classDiagram
 | `unitCompatible` | `boolean` |
 | `packsNeeded` | `Integer` |
 | `packsTotalPrice` | `Double` |
+| `basePrice` | `Double` |
+| `basePriceUnit` | `String` |
+| `packsPlausible` | `boolean` |
 
 | Member | Visibility | What it does |
 |---|---|---|

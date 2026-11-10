@@ -2,6 +2,7 @@ package de.dahaem.api;
 
 import de.dahaem.mealplanner.PastDayException;
 import de.dahaem.shopping.ListCompletedException;
+import de.dahaem.shopping.PastShoppingDayException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -47,6 +48,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e) {
         return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", e.getMessage());
+    }
+
+    /** The shopping day of a list is in the past: a bad request with a code of its own. */
+    @ExceptionHandler(PastShoppingDayException.class)
+    public ResponseEntity<ErrorResponse> pastShoppingDay(PastShoppingDayException e) {
+        return error(HttpStatus.BAD_REQUEST, "PAST_SHOPPING_DAY", e.getMessage());
     }
 
     @ExceptionHandler({BadRequestException.class, IllegalArgumentException.class})

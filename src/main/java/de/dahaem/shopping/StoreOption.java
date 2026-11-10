@@ -12,6 +12,10 @@ import java.time.LocalDate;
  * true do packsNeeded/packsTotalPrice carry a real pack count and its total price; when the units
  * don't reconcile (or either is unrecognized), both stay null rather than fabricate a number from
  * a price that isn't actually for the needed quantity.
+ *
+ * <p>basePrice is the price of one pack's worth per kg, per l or per piece (basePriceUnit "kg", "l", "Stück"; deposit not
+ * included), so the comparison, and a wrong pack size, shows up here and not in every client; null when the unit is not
+ * recognised. packsPlausible is false when packsNeeded is above {@link #MAX_PLAUSIBLE_PACKS}: check the pack size.
  */
 public record StoreOption(
         int storeItemId,
@@ -30,6 +34,21 @@ public record StoreOption(
         Double tillPrice,
         boolean unitCompatible,
         Integer packsNeeded,
-        Double packsTotalPrice
+        Double packsTotalPrice,
+        Double basePrice,
+        String basePriceUnit,
+        boolean packsPlausible
 ) {
+
+    /**
+     * More packs than this for one line is not believable (a "300 packs of rice" line is a wrong pack size in the data,
+     * not a shopping trip). Such an option is flagged {@code packsPlausible = false} and left out of the store totals.
+     * The threshold is a product decision (Nate); 10 matches the warning the page shows.
+     */
+    public static final int MAX_PLAUSIBLE_PACKS = 10;
+
+    /** True when the pack count is believable, or unknown (units that do not reconcile have no count to doubt). */
+    public static boolean plausible(Integer packsNeeded) {
+        return packsNeeded == null || packsNeeded <= MAX_PLAUSIBLE_PACKS;
+    }
 }

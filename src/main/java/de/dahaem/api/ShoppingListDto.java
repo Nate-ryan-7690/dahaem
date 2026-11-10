@@ -36,14 +36,15 @@ public record ShoppingListDto(List<Line> items) {
                              int packageSize, Double normalPrice, boolean onSale, Double salePrice,
                              int dealQuantity, Double dealPrice, LocalDate validFrom, LocalDate validUntil,
                              Double deposit,
-                             Double tillPrice, boolean unitCompatible, Integer packsNeeded, Double packsTotalPrice) {
+                             Double tillPrice, boolean unitCompatible, Integer packsNeeded, Double packsTotalPrice,
+                             Double basePrice, String basePriceUnit, boolean packsPlausible) {
 
         static StoreOptionDto from(StoreOption option) {
             return new StoreOptionDto(option.storeItemId(), option.storeName(), option.brandName(),
                     option.packageUnit(), option.packageSize(), option.normalPrice(), option.onSale(),
                     option.salePrice(), option.dealQuantity(), option.dealPrice(), option.validFrom(), option.validUntil(),
                     option.deposit(), option.tillPrice(), option.unitCompatible(), option.packsNeeded(),
-                    option.packsTotalPrice());
+                    option.packsTotalPrice(), option.basePrice(), option.basePriceUnit(), option.packsPlausible());
         }
     }
 

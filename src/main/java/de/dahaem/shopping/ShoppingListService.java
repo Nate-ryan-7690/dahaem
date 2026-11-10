@@ -5,6 +5,7 @@ import de.dahaem.inventory.Item;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.mealplanner.MealServings;
 import de.dahaem.mealplanner.PlannedMeal;
+import de.dahaem.shared.BasePrice;
 import de.dahaem.shared.Units;
 
 import java.math.BigDecimal;
@@ -172,7 +173,7 @@ public class ShoppingListService {
 
     private static void requireNotPast(LocalDate shoppingDate, LocalDate today) {
         if (shoppingDate.isBefore(today)) {
-            throw new IllegalArgumentException("'shoppingDate' must not be before today");
+            throw new PastShoppingDayException();
         }
     }
 
@@ -485,6 +486,9 @@ public class ShoppingListService {
             }
         }
 
+        BasePrice.Base base = effectivePrice == null ? null
+                : BasePrice.of(effectivePrice, candidate.packageSize(), candidate.packageUnit());
+
         return new StoreOption(
                 candidate.storeItemId(),
                 candidate.storeName(),
@@ -502,6 +506,9 @@ public class ShoppingListService {
                 tillPrice,
                 unitCompatible,
                 packsNeeded,
-                packsTotalPrice);
+                packsTotalPrice,
+                base == null ? null : base.value(),
+                base == null ? null : base.unit(),
+                StoreOption.plausible(packsNeeded));
     }
 }

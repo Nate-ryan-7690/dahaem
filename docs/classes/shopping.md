@@ -4,7 +4,7 @@
 
 Shopping-list generation from recipes and the store options per line.
 
-15 types in 15 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
+16 types in 16 source files (`src/main/java/de/dahaem/shopping`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -15,6 +15,7 @@ classDiagram
         <<record>>
     }
     class shopping_ListCompletedException["ListCompletedException"]
+    class shopping_PastShoppingDayException["PastShoppingDayException"]
     class shopping_PersistedShoppingList["PersistedShoppingList"] {
         <<record>>
     }
@@ -74,6 +75,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 |------|------|------|------------|
 | [`AggregatedIngredient`](#aggregatedingredient) | record |  | One inventory item's combined need across a set of recipes, before any store matching. |
 | [`ListCompletedException`](#listcompletedexception) | class |  | A completed shopping list cannot be changed (reopen it first). |
+| [`PastShoppingDayException`](#pastshoppingdayexception) | class |  | The shopping day of a list is before today. |
 | [`PersistedShoppingList`](#persistedshoppinglist) | record |  | A previously generated shopping_list row, reloaded together with its persisted items. |
 | [`PersistedShoppingListItem`](#persistedshoppinglistitem) | record |  | One persisted shopping_list_item line: the inventory item it is for (null only for a purely manual line with no catalog match), its German/English name, how much is still needed and in which unit, the recipes that need it, every current sto |
 | [`ShoppingList`](#shoppinglist) | record |  | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
@@ -140,6 +142,28 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `ListCompletedException(int listId)` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
+
+## PastShoppingDayException
+
+*class · extends IllegalArgumentException*
+
+The shopping day of a list is before today. A bad request (400) with its own code, PAST_SHOPPING_DAY.
+
+```mermaid
+classDiagram
+    direction LR
+    class shopping_PastShoppingDayException["PastShoppingDayException"] {
+        +PastShoppingDayException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> shopping_PastShoppingDayException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `PastShoppingDayException()` | public |  |
 
 **Referenced by:** `ApiExceptionHandler`
 
@@ -783,6 +807,10 @@ true do packsNeeded/packsTotalPrice carry a real pack count and its total price;
 don't reconcile (or either is unrecognized), both stay null rather than fabricate a number from
 a price that isn't actually for the needed quantity.
 
+basePrice is the price of one pack's worth per kg, per l or per piece (basePriceUnit "kg", "l", "Stück"; deposit not
+included), so the comparison, and a wrong pack size, shows up here and not in every client; null when the unit is not
+recognised. packsPlausible is false when packsNeeded is above .MAX_PLAUSIBLE_PACKS: check the pack size.
+
 ```mermaid
 classDiagram
     direction LR
@@ -805,6 +833,11 @@ classDiagram
         +boolean unitCompatible
         +Integer packsNeeded
         +Double packsTotalPrice
+        +Double basePrice
+        +String basePriceUnit
+        +boolean packsPlausible
+        +int MAX_PLAUSIBLE_PACKS$
+        +plausible(Integer packsNeeded) boolean$
     }
     class shopping_PersistedShoppingListItem["PersistedShoppingListItem"] {
         <<record>>
@@ -839,6 +872,14 @@ classDiagram
 | `unitCompatible` | `boolean` |
 | `packsNeeded` | `Integer` |
 | `packsTotalPrice` | `Double` |
+| `basePrice` | `Double` |
+| `basePriceUnit` | `String` |
+| `packsPlausible` | `boolean` |
+| `MAX_PLAUSIBLE_PACKS` | `int` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `boolean plausible(Integer packsNeeded)` | public static | True when the pack count is believable, or unknown (units that do not reconcile have no count to doubt). |
 
 **Referenced by:** `PersistedShoppingListItem`, `ShoppingListDto.StoreOptionDto`, `ShoppingListItem`
 
@@ -848,8 +889,10 @@ classDiagram
 
 What the lines still to buy would cost at one store, for the user to compare. It never picks a store: every store that
 sells something on the list gets a row. linesCovered is how many of the linesToBuy lines the store has
-with a known pack price; total adds the cheapest such option of the store per covered line. A line the store
-does not cover is not in the total, so compare the totals together with the coverage.
+with a known, believable pack price; total adds the cheapest such option of the store per covered line.
+linesNotCounted are lines the store only has with an implausible pack count (see
+StoreOption.MAX_PLAUSIBLE_PACKS: almost certainly a wrong pack size): they are NOT in the total. A line the
+store does not cover is not in the total either, so compare the totals together with the coverage.
 
 ```mermaid
 classDiagram
@@ -858,6 +901,7 @@ classDiagram
         <<record>>
         +String storeName
         +int linesCovered
+        +int linesNotCounted
         +int linesToBuy
         +double total
         +of(List~PersistedShoppingListItem~ items) List~StoreTotal~$
@@ -876,6 +920,7 @@ classDiagram
 |---|---|
 | `storeName` | `String` |
 | `linesCovered` | `int` |
+| `linesNotCounted` | `int` |
 | `linesToBuy` | `int` |
 | `total` | `double` |
 

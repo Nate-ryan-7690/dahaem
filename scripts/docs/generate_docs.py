@@ -578,8 +578,13 @@ each controller method is the source of the descriptions.
 Every error has the same shape:
 
 ```json
-{ "status": 404, "error": "Not Found", "message": "No meal plan with id 99999" }
+{ "status": 404, "error": "Not Found", "message": "No meal plan with id 99999", "code": "NOT_FOUND" }
 ```
+
+`message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
+`BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY` (400); `UNAUTHORIZED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`,
+`CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
 |---|---|
