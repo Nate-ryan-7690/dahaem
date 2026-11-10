@@ -14,6 +14,7 @@ public record PersistedShoppingList(
         LocalDate shoppingDate,
         LocalDate fromDate,
         boolean status,
+        boolean archived,
         List<PersistedShoppingListItem> items
 ) {
     public PersistedShoppingList {

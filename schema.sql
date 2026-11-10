@@ -362,6 +362,9 @@ CREATE TABLE shopping_list ( shopping_list_id INTEGER PRIMARY KEY AUTO_INCREMENT
 
 	shopping_list_status BOOLEAN NOT NULL,
 
+	-- TRUE = archived: hidden from the overview, not deleted (migration 0019)
+	shopping_list_archived BOOLEAN NOT NULL DEFAULT FALSE,
+
 	FOREIGN KEY(shopping_list_meal_plan_id) REFERENCES meal_plan(meal_plan_id));
 
 CREATE TABLE shopping_list_item(shopping_list_item_id INTEGER PRIMARY KEY AUTO_INCREMENT,
@@ -387,6 +390,9 @@ CREATE TABLE shopping_list_item(shopping_list_item_id INTEGER PRIMARY KEY AUTO_I
 	shopping_list_item_purchase_status BOOLEAN NOT NULL,
 
 	shopping_list_item_is_manual BOOLEAN NOT NULL,
+
+	-- the text of a free-text line (no catalogue item), NULL otherwise (migration 0019)
+	shopping_list_item_name TEXT NULL,
 
 	FOREIGN KEY(shopping_list_id) REFERENCES shopping_list(shopping_list_id),
 

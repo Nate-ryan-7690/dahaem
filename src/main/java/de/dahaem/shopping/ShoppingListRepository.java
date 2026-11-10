@@ -281,7 +281,7 @@ public class ShoppingListRepository {
 
     /**
      * Inserts one shopping_list_item row, on the caller's transaction, and returns its id. unit is the unit of the
-     * amount; needsReview marks a line whose stock was not subtracted because the units differ. storeItemId is nullable
+     * amount; name is the text of a free-text line (no inventoryItemId), null otherwise; needsReview marks a line whose stock was not subtracted because the units differ. storeItemId is nullable
      * (shopping_list_item_store_item_id): null means the line is still awaiting the user's choice
      * of store product. inventoryItemId (shopping_list_item_inventory_item_id) is nullable at the
      * table level for a purely manual free-text line, but every generated line must set it — it is
@@ -290,12 +290,12 @@ public class ShoppingListRepository {
     public int insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId,
                                       Integer inventoryItemId, String storeSection, BigDecimal quantityNeeded,
                                       String unit, Boolean isDiscounted, boolean purchaseStatus, boolean isManual,
-                                      boolean needsReview) throws SQLException {
+                                      boolean needsReview, String name) throws SQLException {
         String sql = "INSERT INTO shopping_list_item (shopping_list_id, shopping_list_item_store_item_id, "
                 + "shopping_list_item_inventory_item_id, shopping_list_item_store_section, "
                 + "shopping_list_item_quantity_needed, shopping_list_item_unit, shopping_list_item_is_discounted, "
-                + "shopping_list_item_purchase_status, shopping_list_item_is_manual, shopping_list_item_needs_review) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "shopping_list_item_purchase_status, shopping_list_item_is_manual, shopping_list_item_needs_review, "
+                + "shopping_list_item_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, shoppingListId);
             ps.setObject(2, storeItemId);
@@ -307,6 +307,7 @@ public class ShoppingListRepository {
             ps.setBoolean(8, purchaseStatus);
             ps.setBoolean(9, isManual);
             ps.setBoolean(10, needsReview);
+            ps.setString(11, name);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -332,7 +333,7 @@ public class ShoppingListRepository {
     /** The shopping_list row for a persisted list, or empty if no such list exists. */
     public Optional<ShoppingListRow> findShoppingListById(int shoppingListId) {
         String sql = "SELECT shopping_list_id, shopping_list_meal_plan_id, shopping_list_created_date, "
-                + "shopping_list_shopping_date, shopping_list_from_date, shopping_list_status "
+                + "shopping_list_shopping_date, shopping_list_from_date, shopping_list_status, shopping_list_archived "
                 + "FROM shopping_list WHERE shopping_list_id = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
@@ -347,7 +348,8 @@ public class ShoppingListRepository {
                         rs.getObject("shopping_list_created_date", LocalDate.class),
                         rs.getObject("shopping_list_shopping_date", LocalDate.class),
                         rs.getObject("shopping_list_from_date", LocalDate.class),
-                        rs.getBoolean("shopping_list_status")));
+                        rs.getBoolean("shopping_list_status"),
+                        rs.getBoolean("shopping_list_archived")));
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not load shopping list " + shoppingListId, e);
@@ -355,12 +357,13 @@ public class ShoppingListRepository {
     }
 
     /**
-     * Every shopping_list_item on a persisted list, joined to its inventory_item's names (both
-     * null for a manual line with no catalog match), ordered by insertion.
+     * Every shopping_list_item on a persisted list, joined to its inventory_item's names (a free-text line has no
+     * catalogue item: its own text is given as both names), ordered by insertion.
      */
     public List<ShoppingListItemRow> findItemsForShoppingList(int shoppingListId) {
         String sql = "SELECT sli.shopping_list_item_id, sli.shopping_list_item_inventory_item_id, "
-                + "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, "
+                + "COALESCE(ii.inventory_item_name_deutsch, sli.shopping_list_item_name) AS inventory_item_name_deutsch, "
+                + "COALESCE(ii.inventory_item_name_english, sli.shopping_list_item_name) AS inventory_item_name_english, "
                 + "COALESCE(sli.shopping_list_item_unit, ii.inventory_item_unit) AS unit, "
                 + "sli.shopping_list_item_quantity_needed, sli.shopping_list_item_store_item_id, "
                 + "sli.shopping_list_item_is_manual, sli.shopping_list_item_needs_review, "
@@ -420,29 +423,30 @@ public class ShoppingListRepository {
         return out;
     }
 
-    /** The saved lists of a meal plan, newest first, each with its number of lines. */
-    public List<ShoppingListSummary> findListsForPlan(int mealPlanId) {
-        return findLists(mealPlanId);
+    /** The saved lists of a meal plan, newest first, each with its number of lines; only archived ones, or only the others. */
+    public List<ShoppingListSummary> findListsForPlan(int mealPlanId, boolean archived) {
+        return findLists(mealPlanId, archived);
     }
 
-    /** Every saved list, newest first (lists that belong to no plan included). */
-    public List<ShoppingListSummary> findAllLists() {
-        return findLists(null);
+    /** Every saved list, newest first (lists that belong to no plan included); only archived ones, or only the others. */
+    public List<ShoppingListSummary> findAllLists(boolean archived) {
+        return findLists(null, archived);
     }
 
-    private List<ShoppingListSummary> findLists(Integer mealPlanId) {
+    private List<ShoppingListSummary> findLists(Integer mealPlanId, boolean archived) {
         String sql = "SELECT sl.shopping_list_id, sl.shopping_list_meal_plan_id, sl.shopping_list_created_date, "
-                + "sl.shopping_list_shopping_date, sl.shopping_list_from_date, sl.shopping_list_status, "
+                + "sl.shopping_list_shopping_date, sl.shopping_list_from_date, sl.shopping_list_status, sl.shopping_list_archived, "
                 + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS line_count, "
                 + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id "
                 + "AND sli.shopping_list_item_purchase_status) AS purchased_count "
                 + "FROM shopping_list sl WHERE (? IS NULL OR sl.shopping_list_meal_plan_id = ?) "
-                + "ORDER BY sl.shopping_list_id DESC";
+                + "AND sl.shopping_list_archived = ? ORDER BY sl.shopping_list_id DESC";
         List<ShoppingListSummary> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setObject(1, mealPlanId);
             ps.setObject(2, mealPlanId);
+            ps.setBoolean(3, archived);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new ShoppingListSummary(
@@ -452,6 +456,7 @@ public class ShoppingListRepository {
                             rs.getObject("shopping_list_shopping_date", LocalDate.class),
                             rs.getObject("shopping_list_from_date", LocalDate.class),
                             rs.getBoolean("shopping_list_status"),
+                            rs.getBoolean("shopping_list_archived"),
                             rs.getInt("line_count"),
                             rs.getInt("purchased_count")));
                 }
@@ -505,6 +510,11 @@ public class ShoppingListRepository {
     public void setQuantityNeeded(int shoppingListItemId, BigDecimal quantity) {
         update("UPDATE shopping_list_item SET shopping_list_item_quantity_needed = ? WHERE shopping_list_item_id = ?",
                 quantity, shoppingListItemId);
+    }
+
+    /** Archives a list (hidden from the overview, not deleted) or brings it back. */
+    public void setListArchived(int shoppingListId, boolean archived) {
+        update("UPDATE shopping_list SET shopping_list_archived = ? WHERE shopping_list_id = ?", archived, shoppingListId);
     }
 
     /** Opens or completes a list. */

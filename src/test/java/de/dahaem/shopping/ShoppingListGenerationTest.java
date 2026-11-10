@@ -301,7 +301,7 @@ class ShoppingListGenerationTest {
         assertEquals(LocalDate.of(2026, 10, 7), offer.validUntil());
 
         // generating again never rewrites the earlier list: both stay, newest first
-        List<ShoppingListSummary> lists = service.listsForPlan(planId);
+        List<ShoppingListSummary> lists = service.listsForPlan(planId, false);
         assertEquals(List.of(forNextWeek, forToday), lists.stream().map(ShoppingListSummary::id).toList());
         assertEquals(1, lists.get(1).lines());
     }

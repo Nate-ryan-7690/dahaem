@@ -60,7 +60,9 @@ class ShoppingListSchemaMigrationTest {
         TestDatabase.reset(List.of(Path.of("schema.sql")));
         List<String> fresh = columnsOfTheShoppingTables();
 
-        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION));
+        // schema.sql also has the later 0019 columns, so the later migration is applied on top of 0017 here
+        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION,
+                Path.of("migrations", "0019_shopping_list_archive_and_free_text.sql")));
         List<String> migrated = columnsOfTheShoppingTables();
 
         assertEquals(fresh, migrated);

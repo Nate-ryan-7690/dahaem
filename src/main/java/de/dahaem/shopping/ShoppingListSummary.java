@@ -7,5 +7,5 @@ import java.time.LocalDate;
  * them are ticked as bought ("3 von 8 gekauft").
  */
 public record ShoppingListSummary(int id, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate,
-                                  boolean status, int lines, int purchasedLines) {
+                                  boolean status, boolean archived, int lines, int purchasedLines) {
 }

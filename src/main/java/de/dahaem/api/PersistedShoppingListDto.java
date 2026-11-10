@@ -22,12 +22,16 @@ import java.util.List;
  * subtracted and a person checks it ({@code stockQuantity} / {@code stockUnit} show what the household has);
  * {@code recipes} are the recipes that need the line; {@code purchased} is the tick "bought" on the trip.
  *
+ * <p>{@code archived} true = hidden from the overview (nothing is deleted); a free-text line (added with a {@code name})
+ * has no {@code inventoryItemId}, its text is in {@code nameDeutsch} and {@code nameEnglish}, and it has no store options.
+ *
  * <p>{@code status} true = completed (read-only). {@code storeTotals}: for each store that sells something on the list,
  * how many of the lines still to buy it covers and what those lines cost there (the cheapest pack option per line);
  * shown side by side, never picked for the user.
  */
 public record PersistedShoppingListDto(int id, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate,
-                                        LocalDate fromDate, boolean status, List<Line> items,
+                                        LocalDate fromDate, boolean status, boolean archived,
+                                        List<Line> items,
                                         List<StoreTotal> storeTotals) {
 
     public record Line(int shoppingListItemId, Integer inventoryItemId, String nameDeutsch, String nameEnglish,
@@ -50,15 +54,16 @@ public record PersistedShoppingListDto(int id, Integer mealPlanId, LocalDate cre
 
     /** One saved list of a meal plan in short (see {@code GET /api/meal-plans/{id}/shopping-lists}); {@code purchasedLines} of its {@code lines} are ticked as bought. */
     public record Summary(int id, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status,
+                          boolean archived,
                           int lines, int purchasedLines) {
         static Summary from(ShoppingListSummary s) {
-            return new Summary(s.id(), s.mealPlanId(), s.createdDate(), s.shoppingDate(), s.fromDate(), s.status(), s.lines(), s.purchasedLines());
+            return new Summary(s.id(), s.mealPlanId(), s.createdDate(), s.shoppingDate(), s.fromDate(), s.status(), s.archived(), s.lines(), s.purchasedLines());
         }
     }
 
     static PersistedShoppingListDto from(PersistedShoppingList list) {
         return new PersistedShoppingListDto(list.id(), list.mealPlanId(), list.createdDate(), list.shoppingDate(),
-                list.fromDate(), list.status(), list.items().stream().map(Line::from).toList(),
+                list.fromDate(), list.status(), list.archived(), list.items().stream().map(Line::from).toList(),
                 StoreTotal.of(list.items()));
     }
 }

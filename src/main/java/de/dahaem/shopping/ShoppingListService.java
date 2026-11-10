@@ -195,7 +195,7 @@ public class ShoppingListService {
                 // a line no store sells stays on the list: it is shown as unavailable when the list is read
                 int lineId = repository.insertShoppingListItem(con, shoppingListId, null, item.inventoryItemId(), null,
                         BigDecimal.valueOf(missing).setScale(3, RoundingMode.HALF_UP), item.unit(), null, false,
-                        false, needsReview);
+                        false, needsReview, null);
                 repository.insertItemRecipes(con, lineId, item.sourceRecipeIds());
             }
 
@@ -288,19 +288,28 @@ public class ShoppingListService {
     }
 
     /**
-     * Adds a line the user wants on the list by hand, for a catalogue item (stock is not looked at: the user asked for
-     * it). {@code unit} defaults to the item's own unit. Returns the new line's id.
+     * Adds a line the user wants on the list by hand (stock is not looked at: the user asked for it): either for a
+     * catalogue item ({@code inventoryItemId}; {@code unit} then defaults to the item's own unit) or as free text
+     * ({@code name}, for things like "Backpapier"; no store options, the unit is optional). Exactly one of the two
+     * must be given. Returns the new line's id.
      */
-    public int addManualItem(int shoppingListId, int inventoryItemId, double quantity, String unit) {
+    public int addManualItem(int shoppingListId, Integer inventoryItemId, String name, double quantity, String unit) {
         requireOpen(shoppingListId);
         BigDecimal amount = validAmount(quantity);
-        if (inventoryRepository.findById(inventoryItemId).isEmpty()) {
+        String text = name == null || name.isBlank() ? null : name.trim();
+        if ((inventoryItemId == null) == (text == null)) {
+            throw new IllegalArgumentException("give either 'inventoryItemId' or 'name', not both and not neither");
+        }
+        if (text != null && text.length() > 200) {
+            throw new IllegalArgumentException("'name' must be at most 200 characters");
+        }
+        if (inventoryItemId != null && inventoryRepository.findById(inventoryItemId).isEmpty()) {
             throw new IllegalArgumentException("No inventory item with id " + inventoryItemId);
         }
         Connection con = repository.openTransaction();
         try {
             int id = repository.insertShoppingListItem(con, shoppingListId, null, inventoryItemId, null, amount,
-                    unit == null || unit.isBlank() ? null : unit.trim(), null, false, true, false);
+                    unit == null || unit.isBlank() ? null : unit.trim(), null, false, true, false, text);
             con.commit();
             return id;
         } catch (SQLException e) {
@@ -353,18 +362,23 @@ public class ShoppingListService {
                     .map(itemRow -> toPersistedItem(itemRow, offersOn, recipes.getOrDefault(itemRow.itemId(), List.of())))
                     .toList();
             return new PersistedShoppingList(row.id(), row.mealPlanId(), row.createdDate(), row.shoppingDate(),
-                    row.fromDate(), row.status(), items);
+                    row.fromDate(), row.status(), row.archived(), items);
         });
     }
 
-    /** The saved lists of a meal plan, newest first. A new generation never changes an older list. */
-    public List<ShoppingListSummary> listsForPlan(int mealPlanId) {
-        return repository.findListsForPlan(mealPlanId);
+    /** The saved lists of a meal plan, newest first: the archived ones or the others. A new generation never changes an older list. */
+    public List<ShoppingListSummary> listsForPlan(int mealPlanId, boolean archived) {
+        return repository.findListsForPlan(mealPlanId, archived);
     }
 
-    /** Every saved list, newest first, including the ones that belong to no meal plan. */
-    public List<ShoppingListSummary> allLists() {
-        return repository.findAllLists();
+    /** Every saved list, newest first, including the ones that belong to no meal plan: the archived ones or the others. */
+    public List<ShoppingListSummary> allLists(boolean archived) {
+        return repository.findAllLists(archived);
+    }
+
+    /** Archives a list (hidden from the overview, nothing is deleted) or brings it back. */
+    public void setArchived(int shoppingListId, boolean archived) {
+        repository.setListArchived(shoppingListId, archived);
     }
 
     /**

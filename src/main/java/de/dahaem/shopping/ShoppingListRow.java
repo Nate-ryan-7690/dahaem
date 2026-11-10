@@ -7,5 +7,5 @@ import java.time.LocalDate;
  * fromDate (the first meal day the list counts) are null on a list made before migration 0017.
  */
 public record ShoppingListRow(int id, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate,
-                              LocalDate fromDate, boolean status) {
+                              LocalDate fromDate, boolean status, boolean archived) {
 }
