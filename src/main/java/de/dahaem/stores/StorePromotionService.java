@@ -28,7 +28,7 @@ public class StorePromotionService {
     }
 
     /** A pack size reduced to an integer count of a base unit. */
-    record Pack(int size, String unit) {}
+    public record Pack(int size, String unit) {}
 
     // "<n> <unit>" possibly as "500-g", "1,5-l", "6 x 0,33 l"; the container word ("Packung") is ignored.
     private static final Pattern THOUSANDS = Pattern.compile("\\d{1,3}(?:\\.\\d{3})+");
@@ -92,7 +92,7 @@ public class StorePromotionService {
     }
 
     /** "500-g-Packung" -> 500 g; "1,5-l-Flasche" -> 1500 ml; "6 x 0,33 l" -> 1980 ml; null if unparseable. */
-    static Pack parseSize(String salesUnit) {
+    public static Pack parseSize(String salesUnit) {
         return parseSize(salesUnit, null);
     }
 

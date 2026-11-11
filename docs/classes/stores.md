@@ -2306,7 +2306,7 @@ classDiagram
         -Pattern YIELD_PRODUCT$
         -Pattern SIZE$
         +promote() ImportSummary
-        ~parseSize(String salesUnit) Pack$
+        +parseSize(String salesUnit) Pack$
         ~parseSize(String salesUnit, String productName) Pack$
     }
     class stores_StorePromotionService_Pack["StorePromotionService.Pack"] {
@@ -2341,7 +2341,7 @@ classDiagram
 |---|---|---|
 | `StorePromotionService(StoreRepository repository)` | public |  |
 | `ImportSummary promote()` | public |  |
-| `Pack parseSize(String salesUnit)` | package static | "500-g-Packung" -> 500 g; "1,5-l-Flasche" -> 1500 ml; "6 x 0,33 l" -> 1980 ml; null if unparseable. |
+| `Pack parseSize(String salesUnit)` | public static | "500-g-Packung" -> 500 g; "1,5-l-Flasche" -> 1500 ml; "6 x 0,33 l" -> 1980 ml; null if unparseable. |
 | `Pack parseSize(String salesUnit, String productName)` | package static | Like .parseSize(String), with the product name for the cases where the name changes the reading. |
 
 **Referenced by:** `MatchGate`, `RefreshService`
@@ -2408,6 +2408,7 @@ classDiagram
         +saveMatches(Map~Integer, Integer~ matches) void
         +saveOffers(int storeId, List~StoreOffer~ offers, LocalDate pulledOn, String source) int
     }
+    class barcode_BarcodeService["BarcodeService"]
     class finance_PurchaseService["PurchaseService"]
     class stores_StoreDiscountService["StoreDiscountService"]
     class stores_StoreImportService["StoreImportService"]
@@ -2451,6 +2452,7 @@ classDiagram
     stores_StoreRepository ..> stores_OfferRow
     stores_StoreRepository ..> stores_StoreOffer
     api_ServiceConfig ..> stores_StoreRepository
+    barcode_BarcodeService --> stores_StoreRepository
     finance_PurchaseService --> stores_StoreRepository
     stores_StoreDiscountService --> stores_StoreRepository
     stores_StoreImportService --> stores_StoreRepository
@@ -2482,7 +2484,7 @@ classDiagram
 | `void saveMatches(Map<Integer, Integer> matches)` | public |  |
 | `int saveOffers(int storeId, List<StoreOffer> offers, LocalDate pulledOn, String source)` | public | Inserts offers, or refreshes them if the same offer (store, product, start date, region) was pulled before, e.g. |
 
-**Referenced by:** `PurchaseService`, `ServiceConfig`, `StoreDiscountService`, `StoreImportService`, `StoreMatchService`, `StorePromotionService`
+**Referenced by:** `BarcodeService`, `PurchaseService`, `ServiceConfig`, `StoreDiscountService`, `StoreImportService`, `StoreMatchService`, `StorePromotionService`
 
 ## VariantParser
 

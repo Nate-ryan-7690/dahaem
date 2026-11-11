@@ -1,5 +1,7 @@
 package de.dahaem.api;
 
+import de.dahaem.barcode.InvalidBarcodeException;
+import de.dahaem.barcode.PackUnitException;
 import de.dahaem.mealplanner.PastDayException;
 import de.dahaem.shopping.ListCompletedException;
 import de.dahaem.shopping.PastShoppingDayException;
@@ -48,6 +50,18 @@ public class ApiExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e) {
         return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", e.getMessage());
+    }
+
+    /** A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). */
+    @ExceptionHandler(InvalidBarcodeException.class)
+    public ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e) {
+        return error(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
+    }
+
+    /** The pack of a barcode cannot be stocked in the item's unit: a bad request with a code of its own. */
+    @ExceptionHandler(PackUnitException.class)
+    public ResponseEntity<ErrorResponse> packUnit(PackUnitException e) {
+        return error(HttpStatus.BAD_REQUEST, "PACK_UNIT_MISMATCH", e.getMessage());
     }
 
     /** The shopping day of a list is in the past: a bad request with a code of its own. */

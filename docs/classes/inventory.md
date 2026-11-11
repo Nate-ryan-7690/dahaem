@@ -54,6 +54,7 @@ classDiagram
         +findByIdForUpdate(Connection con, int id) Optional~Item~
         +setStock(Connection con, int id, int quantity, LocalDate earliestExpDate) void
     }
+    class barcode_BarcodeService["BarcodeService"]
     class finance_PurchaseService["PurchaseService"]
     class finance_StockService["StockService"]
     class inventory_InventoryService["InventoryService"]
@@ -68,6 +69,7 @@ classDiagram
     inventory_InventoryRepository ..> inventory_Item
     inventory_InventoryRepository ..> inventory_ItemPage
     api_ServiceConfig ..> inventory_InventoryRepository
+    barcode_BarcodeService --> inventory_InventoryRepository
     finance_PurchaseService --> inventory_InventoryRepository
     finance_StockService --> inventory_InventoryRepository
     inventory_InventoryService --> inventory_InventoryRepository
@@ -85,7 +87,7 @@ classDiagram
 | `Optional<Item> findByIdForUpdate(Connection con, int id)` | public | The item, locked for the caller's transaction (see PurchaseRepository.openTransaction()). |
 | `void setStock(Connection con, int id, int quantity, LocalDate earliestExpDate)` | public | Sets the stock and the earliest expiry date together (null date = none known). |
 
-**Referenced by:** `InventoryService`, `PurchaseService`, `ServiceConfig`, `ShoppingListService`, `StockService`
+**Referenced by:** `BarcodeService`, `InventoryService`, `PurchaseService`, `ServiceConfig`, `ShoppingListService`, `StockService`
 
 ## InventoryService
 
