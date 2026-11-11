@@ -32,13 +32,15 @@ class ShoppingListByServingsTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 11, 1);
 
     private MealPlanService plans;
+    private int household;
     private ShoppingListService service;
 
     @BeforeEach
     void setUp() throws SQLException {
         TestDatabase.reset();
+        household = TestHousehold.createHousehold("Zuhause", null);
         plans = new MealPlanService(new MealPlanRepository(), new TestClock(TODAY))
-                .forHousehold(TestHousehold.createHousehold("Zuhause", null));   // the week of MON is still ahead
+                .forHousehold(household);   // the week of MON is still ahead
         service = new ShoppingListService(new ShoppingListRepository(), new MealPlanRepository(),
                 new InventoryRepository());
         // one item (onion, none in stock) that a store sells, so it lands on the persisted list
@@ -87,7 +89,9 @@ class ShoppingListByServingsTest {
     void theRecipePreferenceBeatsTheHouseholdButNotTheMeal() throws SQLException {
         recipe(1, 2, 100);
         recipe(2, 2, 100);
-        exec("UPDATE recipe SET recipe_preferred_servings = 3 WHERE recipe_id IN (1, 2)");
+        exec("INSERT INTO household_recipe_servings (household_recipe_servings_household_id, "
+                + "household_recipe_servings_recipe_id, household_recipe_servings_servings) VALUES ("
+                + household + ", 1, 3), (" + household + ", 2, 3)");
         int plan = planWith(meal(1, null));
 
         assertEquals(150, onionOnList(service.generateFromMealPlanByServings(plan, TODAY, 4)));
