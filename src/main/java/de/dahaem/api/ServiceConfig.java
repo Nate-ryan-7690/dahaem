@@ -1,6 +1,7 @@
 package de.dahaem.api;
 
 import de.dahaem.auth.AccountRepository;
+import de.dahaem.auth.AccountSelfService;
 import de.dahaem.auth.AccountService;
 import de.dahaem.auth.LoginService;
 import de.dahaem.auth.LoginThrottle;
@@ -149,6 +150,11 @@ public class ServiceConfig {
     @Bean
     public LoginService loginService(AccountService accountService, LoginThrottle loginThrottle) {
         return new LoginService(accountService, loginThrottle);
+    }
+
+    @Bean
+    public AccountSelfService accountSelfService(AccountService accountService, LoginThrottle loginThrottle) {
+        return new AccountSelfService(accountService, loginThrottle);
     }
 
     @Bean

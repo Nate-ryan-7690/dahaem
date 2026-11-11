@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import de.dahaem.auth.EmailTakenException;
 import de.dahaem.auth.InvalidCredentialsException;
 import de.dahaem.auth.TooManyAttemptsException;
 import de.dahaem.barcode.IntakeConflictException;
@@ -61,6 +62,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidBarcodeException.class)
     public ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e) {
         return error(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
+    }
+
+    /** The email address belongs to another account. */
+    @ExceptionHandler(EmailTakenException.class)
+    public ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e) {
+        return error(HttpStatus.CONFLICT, "EMAIL_TAKEN", e.getMessage());
     }
 
     /** A wrong email or password (the same answer for both). */
