@@ -131,6 +131,18 @@ class BarcodeServiceTest {
     }
 
     @Test
+    void aLinkedStoreItemWithoutAPriceHasNoPriceNotZero() throws SQLException {
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, "
+                + "store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available) "
+                + "VALUES (4, 1, 2, 1, 'g', 250, NULL, 1)");
+
+        BarcodeProduct p = service.assign(CODE, 1, "TestBrand", 250, "g", null, 4, TODAY).product();
+
+        assertEquals(1, p.storeItems().size());
+        assertNull(p.storeItems().get(0).price(), "an unknown price must not show as 0.0");
+    }
+
+    @Test
     void assigningAgainReplacesWhatTheBarcodeIs() {
         service.assign(CODE, 1, "Barilla", 500, "g", null, null, TODAY);
 
