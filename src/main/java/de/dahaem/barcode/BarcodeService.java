@@ -1,6 +1,8 @@
 package de.dahaem.barcode;
 
 import de.dahaem.inventory.InventoryRepository;
+import de.dahaem.inventory.Item;
+import de.dahaem.shared.Units;
 import de.dahaem.stores.StoreRepository;
 
 import java.io.IOException;
@@ -50,7 +52,8 @@ public class BarcodeService {
     /**
      * Remembers what a barcode is (or replaces it): the catalogue item, the brand (blank = none), the pack and the name as
      * printed. {@code storeItemId} (optional) also links the store item that carries it; it must be for the same catalogue
-     * item. Returns the barcode as it is now.
+     * item. The pack is stored in the units the shopping list uses (g, ml, stück; see {@link #canonicalPack}) and must fit
+     * the item's unit. Returns the barcode as it is now.
      */
     public BarcodeLookup assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit,
                                 String name, Integer storeItemId, LocalDate today) {
@@ -67,9 +70,9 @@ public class BarcodeService {
         if (printedName != null && printedName.length() > 200) {
             throw new IllegalArgumentException("'name' must be at most 200 characters");
         }
-        if (inventoryRepository.findById(inventoryItemId).isEmpty()) {
-            throw new IllegalArgumentException("No inventory item with id " + inventoryItemId);
-        }
+        Item item = inventoryRepository.findById(inventoryItemId)
+                .orElseThrow(() -> new IllegalArgumentException("No inventory item with id " + inventoryItemId));
+        Pack pack = canonicalPack(packSize, unit, item.getUnit());
         Connection con = repository.openTransaction();
         try {
             if (storeItemId != null) {
@@ -83,7 +86,7 @@ public class BarcodeService {
                 }
             }
             Integer brandId = brandName == null ? null : storeRepository.findOrCreateBrand(con, brandName);
-            repository.upsert(con, code, inventoryItemId, brandId, unit, packSize, printedName, today);
+            repository.upsert(con, code, inventoryItemId, brandId, pack.unit(), pack.size(), printedName, today);
             if (storeItemId != null) {
                 repository.link(con, code, storeItemId);
             }
@@ -98,6 +101,40 @@ public class BarcodeService {
             close(con);
         }
         return lookup(code);
+    }
+
+    /** A pack as it is stored: the same units a store item and the shopping list use. */
+    record Pack(int size, String unit) {
+    }
+
+    /**
+     * The pack in the units the shopping list works in: mass in g, volume in ml, pieces in stück ("1 kg" is 1000 g, "1,5 l"
+     * is 1500 ml), so a barcode's pack is the same as the matching store item's and the stock of the item. The pack must be
+     * stockable in the item's own unit (same dimension): an item counted in g cannot take a pack in ml. A unit nobody knows
+     * (WL, Waschladungen) is accepted only when it is the item's own unit. Otherwise a PackUnitException.
+     */
+    static Pack canonicalPack(int size, String unit, String itemUnit) {
+        Units.Parsed parsed = Units.parse(unit);
+        if (!parsed.isKnown()) {
+            if (itemUnit != null && itemUnit.trim().equalsIgnoreCase(unit.trim())) {
+                return new Pack(size, itemUnit.trim());
+            }
+            throw new PackUnitException("The pack unit '" + unit + "' is not a known unit and is not the item's unit '"
+                    + itemUnit + "'");
+        }
+        String base = switch (parsed.dimension()) {
+            case MASS -> "g";
+            case VOLUME -> "ml";
+            default -> "stück";
+        };
+        long total = Math.round(size * parsed.toBaseFactor());
+        if (total <= 0 || total > 9_999_999) {
+            throw new IllegalArgumentException("The pack is too large or too small: " + size + " " + unit);
+        }
+        if (!Units.compatible(itemUnit, base)) {
+            throw new PackUnitException("A pack in " + base + " cannot be stocked for an item counted in '" + itemUnit + "'");
+        }
+        return new Pack((int) total, base);
     }
 
     private static void rollback(Connection con) {

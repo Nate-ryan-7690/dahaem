@@ -41,7 +41,9 @@ class BarcodeServiceTest {
         exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'TestBrand')");
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, "
                 + "inventory_item_quantity, inventory_item_unit, inventory_item_category) VALUES "
-                + "(1, 'spaghetti', 'spaghetti', 0, 'g', 'pasta'), (2, 'rice', 'reis', 0, 'g', 'grain')");
+                + "(1, 'spaghetti', 'spaghetti', 0, 'g', 'pasta'), (2, 'rice', 'reis', 0, 'g', 'grain'), "
+                + "(3, 'milk', 'milch', 0, 'ml', 'dairy'), (4, 'detergent', 'waschmittel', 0, 'WL', 'household'), "
+                + "(5, 'eggs', 'eier', 0, 'Stück', 'dairy')");
         // store items: Aldi and Penny both carry spaghetti (item 1); Aldi also has rice (item 2)
         exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, "
                 + "store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available) VALUES "
@@ -136,6 +138,46 @@ class BarcodeServiceTest {
         assertEquals(2, p.inventoryItemId());
         assertEquals(1000, p.packSize());
         assertNull(p.brand());
+    }
+
+    @Test
+    void thePackIsStoredInTheUnitsTheShoppingListUses() {
+        BarcodeProduct rice = service.assign(CODE, 2, null, 1, "kg", null, null, TODAY).product();
+        assertEquals(1000, rice.packSize());
+        assertEquals("g", rice.packUnit());
+
+        BarcodeProduct milk = service.assign("73513537", 3, null, 2, "L", null, null, TODAY).product();
+        assertEquals(2000, milk.packSize());
+        assertEquals("ml", milk.packUnit());
+
+        BarcodeProduct eggs = service.assign("4012345678901", 5, null, 10, "Stück", null, null, TODAY).product();
+        assertEquals(10, eggs.packSize());
+        assertEquals("stück", eggs.packUnit());
+
+        BarcodeProduct detergent = service.assign("4006381333948", 4, null, 20, "wl", null, null, TODAY).product();
+        assertEquals(20, detergent.packSize());
+        assertEquals("WL", detergent.packUnit());
+    }
+
+    @Test
+    void aPackThatCannotBeStockedInTheItemsUnitIsRefused() {
+        // ml for an item counted in g, g for an item counted in ml, pieces for an item in g, an unknown unit for a g item
+        assertThrows(PackUnitException.class, () -> service.assign(CODE, 1, null, 500, "ml", null, null, TODAY));
+        assertThrows(PackUnitException.class, () -> service.assign(CODE, 3, null, 500, "g", null, null, TODAY));
+        assertThrows(PackUnitException.class, () -> service.assign(CODE, 1, null, 6, "stück", null, null, TODAY));
+        assertThrows(PackUnitException.class, () -> service.assign(CODE, 1, null, 500, "Eimer", null, null, TODAY));
+        assertTrue(repository.findByCode(CODE).isEmpty());
+    }
+
+    @Test
+    void differentPackSizesOfTheSameProductAreDifferentBarcodes() {
+        service.assign(CODE, 1, "Barilla", 500, "g", null, 1, TODAY);
+        service.assign("73513537", 1, "Barilla", 250, "g", null, null, TODAY);
+        service.assign("4012345678901", 1, "Barilla", 550, "g", "Aktion +50 g", null, TODAY);
+
+        assertEquals(500, service.lookup(CODE).product().packSize());
+        assertEquals(250, service.lookup("73513537").product().packSize());
+        assertEquals(550, service.lookup("4012345678901").product().packSize());
     }
 
     @Test

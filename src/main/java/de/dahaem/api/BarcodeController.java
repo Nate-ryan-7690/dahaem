@@ -39,7 +39,8 @@ public class BarcodeController {
     /**
      * Remembers what the barcode is, or replaces it ({@link AssignBarcodeRequest}). The user chooses the catalogue item;
      * nothing is guessed. Returns the barcode as it is now (status KNOWN). 400 for an unknown item or store item, a store
-     * item of another catalogue item, or a bad pack.
+     * item of another catalogue item, a bad pack, or a pack that cannot be stocked in the item's unit (400
+     * PACK_UNIT_MISMATCH: an item counted in g takes a pack in g or kg, not in ml).
      */
     @PutMapping("/{code}")
     public BarcodeLookup assign(@PathVariable("code") String code, @RequestBody AssignBarcodeRequest request) {

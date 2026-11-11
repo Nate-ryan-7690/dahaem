@@ -198,8 +198,14 @@ class ApiSmokeTest {
         // demo data: store item 1 is for catalogue item 40, store item 3 for item 825
         mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"inventoryItemId\": 40, \"packSize\": 3, \"packUnit\": \"stück\", \"storeItemId\": 3}"))
+                        .content("{\"inventoryItemId\": 40, \"packSize\": 3, \"packUnit\": \"g\", \"storeItemId\": 3}"))
                 .andExpect(status().isBadRequest());
+        // item 40 is counted in g: a pack in ml cannot be stocked for it
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": 40, \"packSize\": 500, \"packUnit\": \"ml\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PACK_UNIT_MISMATCH"));
         mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"inventoryItemId\": 40, \"brand\": \"Testmarke\", \"packSize\": 1000, "

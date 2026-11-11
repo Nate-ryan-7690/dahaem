@@ -464,7 +464,11 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
 - **Barcodes, first step done (2026-11-11)** — numbers first (typed), scanning in the app later. Migration 0020:
   `product_barcode` (the product a number identifies: catalogue item, brand, pack size + unit, name; stored as GTIN-13)
   and `product_barcode_store_item` (link table: the same number is on the shelf in several stores, each with its own
-  store_item). `GET /api/barcodes/{code}` (status KNOWN / FOUND / NOT_FOUND / DISABLED / UNAVAILABLE; codes
+  store_item). A barcode is one specific pack: 250 g, 500 g and a 550 g "+50 g" special are different barcodes (or, for a
+  special sharing the normal number, a pack size given at intake), and `store_item` already has size in its identity, so
+  the shopping list's pack maths handles any size. The pack is stored in the units the shopping list uses (kg -> g,
+  l -> ml, pieces -> stück) and must fit the item's unit (400 PACK_UNIT_MISMATCH otherwise; WL only for an item counted
+  in WL). `GET /api/barcodes/{code}` (status KNOWN / FOUND / NOT_FOUND / DISABLED / UNAVAILABLE; codes
   INVALID_BARCODE and BARCODE_CHECKSUM for typing errors) and `PUT /api/barcodes/{code}` (the user assigns the
   catalogue item; optional `storeItemId` links a store item of the same item). Unknown numbers may be described by Open
   Food Facts (suggestion only, never saved by itself; only the number is sent; OFF) when `DAHAEM_BARCODE_LOOKUP=openfoodfacts`
