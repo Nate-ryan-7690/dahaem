@@ -88,6 +88,20 @@ public class MealPlanRepository {
     }
 
     /** The plan with this id if it belongs to the household (empty for another household's plan). */
+    /** The household a plan belongs to; empty if there is no such plan or it has none (made before migration 0022). */
+    public Optional<Integer> findHouseholdIdOfPlan(int planId) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "SELECT meal_plan_household_id FROM meal_plan WHERE meal_plan_id = ?")) {
+            ps.setInt(1, planId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.ofNullable((Integer) rs.getObject(1)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the household of meal plan " + planId, e);
+        }
+    }
+
     public Optional<MealPlan> findPlan(int householdId, int planId) {
         String sql = "SELECT meal_plan_id, meal_plan_week_start_date FROM meal_plan " +
                 "WHERE meal_plan_id = ? AND meal_plan_household_id = ?";

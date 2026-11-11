@@ -439,14 +439,15 @@ classDiagram
         +aggregateIngredientsByServings(java.util.Map~Integer, Integer~ servingsPerRecipe) List~AggregatedIngredient~
         +loadStoreCandidates(int inventoryItemId, LocalDate today) List~StoreItemCandidate~
         +openTransaction() Connection
-        +insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status) int
+        +insertShoppingList(Connection con, Integer householdId, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status) int
         +insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, Integer inventoryItemId, String storeSection, BigDecimal quantityNeeded, String unit, Boolean isDiscounted, boolean purchaseStatus, boolean isManual, boolean needsReview, String name) int
         +insertItemRecipes(Connection con, int shoppingListItemId, List~Integer~ recipeIds) void
         +findShoppingListById(int shoppingListId) Optional~ShoppingListRow~
         +findItemsForShoppingList(int shoppingListId) List~ShoppingListItemRow~
         +recipesByItem(int shoppingListId) Map~Integer, List~SourceRecipe~~
         +findListsForPlan(int mealPlanId, boolean archived) List~ShoppingListSummary~
-        +findAllLists(boolean archived) List~ShoppingListSummary~
+        +findAllLists(int householdId, boolean archived) List~ShoppingListSummary~
+        +findHouseholdIdOfList(int shoppingListId) Optional~Integer~
         +findInventoryItemIdForItem(int shoppingListItemId) Optional~Integer~
         +findShoppingListIdForItem(int shoppingListItemId) Optional~Integer~
         +setPurchased(int shoppingListItemId, boolean purchased) void
@@ -495,14 +496,15 @@ classDiagram
 | `List<AggregatedIngredient> aggregateIngredientsByServings(java.util.Map<Integer, Integer> servingsPerRecipe)` | public | Same as .aggregateIngredients(List, int), but every recipe has its own head count: the map gives, per recipe id, the total number of servings planned across all its meals (a recipe planned twice, for 2 and for 4, is 6). |
 | `List<StoreItemCandidate> loadStoreCandidates(int inventoryItemId, LocalDate today)` | public | Every store_item that can supply the given inventory item, with its brand and store name, and its store_discount for today if one is currently running. |
 | `Connection openTransaction()` | public | Opens a connection with auto-commit off, for a caller that needs to combine several writes atomically. |
-| `int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status)` | public | Inserts a new shopping_list row, on the caller's transaction. |
+| `int insertShoppingList(Connection con, Integer householdId, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate, LocalDate fromDate, boolean status)` | public | Inserts a new shopping_list row, on the caller's transaction. |
 | `int insertShoppingListItem(Connection con, int shoppingListId, Integer storeItemId, Integer inventoryItemId, String storeSection, BigDecimal quantityNeeded, String unit, Boolean isDiscounted, boolean purchaseStatus, boolean isManual, boolean needsReview, String name)` | public | Inserts one shopping_list_item row, on the caller's transaction, and returns its id. |
 | `void insertItemRecipes(Connection con, int shoppingListItemId, List<Integer> recipeIds)` | public | Records which recipes need a line, on the caller's transaction. |
 | `Optional<ShoppingListRow> findShoppingListById(int shoppingListId)` | public | The shopping_list row for a persisted list, or empty if no such list exists. |
 | `List<ShoppingListItemRow> findItemsForShoppingList(int shoppingListId)` | public | Every shopping_list_item on a persisted list, joined to its inventory_item's names (a free-text line has no catalogue item: its own text is given as both names), ordered by insertion. |
 | `Map<Integer, List<SourceRecipe>> recipesByItem(int shoppingListId)` | public | The recipes that need each line of a list (line id -> recipes, by name). |
 | `List<ShoppingListSummary> findListsForPlan(int mealPlanId, boolean archived)` | public | The saved lists of a meal plan, newest first, each with its number of lines; only archived ones, or only the others. |
-| `List<ShoppingListSummary> findAllLists(boolean archived)` | public | Every saved list, newest first (lists that belong to no plan included); only archived ones, or only the others. |
+| `List<ShoppingListSummary> findAllLists(int householdId, boolean archived)` | public | Every saved list of a household, newest first (lists that belong to no plan included); only archived ones, or only the others. |
+| `Optional<Integer> findHouseholdIdOfList(int shoppingListId)` | public | The household a saved list belongs to; empty if there is no such list or it has none yet (made before migration 0023). |
 | `Optional<Integer> findInventoryItemIdForItem(int shoppingListItemId)` | public | The inventory_item_id a shopping_list_item is for, or empty if the item doesn't exist or has no catalog link (a manual line). |
 | `Optional<Integer> findShoppingListIdForItem(int shoppingListItemId)` | public | The shopping_list_id a shopping_list_item belongs to, or empty if no such item exists. |
 | `void setPurchased(int shoppingListItemId, boolean purchased)` | public | Ticks a line as bought (or unticks it). |
@@ -588,9 +590,10 @@ classDiagram
         +loadPersistedList(int shoppingListId) Optional~PersistedShoppingList~
         +loadPersistedList(int shoppingListId, LocalDate today) Optional~PersistedShoppingList~
         +listsForPlan(int mealPlanId, boolean archived) List~ShoppingListSummary~
-        +allLists(boolean archived) List~ShoppingListSummary~
+        +allLists(int householdId, boolean archived) List~ShoppingListSummary~
+        +isOwnedBy(int shoppingListId, int householdId) boolean
         +setArchived(int shoppingListId, boolean archived) void
-        +createEmptyList(LocalDate today, LocalDate shoppingDate) int
+        +createEmptyList(int householdId, LocalDate today, LocalDate shoppingDate) int
     }
     class shopping_ShoppingListRepository["ShoppingListRepository"]
     class mealplanner_MealPlanRepository["MealPlanRepository"]
@@ -659,9 +662,10 @@ classDiagram
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId)` | public |  |
 | `Optional<PersistedShoppingList> loadPersistedList(int shoppingListId, LocalDate today)` | public | Reloads a persisted shopping_list by id with its items, or empty if no such list exists. |
 | `List<ShoppingListSummary> listsForPlan(int mealPlanId, boolean archived)` | public | The saved lists of a meal plan, newest first: the archived ones or the others. |
-| `List<ShoppingListSummary> allLists(boolean archived)` | public | Every saved list, newest first, including the ones that belong to no meal plan: the archived ones or the others. |
+| `List<ShoppingListSummary> allLists(int householdId, boolean archived)` | public | Every saved list, newest first, including the ones that belong to no meal plan: the archived ones or the others. |
+| `boolean isOwnedBy(int shoppingListId, int householdId)` | public | True when the list exists and belongs to this household (a foreign or unknown list is not one's own). |
 | `void setArchived(int shoppingListId, boolean archived)` | public | Archives a list (hidden from the overview, nothing is deleted) or brings it back. |
-| `int createEmptyList(LocalDate today, LocalDate shoppingDate)` | public | Makes an empty list that belongs to no meal plan, for a trip without planned meals (the user adds the lines by hand). |
+| `int createEmptyList(int householdId, LocalDate today, LocalDate shoppingDate)` | public | Makes an empty list that belongs to no meal plan, for a trip without planned meals (the user adds the lines by hand). |
 
 **Referenced by:** `MealPlanController`, `ServiceConfig`, `ShoppingListController`, `ShoppingListItemController`
 

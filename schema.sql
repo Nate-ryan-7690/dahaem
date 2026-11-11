@@ -363,6 +363,10 @@ CREATE TABLE shopping_list ( shopping_list_id INTEGER PRIMARY KEY AUTO_INCREMENT
 
 	shopping_list_meal_plan_id INTEGER,
 
+	-- whose list it is (migration 0023); NULL only on a list made before it. The foreign key to household is added
+	-- below, after that table exists.
+	shopping_list_household_id INTEGER NULL,
+
 	shopping_list_created_date DATE NOT NULL,
 
 	-- the day of the shopping trip: offers are judged on it (migration 0017); NULL on a list made before it
@@ -377,6 +381,9 @@ CREATE TABLE shopping_list ( shopping_list_id INTEGER PRIMARY KEY AUTO_INCREMENT
 	shopping_list_archived BOOLEAN NOT NULL DEFAULT FALSE,
 
 	FOREIGN KEY(shopping_list_meal_plan_id) REFERENCES meal_plan(meal_plan_id));
+
+ALTER TABLE shopping_list
+	ADD CONSTRAINT shopping_list_household_fk FOREIGN KEY (shopping_list_household_id) REFERENCES household(household_id);
 
 CREATE TABLE shopping_list_item(shopping_list_item_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 

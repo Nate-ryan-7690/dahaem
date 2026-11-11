@@ -261,16 +261,18 @@ public class ShoppingListRepository {
      * Inserts a new shopping_list row, on the caller's transaction. Returns its generated id. shoppingDate is the day of
      * the trip (offers are judged on it), fromDate the first meal day the list counts; either may be null.
      */
-    public int insertShoppingList(Connection con, Integer mealPlanId, LocalDate createdDate, LocalDate shoppingDate,
-                                  LocalDate fromDate, boolean status) throws SQLException {
-        String sql = "INSERT INTO shopping_list (shopping_list_meal_plan_id, shopping_list_created_date, "
-                + "shopping_list_shopping_date, shopping_list_from_date, shopping_list_status) VALUES (?, ?, ?, ?, ?)";
+    public int insertShoppingList(Connection con, Integer householdId, Integer mealPlanId, LocalDate createdDate,
+                                  LocalDate shoppingDate, LocalDate fromDate, boolean status) throws SQLException {
+        String sql = "INSERT INTO shopping_list (shopping_list_household_id, shopping_list_meal_plan_id, "
+                + "shopping_list_created_date, shopping_list_shopping_date, shopping_list_from_date, shopping_list_status) "
+                + "VALUES (?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setObject(1, mealPlanId);
-            ps.setObject(2, createdDate);
-            ps.setObject(3, shoppingDate);
-            ps.setObject(4, fromDate);
-            ps.setBoolean(5, status);
+            ps.setObject(1, householdId);
+            ps.setObject(2, mealPlanId);
+            ps.setObject(3, createdDate);
+            ps.setObject(4, shoppingDate);
+            ps.setObject(5, fromDate);
+            ps.setBoolean(6, status);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -425,28 +427,45 @@ public class ShoppingListRepository {
 
     /** The saved lists of a meal plan, newest first, each with its number of lines; only archived ones, or only the others. */
     public List<ShoppingListSummary> findListsForPlan(int mealPlanId, boolean archived) {
-        return findLists(mealPlanId, archived);
+        return findLists(null, mealPlanId, archived);
     }
 
-    /** Every saved list, newest first (lists that belong to no plan included); only archived ones, or only the others. */
-    public List<ShoppingListSummary> findAllLists(boolean archived) {
-        return findLists(null, archived);
+    /** Every saved list of a household, newest first (lists that belong to no plan included); only archived ones, or only the others. */
+    public List<ShoppingListSummary> findAllLists(int householdId, boolean archived) {
+        return findLists(householdId, null, archived);
     }
 
-    private List<ShoppingListSummary> findLists(Integer mealPlanId, boolean archived) {
+    /** The household a saved list belongs to; empty if there is no such list or it has none yet (made before migration 0023). */
+    public Optional<Integer> findHouseholdIdOfList(int shoppingListId) {
+        String sql = "SELECT shopping_list_household_id FROM shopping_list WHERE shopping_list_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, shoppingListId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.ofNullable((Integer) rs.getObject(1)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the household of shopping list " + shoppingListId, e);
+        }
+    }
+
+    private List<ShoppingListSummary> findLists(Integer householdId, Integer mealPlanId, boolean archived) {
         String sql = "SELECT sl.shopping_list_id, sl.shopping_list_meal_plan_id, sl.shopping_list_created_date, "
                 + "sl.shopping_list_shopping_date, sl.shopping_list_from_date, sl.shopping_list_status, sl.shopping_list_archived, "
                 + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id) AS line_count, "
                 + "(SELECT COUNT(*) FROM shopping_list_item sli WHERE sli.shopping_list_id = sl.shopping_list_id "
                 + "AND sli.shopping_list_item_purchase_status) AS purchased_count "
-                + "FROM shopping_list sl WHERE (? IS NULL OR sl.shopping_list_meal_plan_id = ?) "
+                + "FROM shopping_list sl WHERE (? IS NULL OR sl.shopping_list_household_id = ?) "
+                + "AND (? IS NULL OR sl.shopping_list_meal_plan_id = ?) "
                 + "AND sl.shopping_list_archived = ? ORDER BY sl.shopping_list_id DESC";
         List<ShoppingListSummary> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setObject(1, mealPlanId);
-            ps.setObject(2, mealPlanId);
-            ps.setBoolean(3, archived);
+            ps.setObject(1, householdId);
+            ps.setObject(2, householdId);
+            ps.setObject(3, mealPlanId);
+            ps.setObject(4, mealPlanId);
+            ps.setBoolean(5, archived);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new ShoppingListSummary(

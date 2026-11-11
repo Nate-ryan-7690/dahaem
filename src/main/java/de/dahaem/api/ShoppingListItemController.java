@@ -35,8 +35,9 @@ public class ShoppingListItemController {
      * without a plan. Archived lists are left out; {@code ?archived=true} shows only the archived ones.
      */
     @GetMapping
-    public List<PersistedShoppingListDto.Summary> all(@RequestParam(name = "archived", defaultValue = "false") boolean archived) {
-        return shoppingListService.allLists(archived).stream().map(PersistedShoppingListDto.Summary::from).toList();
+    public List<PersistedShoppingListDto.Summary> all(@RequestParam(name = "archived", defaultValue = "false") boolean archived,
+                                                      Caller caller) {
+        return shoppingListService.allLists(caller.householdId(), archived).stream().map(PersistedShoppingListDto.Summary::from).toList();
     }
 
     /**
@@ -46,15 +47,17 @@ public class ShoppingListItemController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public GeneratedShoppingListDto create(@RequestParam(name = "shoppingDate", required = false)
-                                           @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate shoppingDate) {
+                                           @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate shoppingDate,
+                                           Caller caller) {
         LocalDate today = mealPlanService.today();   // the household's day, not the server's
-        return new GeneratedShoppingListDto(shoppingListService.createEmptyList(today,
+        return new GeneratedShoppingListDto(shoppingListService.createEmptyList(caller.householdId(), today,
                 shoppingDate != null ? shoppingDate : today));
     }
 
     /** Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. */
     @GetMapping("/{listId}")
-    public PersistedShoppingListDto get(@PathVariable("listId") int listId) {
+    public PersistedShoppingListDto get(@PathVariable("listId") int listId, Caller caller) {
+        requireOwn(listId, caller);
         return shoppingListService.loadPersistedList(listId)
                 .map(PersistedShoppingListDto::from)
                 .orElseThrow(() -> new NotFoundException("No shopping list with id " + listId));
@@ -68,7 +71,9 @@ public class ShoppingListItemController {
     @PutMapping("/{listId}/items/{itemId}/store-item")
     public ShoppingListItemSelectionDto selectStoreItem(@PathVariable("listId") int listId,
                                                           @PathVariable("itemId") int itemId,
-                                                          @RequestBody SelectStoreItemRequest request) {
+                                                          @RequestBody SelectStoreItemRequest request,
+                                                          Caller caller) {
+        requireOwn(listId, caller);
         requireItemOnList(listId, itemId);
         shoppingListService.requireOpen(listId);
         shoppingListService.selectStoreItem(itemId, request.storeItemId());
@@ -79,7 +84,9 @@ public class ShoppingListItemController {
     @PutMapping("/{listId}/items/{itemId}/purchased")
     public ShoppingListEdits.PurchasedDto setPurchased(@PathVariable("listId") int listId,
                                                        @PathVariable("itemId") int itemId,
-                                                       @RequestBody ShoppingListEdits.PurchasedRequest request) {
+                                                       @RequestBody ShoppingListEdits.PurchasedRequest request,
+                                                       Caller caller) {
+        requireOwn(listId, caller);
         if (request.purchased() == null) {
             throw new BadRequestException("'purchased' must be true or false");
         }
@@ -92,7 +99,9 @@ public class ShoppingListItemController {
     @PutMapping("/{listId}/items/{itemId}/quantity")
     public ShoppingListEdits.QuantityDto setQuantity(@PathVariable("listId") int listId,
                                                      @PathVariable("itemId") int itemId,
-                                                     @RequestBody ShoppingListEdits.QuantityRequest request) {
+                                                     @RequestBody ShoppingListEdits.QuantityRequest request,
+                                                     Caller caller) {
+        requireOwn(listId, caller);
         if (request.quantity() == null) {
             throw new BadRequestException("'quantity' is required");
         }
@@ -104,7 +113,8 @@ public class ShoppingListItemController {
     /** Removes a line from a list that is not completed. */
     @DeleteMapping("/{listId}/items/{itemId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void removeItem(@PathVariable("listId") int listId, @PathVariable("itemId") int itemId) {
+    public void removeItem(@PathVariable("listId") int listId, @PathVariable("itemId") int itemId, Caller caller) {
+        requireOwn(listId, caller);
         requireItemOnList(listId, itemId);
         shoppingListService.removeItem(listId, itemId);
     }
@@ -116,7 +126,9 @@ public class ShoppingListItemController {
     @PostMapping("/{listId}/items")
     @ResponseStatus(HttpStatus.CREATED)
     public ShoppingListEdits.AddedLineDto addItem(@PathVariable("listId") int listId,
-                                                  @RequestBody ShoppingListEdits.AddLineRequest request) {
+                                                  @RequestBody ShoppingListEdits.AddLineRequest request,
+                                                  Caller caller) {
+        requireOwn(listId, caller);
         if (request.quantity() == null) {
             throw new BadRequestException("'quantity' is required");
         }
@@ -130,7 +142,9 @@ public class ShoppingListItemController {
     /** Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back. */
     @PutMapping("/{listId}/archived")
     public ShoppingListEdits.ArchivedDto setArchived(@PathVariable("listId") int listId,
-                                                     @RequestBody ShoppingListEdits.ArchivedRequest request) {
+                                                     @RequestBody ShoppingListEdits.ArchivedRequest request,
+                                                     Caller caller) {
+        requireOwn(listId, caller);
         if (request.archived() == null) {
             throw new BadRequestException("'archived' must be true or false");
         }
@@ -144,7 +158,9 @@ public class ShoppingListItemController {
     /** Completes a list ({"completed": true}: it becomes read-only) or reopens it. */
     @PutMapping("/{listId}/status")
     public ShoppingListEdits.StatusDto setStatus(@PathVariable("listId") int listId,
-                                                 @RequestBody ShoppingListEdits.StatusRequest request) {
+                                                 @RequestBody ShoppingListEdits.StatusRequest request,
+                                                 Caller caller) {
+        requireOwn(listId, caller);
         if (request.completed() == null) {
             throw new BadRequestException("'completed' must be true or false");
         }
@@ -153,6 +169,13 @@ public class ShoppingListItemController {
         }
         shoppingListService.setCompleted(listId, request.completed());
         return new ShoppingListEdits.StatusDto(listId, request.completed());
+    }
+
+    /** A list of another household is not found, exactly like one that does not exist. */
+    private void requireOwn(int listId, Caller caller) {
+        if (!shoppingListService.isOwnedBy(listId, caller.householdId())) {
+            throw new NotFoundException("No shopping list with id " + listId);
+        }
     }
 
     private void requireItemOnList(int listId, int itemId) {

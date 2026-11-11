@@ -26,6 +26,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -167,6 +168,63 @@ class HouseholdSeparationApiTest {
         // without the token the header is not believed at all
         mvc.perform(get("/api/meal-plans/week").header("X-Acting-User", "" + userA))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private int newList(int user) throws Exception {
+        String body = mvc.perform(as(post("/api/shopping-lists"), user))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(body).get("shoppingListId").asInt();
+    }
+
+    @Test
+    void eachHouseholdSeesOnlyItsOwnShoppingLists() throws Exception {
+        int listOfA = newList(userA);
+        int listOfB = newList(userB);
+
+        mvc.perform(as(get("/api/shopping-lists"), userA))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(listOfA));
+        mvc.perform(as(get("/api/shopping-lists"), userB))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(listOfB));
+    }
+
+    @Test
+    void anotherHouseholdsShoppingListCannotBeReadOrChanged() throws Exception {
+        int listOfA = newList(userA);
+
+        mvc.perform(as(get("/api/shopping-lists/{id}", listOfA), userB)).andExpect(status().isNotFound());
+        mvc.perform(as(post("/api/shopping-lists/{id}/items", listOfA), userB)
+                        .content("{\"name\": \"Backpapier\", \"quantity\": 1}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(as(put("/api/shopping-lists/{id}/archived", listOfA), userB).content("{\"archived\": true}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(as(put("/api/shopping-lists/{id}/status", listOfA), userB).content("{\"completed\": true}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(as(delete("/api/shopping-lists/{id}/items/{item}", listOfA, 1), userB))
+                .andExpect(status().isNotFound());
+        // untouched, and fine for its own household
+        mvc.perform(as(get("/api/shopping-lists/{id}", listOfA), userA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.archived").value(false))
+                .andExpect(jsonPath("$.status").value(false));
+    }
+
+    @Test
+    void aListMadeFromAPlanBelongsToTheHouseholdOfThePlan() throws Exception {
+        addMeal(userA);
+        int planOfA = id("SELECT meal_plan_id FROM meal_plan WHERE meal_plan_household_id = " + householdA);
+        String body = mvc.perform(as(post("/api/meal-plans/{id}/shopping-list", planOfA), userA))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        int list = com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(body).get("shoppingListId").asInt();
+
+        mvc.perform(as(get("/api/shopping-lists/{id}", list), userA)).andExpect(status().isOk());
+        mvc.perform(as(get("/api/shopping-lists/{id}", list), userB)).andExpect(status().isNotFound());
+        mvc.perform(as(get("/api/shopping-lists"), userB)).andExpect(jsonPath("$", hasSize(0)));
+        org.junit.jupiter.api.Assertions.assertEquals(householdA,
+                id("SELECT shopping_list_household_id FROM shopping_list WHERE shopping_list_id = " + list));
     }
 
     private static int id(String sql) throws SQLException {
