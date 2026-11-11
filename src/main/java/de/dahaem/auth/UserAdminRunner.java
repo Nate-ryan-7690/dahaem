@@ -14,6 +14,9 @@ import java.util.Arrays;
  *   create-user <email> <displayName> [householdName]
  *       The first user creates the household (default name "DAHÄM") and becomes its ADMIN;
  *       later users join that household as MEMBER.
+ *   create-household-user <email> <displayName> <householdName>
+ *       Starts a NEW household with this user as its ADMIN, even if households exist (a second household). Everyone else
+ *       joins it by invitation (the admin makes one in the app).
  *   set-password <email>
  *       Sets a new password for an existing user (there are no password-reset emails).
  *
@@ -30,8 +33,9 @@ public class UserAdminRunner {
     public static void main(String[] args) {
         String command = args.length > 0 ? args[0] : "";
         boolean createUser = command.equals("create-user") && (args.length == 3 || args.length == 4);
+        boolean createHouseholdUser = command.equals("create-household-user") && args.length == 4;
         boolean setPassword = command.equals("set-password") && args.length == 2;
-        if (!createUser && !setPassword) {
+        if (!createUser && !createHouseholdUser && !setPassword) {
             printUsage();
             System.exit(2);
         }
@@ -40,9 +44,10 @@ public class UserAdminRunner {
                 new BCryptPasswordEncoder(AccountService.DEFAULT_BCRYPT_STRENGTH));
         try {
             String password = readPassword();
-            if (createUser) {
-                CreatedAccount created = service.createUser(args[1], args[2], password,
-                        args.length == 4 ? args[3] : null, LocalDate.now());
+            if (createUser || createHouseholdUser) {
+                CreatedAccount created = createHouseholdUser
+                        ? service.createUserInNewHousehold(args[1], args[2], password, args[3], LocalDate.now())
+                        : service.createUser(args[1], args[2], password, args.length == 4 ? args[3] : null, LocalDate.now());
                 Household household = created.membership().household();
                 System.out.printf("Created user %s (%s), id %d.%n", created.user().getEmail(),
                         created.user().getDisplayName(), created.user().getId());
@@ -92,6 +97,8 @@ public class UserAdminRunner {
                   create-user <email> <displayName> [householdName]
                                  create a login; the first user creates the household (as ADMIN),
                                  later users join it (as MEMBER)
+                  create-household-user <email> <displayName> <householdName>
+                                 start a NEW household (a second one) with this user as its ADMIN
                   set-password <email>
                                  set a new password for an existing user
                 The password is read from $DAHAEM_PASSWORD, or prompted for on the console.""");

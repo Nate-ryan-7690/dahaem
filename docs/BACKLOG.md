@@ -682,7 +682,9 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
   them, but `seed/demo_data.sql` inserts plans and lists before any household exists, so the seed must change first);
   (c) `purchase_receipt` has no household yet: there is no receipts API, only the operator's import command, so nothing leaks;
   add the column when receipts get an API or a second household imports its own.
-- [ ] PR 5: operator tool for a second household (`UserAdminRunner`: create a household with its first admin). Needed before a second household can exist.
+- [x] PR 5: operator command for a second household: `UserAdminRunner create-household-user <email> <displayName> <householdName>` starts
+  a NEW household with that user as its ADMIN (plain `create-user` still joins the oldest one). Everyone else joins it with an
+  invitation. With this the household work is complete; the open items above (frozen columns, NOT NULL, receipts) stay Nate's call.
 
 ## Platform
 
