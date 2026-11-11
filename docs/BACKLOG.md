@@ -483,6 +483,18 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   image decoding (ZXing) for a photo of a barcode, the spreadsheet / CSV import of Nate's hand-written list (it can call
   `/api/intake` as it is), recording the price of a purchase from a receipt, and unit conversions for packs in pieces vs
   items in g (counted as 1 per pack).
+- **Go-live review: Nate's decisions (2026-11-11) and what is built** — (1) the PHP front end owns the session: built
+  `POST /api/auth/verify` (email + password, internal token required; 200 with the user, household and role, no session, no
+  cookie; 401 `BAD_CREDENTIALS` for a wrong password and an unknown email alike; 429 `TOO_MANY_ATTEMPTS` + `Retry-After`) and
+  the `X-Acting-User` header (user id, believed only with the token) in the audit log. (2) Stay single-household, no scoping.
+  (3) Built a delay, not a lockout, on the verify endpoint (`LoginThrottle`, in memory: 5 failures per client address / 20 per
+  email, then 30 s doubling up to 15 / 5 minutes; a correct login clears the email only). The PHP has no login and no limit of
+  its own today; Cloudflare Access (one-time PIN, Bot Fight Mode) only protects the tunnel path, not the LAN path. (4) Cloudflare
+  Access is the alpha gate only: no Access identity is used or validated. (5) BCrypt cost 12 (`dahaem.auth.bcrypt-strength`),
+  older hashes are made again at the next login. Still to do: the PHP login page and session (frontend repo; contract in the PR
+  that added this), then switch off the API's own session login (`/api/auth/login`, `/api/auth/csrf`, the Java session
+  cookie) and delete the old static shell; the smaller options (body size cap, deny-by-default outside `/api`, image pins and
+  healthcheck, log size limits) are open and listed in the entry below.
 - **Go-live review of the Java side (2026-11-11, before the Cloudflare tunnel is started)** — fixed in the review PR:
   fail-closed start-up (`StartupGuard`: no start without `INTERNAL_API_TOKEN` and the three DB variables;
   `-Ddahaem.require-secrets=false` for local development only), audit log (logger `audit`, client IP from `X-Client-Ip`,

@@ -25,6 +25,16 @@ class AuditLogTest {
     }
 
     @Test
+    void theActingUserIsBelievedOnlyWithTheInternalTokenAndOnlyAsANumber() {
+        assertEquals("42", AuditLog.actingUser("42", true));
+        assertEquals("42", AuditLog.actingUser(" 42 ", true));
+        assertEquals("-", AuditLog.actingUser("42", false));
+        for (String bad : new String[]{"4 2", "42\nlogin ok", "abc", "-1", "1234567890", "", null}) {
+            assertEquals("-", AuditLog.actingUser(bad, true), String.valueOf(bad));
+        }
+    }
+
+    @Test
     void controlCharactersAreTakenOutOfLoggedValuesAndLongOnesAreShortened() {
         assertFalse(AuditLog.clean("/api/x\nlogin ok user=admin", 200).contains("\n"));
         assertEquals("/api/x?login ok", AuditLog.clean("/api/x\nlogin ok", 200));
