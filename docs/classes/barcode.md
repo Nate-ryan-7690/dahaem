@@ -4,7 +4,7 @@
 
 
 
-16 types in 11 source files (`src/main/java/de/dahaem/barcode`). Back to the [class index](README.md).
+12 types in 10 source files (`src/main/java/de/dahaem/barcode`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -25,14 +25,6 @@ classDiagram
         <<record>>
     }
     class barcode_Gtin["Gtin"]
-    class barcode_IntakeService["IntakeService"]
-    class barcode_IntakeService_Line["IntakeService.Line"] {
-        <<record>>
-    }
-    class barcode_IntakeService_LineResult["IntakeService.LineResult"] {
-        <<record>>
-    }
-    class barcode_IntakeService_LineException["IntakeService.LineException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
     class barcode_OpenFoodFactsSource["OpenFoodFactsSource"]
     class barcode_PackUnitException["PackUnitException"]
@@ -50,10 +42,6 @@ classDiagram
     barcode_BarcodeService --> barcode_ProductBarcodeRepository
     barcode_BarcodeService --> barcode_ProductDataSource
     barcode_BarcodeService ..> barcode_BarcodeLookup
-    barcode_IntakeService *-- barcode_IntakeService_Line
-    barcode_IntakeService *-- barcode_IntakeService_LineResult
-    barcode_IntakeService *-- barcode_IntakeService_LineException
-    barcode_IntakeService --> barcode_ProductBarcodeRepository
     barcode_ProductDataSource <|.. barcode_OpenFoodFactsSource
     barcode_OpenFoodFactsSource ..> barcode_ProductSuggestion
     barcode_ProductBarcodeRepository ..> barcode_BarcodeProduct
@@ -65,15 +53,11 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`BarcodeLookup`](#barcodelookup) | record |  | The answer to "what is this barcode?". |
-| [`BarcodeProduct`](#barcodeproduct) | record |  | What DAHÄM knows about a barcode: the catalogue item it is (itemUnit is the unit its stock is counted in), the brand (null = none), the pack (size in unit, like a store item) and the name as printed (may be null), plus the store items that  |
+| [`BarcodeProduct`](#barcodeproduct) | record |  | What DAHÄM knows about a barcode: the catalogue item it is, the brand (null = none), the pack (size in unit, like a store item) and the name as printed (may be null), plus the store items that carry it (one per store that sells it). |
 | [`BarcodeProduct.LinkedStoreItem`](#barcodeproductlinkedstoreitem) | record |  | A store item that carries the barcode: which store, and its current normal price (null if unknown). |
 | [`BarcodeService`](#barcodeservice) | class |  | Barcodes: what a number is, and remembering it. |
 | [`BarcodeService.Pack`](#barcodeservicepack) | record |  | A pack as it is stored: the same units a store item and the shopping list use. |
 | [`Gtin`](#gtin) | class |  | Barcode numbers (GTIN: EAN-8, UPC-A, EAN-13, GTIN-14). |
-| [`IntakeService`](#intakeservice) | class |  | Puts groceries away by barcode: for each line (barcode, packs, expiry date, price) the store item for (store, brand, catalogue item, pack) is found or created, linked to the barcode, and the purchase recorded, which adds packs x pack size t |
-| [`IntakeService.Line`](#intakeserviceline) | record |  | One line to put away. |
-| [`IntakeService.LineResult`](#intakeservicelineresult) | record |  | What happened to one line: recorded (purchase, store item, how much stock was added in which unit) or why not. |
-| [`IntakeService.LineException`](#intakeservicelineexception) | class |  |  |
 | [`InvalidBarcodeException`](#invalidbarcodeexception) | class |  | A barcode number that cannot be right: not digits, a length no barcode has (INVALID_BARCODE), or a check digit that does not fit the other digits, which is what a typing error looks like (BARCODE_CHECKSUM). |
 | [`OpenFoodFactsSource`](#openfoodfactssource) | class |  | Open Food Facts (open data, no key): name, brand and quantity of a product by its barcode. |
 | [`PackUnitException`](#packunitexception) | class |  | The pack of a barcode cannot be stocked in the catalogue item's unit (a pack in ml for an item counted in g, or a unit nobody knows). |
@@ -129,7 +113,7 @@ classDiagram
 
 *record*
 
-What DAHÄM knows about a barcode: the catalogue item it is (itemUnit is the unit its stock is counted in), the brand (null = none), the pack (size in unit, like a
+What DAHÄM knows about a barcode: the catalogue item it is, the brand (null = none), the pack (size in unit, like a
 store item) and the name as printed (may be null), plus the store items that carry it (one per store that sells it).
 
 ```mermaid
@@ -141,7 +125,6 @@ classDiagram
         +int inventoryItemId
         +String nameDeutsch
         +String nameEnglish
-        +String itemUnit
         +String brand
         +int packSize
         +String packUnit
@@ -166,7 +149,6 @@ classDiagram
 | `inventoryItemId` | `int` |
 | `nameDeutsch` | `String` |
 | `nameEnglish` | `String` |
-| `itemUnit` | `String` |
 | `brand` | `String` |
 | `packSize` | `int` |
 | `packUnit` | `String` |
@@ -315,178 +297,6 @@ classDiagram
 | `String normalize(String raw)` | public static |  |
 | `boolean checkDigitFits(String digits)` | package static | The last digit must make the weighted sum (weights 3, 1, 3, 1 ... |
 
-## IntakeService
-
-*class*
-
-Puts groceries away by barcode: for each line (barcode, packs, expiry date, price) the store item for (store, brand,
-catalogue item, pack) is found or created, linked to the barcode, and the purchase recorded, which adds packs x pack size
-to the item's stock in the item's own unit and keeps the expiry date as a batch. Every line stands on its own: one bad
-line is reported and the rest are still put away. No SQL here, no UI here.
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeService["IntakeService"] {
-        -Logger log$
-        ~String NO_BRAND$
-        ~int MAX_PACKS$
-        -ProductBarcodeRepository barcodes
-        -PurchaseService purchases
-        -StoreRepository stores
-        +IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores)
-        +intake(String storeName, LocalDate purchaseDate, List~Line~ lines) List~LineResult~
-    }
-    class barcode_IntakeService_Line["IntakeService.Line"] {
-        <<record>>
-    }
-    class barcode_IntakeService_LineResult["IntakeService.LineResult"] {
-        <<record>>
-    }
-    class barcode_IntakeService_LineException["IntakeService.LineException"]
-    class barcode_ProductBarcodeRepository["ProductBarcodeRepository"]
-    class finance_PurchaseService["PurchaseService"]
-    class stores_StoreRepository["StoreRepository"]
-    class api_IntakeController["IntakeController"] {
-        <<controller>>
-    }
-    class api_IntakeController_IntakeRequest["IntakeController.IntakeRequest"] {
-        <<record>>
-    }
-    class api_IntakeController_IntakeResult["IntakeController.IntakeResult"] {
-        <<record>>
-    }
-    class api_ServiceConfig["ServiceConfig"] {
-        <<spring>>
-    }
-    barcode_IntakeService *-- barcode_IntakeService_Line
-    barcode_IntakeService *-- barcode_IntakeService_LineResult
-    barcode_IntakeService *-- barcode_IntakeService_LineException
-    barcode_IntakeService --> barcode_ProductBarcodeRepository
-    barcode_IntakeService --> finance_PurchaseService
-    barcode_IntakeService --> stores_StoreRepository
-    api_IntakeController --> barcode_IntakeService
-    api_IntakeController_IntakeRequest --> barcode_IntakeService
-    api_IntakeController_IntakeResult --> barcode_IntakeService
-    api_ServiceConfig ..> barcode_IntakeService
-```
-
-| Field | Type |
-|---|---|
-| `log` | `Logger` |
-| `NO_BRAND` | `String` |
-| `MAX_PACKS` | `int` |
-| `barcodes` | `ProductBarcodeRepository` |
-| `purchases` | `PurchaseService` |
-| `stores` | `StoreRepository` |
-
-| Member | Visibility | What it does |
-|---|---|---|
-| `IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores)` | public |  |
-| `List<LineResult> intake(String storeName, LocalDate purchaseDate, List<Line> lines)` | public |  |
-
-**Referenced by:** `IntakeController`, `IntakeController.IntakeRequest`, `IntakeController.IntakeResult`, `ServiceConfig`
-
-## IntakeService.Line
-
-*record*
-
-One line to put away. packs defaults to 1; expirationDate is required; pricePaid is the total
-for all the packs of the line and, when missing, the known price of the store item times the packs (a line for a
-product with no known price at this store needs it); packSize / packUnit (both or neither) replace
-the barcode's pack for this purchase, for a special package.
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeService_Line["IntakeService.Line"] {
-        <<record>>
-        +String barcode
-        +Integer packs
-        +LocalDate expirationDate
-        +Double pricePaid
-        +Integer packSize
-        +String packUnit
-    }
-    class barcode_IntakeService["IntakeService"]
-    barcode_IntakeService *-- barcode_IntakeService_Line
-```
-
-| Component | Type |
-|---|---|
-| `barcode` | `String` |
-| `packs` | `Integer` |
-| `expirationDate` | `LocalDate` |
-| `pricePaid` | `Double` |
-| `packSize` | `Integer` |
-| `packUnit` | `String` |
-
-**Referenced by:** `IntakeService`
-
-## IntakeService.LineResult
-
-*record*
-
-What happened to one line: recorded (purchase, store item, how much stock was added in which unit) or why not.
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeService_LineResult["IntakeService.LineResult"] {
-        <<record>>
-        +int index
-        +String barcode
-        +boolean ok
-        +Integer purchaseId
-        +Integer storeItemId
-        +Integer stockAdded
-        +String stockUnit
-        +String code
-        +String message
-    }
-    class barcode_IntakeService["IntakeService"]
-    barcode_IntakeService *-- barcode_IntakeService_LineResult
-```
-
-| Component | Type |
-|---|---|
-| `index` | `int` |
-| `barcode` | `String` |
-| `ok` | `boolean` |
-| `purchaseId` | `Integer` |
-| `storeItemId` | `Integer` |
-| `stockAdded` | `Integer` |
-| `stockUnit` | `String` |
-| `code` | `String` |
-| `message` | `String` |
-
-**Referenced by:** `IntakeService`
-
-## IntakeService.LineException
-
-*class · extends RuntimeException*
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeService_LineException["IntakeService.LineException"] {
-        -String code
-        ~LineException(String code, String message)
-    }
-    class barcode_IntakeService["IntakeService"]
-    barcode_IntakeService *-- barcode_IntakeService_LineException
-```
-
-| Field | Type |
-|---|---|
-| `code` | `String` |
-
-| Member | Visibility | What it does |
-|---|---|---|
-| `LineException(String code, String message)` | package |  |
-
-**Referenced by:** `IntakeService`
-
 ## InvalidBarcodeException
 
 *class · extends IllegalArgumentException*
@@ -601,11 +411,9 @@ classDiagram
         +findByCode(String code) Optional~BarcodeProduct~
         +upsert(Connection con, String code, int inventoryItemId, Integer brandId, String packUnit, int packSize, String name, LocalDate today) void
         +link(Connection con, String code, int storeItemId) void
-        +link(String code, int storeItemId) void
         +findInventoryItemIdOfStoreItem(Connection con, int storeItemId) Optional~Integer~
     }
     class barcode_BarcodeService["BarcodeService"]
-    class barcode_IntakeService["IntakeService"]
     class barcode_BarcodeProduct["BarcodeProduct"] {
         <<record>>
     }
@@ -615,7 +423,6 @@ classDiagram
     barcode_ProductBarcodeRepository ..> barcode_BarcodeProduct
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     barcode_BarcodeService --> barcode_ProductBarcodeRepository
-    barcode_IntakeService --> barcode_ProductBarcodeRepository
 ```
 
 | Member | Visibility | What it does |
@@ -624,10 +431,9 @@ classDiagram
 | `Optional<BarcodeProduct> findByCode(String code)` | public | The product a normalised barcode identifies, with the store items that carry it; empty if DAHÄM does not know it. |
 | `void upsert(Connection con, String code, int inventoryItemId, Integer brandId, String packUnit, int packSize, String name, LocalDate today)` | public | Creates the barcode, or replaces what it identifies (the day it was first entered stays). |
 | `void link(Connection con, String code, int storeItemId)` | public | Links a store item to the barcode (already linked is fine). |
-| `void link(String code, int storeItemId)` | public | Links a store item to the barcode on its own connection (already linked is fine). |
 | `Optional<Integer> findInventoryItemIdOfStoreItem(Connection con, int storeItemId)` | public | The catalogue item a store item is for, or empty if there is no such store item. |
 
-**Referenced by:** `BarcodeService`, `IntakeService`, `ServiceConfig`
+**Referenced by:** `BarcodeService`, `ServiceConfig`
 
 ## ProductDataSource
 

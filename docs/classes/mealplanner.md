@@ -398,9 +398,6 @@ classDiagram
     class api_BarcodeController["BarcodeController"] {
         <<controller>>
     }
-    class api_IntakeController["IntakeController"] {
-        <<controller>>
-    }
     class api_MealPlanController["MealPlanController"] {
         <<controller>>
     }
@@ -432,7 +429,6 @@ classDiagram
     mealplanner_MealPlanService ..> mealplanner_PlannedMeal
     mealplanner_MealPlanService ..> mealplanner_MealChange
     api_BarcodeController --> mealplanner_MealPlanService
-    api_IntakeController --> mealplanner_MealPlanService
     api_MealPlanController --> mealplanner_MealPlanService
     api_MealPlanWeekDto ..> mealplanner_MealPlanService
     api_MealServingsScheduleConfig ..> mealplanner_MealPlanService
@@ -466,7 +462,7 @@ classDiagram
 | `int freezePastServings(Integer householdPeople)` | public | The nightly job: writes the resolved servings onto every meal of a past day that still follows the default, so a later change of the household number or of a recipe's preference no longer rewrites history. |
 | `Optional<PlannedMeal> findMeal(int entryId)` | public |  |
 
-**Referenced by:** `BarcodeController`, `IntakeController`, `MealPlanController`, `MealPlanWeekDto`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`, `ShoppingListItemController`
+**Referenced by:** `BarcodeController`, `MealPlanController`, `MealPlanWeekDto`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`, `ShoppingListItemController`
 
 ## MealPlanService.Day
 
