@@ -483,6 +483,15 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   image decoding (ZXing) for a photo of a barcode, the spreadsheet / CSV import of Nate's hand-written list (it can call
   `/api/intake` as it is), recording the price of a purchase from a receipt, and unit conversions for packs in pieces vs
   items in g (counted as 1 per pack).
+- **Barcode UI support (2026-11-11, frontend agent's list)** — done: a store or brand name must already exist, so a
+  typo cannot add a bogus one (`POST /api/intake` needs `createStore: true` for a new store, `PUT /api/barcodes/{code}`
+  needs `createBrand: true` for a new brand; otherwise 400 `UNKNOWN_STORE` / `UNKNOWN_BRAND`; matching ignores case);
+  pickers `GET /api/stores` and `GET /api/brands?q=&page=&pageSize=`; `GET /api/inventory/{id}/batches` (store, brand,
+  purchase and expiry date, packs, pack size, what is left in the item's unit, earliest expiry first, `?all=true` includes
+  used-up ones). Next: a client request id on intake so a repeated submit is not recorded twice (needs a table: migration
+  0021). Wanted, lower priority, not built: marking a line as bought on sale (link to the current offer; "surface, don't
+  decide": an explicit flag, no automatic matching), and pending scans shared between phone and tablet for cart mode (a
+  holding table; unpacking mode comes first).
 - **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list
   summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
   PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN, INTERNAL_ERROR),

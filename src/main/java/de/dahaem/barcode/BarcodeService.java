@@ -3,7 +3,9 @@ package de.dahaem.barcode;
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.Item;
 import de.dahaem.shared.Units;
+import de.dahaem.stores.BrandRef;
 import de.dahaem.stores.StoreRepository;
+import de.dahaem.stores.UnknownBrandException;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -50,13 +52,23 @@ public class BarcodeService {
     }
 
     /**
-     * Remembers what a barcode is (or replaces it): the catalogue item, the brand (blank = none), the pack and the name as
+     * Remembers what a barcode is (or replaces it): the catalogue item, the brand (blank = none; a new brand is created), the pack and the name as
      * printed. {@code storeItemId} (optional) also links the store item that carries it; it must be for the same catalogue
      * item. The pack is stored in the units the shopping list uses (g, ml, stück; see {@link #canonicalPack}) and must fit
      * the item's unit. Returns the barcode as it is now.
      */
     public BarcodeLookup assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit,
                                 String name, Integer storeItemId, LocalDate today) {
+        return assign(rawCode, inventoryItemId, brand, packSize, packUnit, name, storeItemId, true, today);
+    }
+
+    /**
+     * Like {@link #assign(String, int, String, int, String, String, Integer, LocalDate)}, but a brand that does not exist
+     * is only created when {@code createBrand} is true; otherwise an UnknownBrandException (400 UNKNOWN_BRAND) and nothing
+     * is saved, so a typo cannot add a bogus brand. The API uses this one.
+     */
+    public BarcodeLookup assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit,
+                                String name, Integer storeItemId, boolean createBrand, LocalDate today) {
         String code = Gtin.normalize(rawCode);
         String unit = packUnit == null ? "" : packUnit.trim();
         if (packSize <= 0 || packSize > 9_999_999) {
@@ -85,7 +97,13 @@ public class BarcodeService {
                             + " is for another catalogue item than " + inventoryItemId);
                 }
             }
-            Integer brandId = brandName == null ? null : storeRepository.findOrCreateBrand(con, brandName);
+            Integer brandId = null;
+            if (brandName != null) {
+                brandId = createBrand
+                        ? storeRepository.findOrCreateBrand(con, brandName)
+                        : storeRepository.findBrandByName(brandName).map(BrandRef::id)
+                                .orElseThrow(() -> new UnknownBrandException(brandName));
+            }
             repository.upsert(con, code, inventoryItemId, brandId, pack.unit(), pack.size(), printedName, today);
             if (storeItemId != null) {
                 repository.link(con, code, storeItemId);

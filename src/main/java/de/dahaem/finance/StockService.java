@@ -6,6 +6,8 @@ import de.dahaem.inventory.Item;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,6 +23,29 @@ public class StockService {
     public StockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository) {
         this.purchaseRepository = purchaseRepository;
         this.inventoryRepository = inventoryRepository;
+    }
+
+    /**
+     * The batches (purchases) of an item, in the order they are used (earliest expiry first), with what is left of each in
+     * the item's own unit. Used-up batches are left out unless {@code includeUsedUp}. Empty if there is no such item.
+     */
+    public Optional<List<StockBatch>> batches(int inventoryItemId, boolean includeUsedUp) {
+        Optional<Item> found = inventoryRepository.findById(inventoryItemId);
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        String unit = found.get().getUnit();
+        List<StockBatch> out = new ArrayList<>();
+        for (PurchaseRepository.BatchRow row : purchaseRepository.findBatchesOfItem(inventoryItemId)) {
+            int remaining = row.remaining() != null ? row.remaining()
+                    : row.quantityPurchased() * StockAmounts.perPack(row.packSize(), row.packUnit(), unit);
+            if (remaining > 0 || includeUsedUp) {
+                out.add(new StockBatch(row.purchaseId(), row.storeItemId(), row.storeName(), row.brandName(),
+                        row.purchaseDate(), row.expirationDate(), row.quantityPurchased(), row.packSize(),
+                        row.packUnit(), remaining, unit));
+            }
+        }
+        return Optional.of(out);
     }
 
     /**

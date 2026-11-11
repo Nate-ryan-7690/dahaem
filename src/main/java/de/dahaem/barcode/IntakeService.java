@@ -2,7 +2,9 @@ package de.dahaem.barcode;
 
 import de.dahaem.finance.PurchaseService;
 import de.dahaem.finance.StockAmounts;
+import de.dahaem.stores.StoreRef;
 import de.dahaem.stores.StoreRepository;
+import de.dahaem.stores.UnknownStoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,10 +50,21 @@ public class IntakeService {
                              Integer stockAdded, String stockUnit, String code, String message) {
     }
 
-    public List<LineResult> intake(String storeName, LocalDate purchaseDate, List<Line> lines) {
+    /**
+     * Puts the lines away at the store. The store must already exist (case does not matter) unless {@code createStore}
+     * is set, so a typo cannot add a bogus store: otherwise an UnknownStoreException (400 UNKNOWN_STORE) and nothing is
+     * recorded.
+     */
+    public List<LineResult> intake(String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines) {
+        String wanted = storeName.trim();
+        Optional<StoreRef> existing = stores.findStoreByName(wanted);
+        if (existing.isEmpty() && !createStore) {
+            throw new UnknownStoreException(wanted);
+        }
+        String store = existing.map(StoreRef::name).orElse(wanted);
         List<LineResult> out = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
-            out.add(one(i, storeName, purchaseDate, lines.get(i)));
+            out.add(one(i, store, purchaseDate, lines.get(i)));
         }
         return out;
     }

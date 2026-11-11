@@ -4,6 +4,8 @@ import de.dahaem.barcode.InvalidBarcodeException;
 import de.dahaem.barcode.PackUnitException;
 import de.dahaem.mealplanner.PastDayException;
 import de.dahaem.shopping.ListCompletedException;
+import de.dahaem.stores.UnknownBrandException;
+import de.dahaem.stores.UnknownStoreException;
 import de.dahaem.shopping.PastShoppingDayException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +58,17 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidBarcodeException.class)
     public ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e) {
         return error(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
+    }
+
+    /** A store or brand name that does not exist, where creating one was not asked for: a bad request with its own code. */
+    @ExceptionHandler(UnknownStoreException.class)
+    public ResponseEntity<ErrorResponse> unknownStore(UnknownStoreException e) {
+        return error(HttpStatus.BAD_REQUEST, "UNKNOWN_STORE", e.getMessage());
+    }
+
+    @ExceptionHandler(UnknownBrandException.class)
+    public ResponseEntity<ErrorResponse> unknownBrand(UnknownBrandException e) {
+        return error(HttpStatus.BAD_REQUEST, "UNKNOWN_BRAND", e.getMessage());
     }
 
     /** The pack of a barcode cannot be stocked in the item's unit: a bad request with a code of its own. */

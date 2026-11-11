@@ -412,6 +412,86 @@ public class StoreRepository {
         }
     }
 
+    /** Every store, by name. */
+    public List<StoreRef> listStores() {
+        List<StoreRef> out = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT store_id, store_name FROM store ORDER BY store_name");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(new StoreRef(rs.getInt(1), rs.getString(2)));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not list the stores", e);
+        }
+        return out;
+    }
+
+    /** The store with this name (case does not matter), or empty. Looks only; creates nothing. */
+    public java.util.Optional<StoreRef> findStoreByName(String name) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT store_id, store_name FROM store WHERE store_name = ?")) {
+            ps.setString(1, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? java.util.Optional.of(new StoreRef(rs.getInt(1), rs.getString(2)))
+                        : java.util.Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not look up store " + name, e);
+        }
+    }
+
+    /** The brand with this name (case does not matter), or empty. Looks only; creates nothing. */
+    public java.util.Optional<BrandRef> findBrandByName(String name) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT brand_id, brand_name FROM brand WHERE brand_name = ?")) {
+            ps.setString(1, name);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? java.util.Optional.of(new BrandRef(rs.getInt(1), rs.getString(2)))
+                        : java.util.Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not look up brand " + name, e);
+        }
+    }
+
+    /**
+     * One page of brands, by name. {@code query} (nullable) matches the name as a case-insensitive substring; its wildcards
+     * are escaped, so a search for "50%" means "50%".
+     */
+    public BrandPage searchBrands(String query, long offset, int limit) {
+        String where = " WHERE (? IS NULL OR brand_name LIKE ?)";
+        String pattern = query == null ? null
+                : "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        try (Connection con = Database.getConnection()) {
+            long total;
+            try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM brand" + where)) {
+                ps.setString(1, pattern);
+                ps.setString(2, pattern);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    total = rs.getLong(1);
+                }
+            }
+            List<BrandRef> items = new ArrayList<>();
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT brand_id, brand_name FROM brand" + where + " ORDER BY brand_name, brand_id LIMIT ? OFFSET ?")) {
+                ps.setString(1, pattern);
+                ps.setString(2, pattern);
+                ps.setInt(3, limit);
+                ps.setLong(4, offset);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        items.add(new BrandRef(rs.getInt(1), rs.getString(2)));
+                    }
+                }
+            }
+            return new BrandPage(items, total);
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not search brands", e);
+        }
+    }
+
     /**
      * The normal price of the store item for (store, brand, item, unit, size), or empty if there is no such store item or it
      * has no price. Looks only; creates nothing.

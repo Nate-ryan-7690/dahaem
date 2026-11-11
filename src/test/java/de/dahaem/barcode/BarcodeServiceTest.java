@@ -3,6 +3,7 @@ package de.dahaem.barcode;
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.shared.Database;
 import de.dahaem.stores.StoreRepository;
+import de.dahaem.stores.UnknownBrandException;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -178,6 +179,22 @@ class BarcodeServiceTest {
         assertEquals(500, service.lookup(CODE).product().packSize());
         assertEquals(250, service.lookup("73513537").product().packSize());
         assertEquals(550, service.lookup("4012345678901").product().packSize());
+    }
+
+    @Test
+    void anUnknownBrandIsRefusedUnlessAskedAndAnExistingOneMatchesWhateverTheCase() throws SQLException {
+        assertThrows(UnknownBrandException.class,
+                () -> service.assign(CODE, 1, "Barilaa", 500, "g", null, null, false, TODAY));
+        assertEquals(0, count("SELECT COUNT(*) FROM brand WHERE brand_name = 'Barilaa'"), "a typo must not add a brand");
+        assertTrue(repository.findByCode(CODE).isEmpty());
+
+        BarcodeProduct existing = service.assign(CODE, 1, "testbrand", 500, "g", null, null, false, TODAY).product();
+        assertEquals("TestBrand", existing.brand());
+        assertEquals(1, count("SELECT COUNT(*) FROM brand"), "'testbrand' is the existing TestBrand");
+
+        BarcodeProduct created = service.assign("73513537", 1, "Barilla", 250, "g", null, null, true, TODAY).product();
+        assertEquals("Barilla", created.brand());
+        assertEquals(2, count("SELECT COUNT(*) FROM brand"));
     }
 
     @Test

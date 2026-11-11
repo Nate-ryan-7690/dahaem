@@ -208,7 +208,7 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.code").value("PACK_UNIT_MISMATCH"));
         mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"inventoryItemId\": 40, \"brand\": \"Testmarke\", \"packSize\": 1000, "
+                        .content("{\"inventoryItemId\": 40, \"brand\": \"Testmarke\", \"createBrand\": true, \"packSize\": 1000, "
                                 + "\"packUnit\": \"g\", \"name\": \"Speisezwiebeln\", \"storeItemId\": 1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("KNOWN"))
@@ -230,7 +230,8 @@ class ApiSmokeTest {
         // item 40 (onion) is counted in g; a 1 kg pack is 1000 g of stock
         mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"inventoryItemId\": 40, \"packSize\": 1, \"packUnit\": \"kg\"}"))
+                        .content("{\"inventoryItemId\": 40, \"brand\": \"Zweitmarke\", \"createBrand\": true, "
+                                + "\"packSize\": 1, \"packUnit\": \"kg\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.product.packSize").value(1000))
                 .andExpect(jsonPath("$.product.packUnit").value("g"))
@@ -238,7 +239,7 @@ class ApiSmokeTest {
 
         mvc.perform(post("/api/intake").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"storeName\": \"Testladen\", \"lines\": ["
+                        .content("{\"storeName\": \"Testladen\", \"createStore\": true, \"lines\": ["
                                 + "{\"barcode\": \"" + code + "\", \"packs\": 2, \"expirationDate\": \"2031-05-01\", \"pricePaid\": 1.98},"
                                 + "{\"barcode\": \"12345\", \"expirationDate\": \"2031-05-01\", \"pricePaid\": 1.0}]}"))
                 .andExpect(status().isOk())
@@ -251,6 +252,37 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.results[1].code").value("INVALID_BARCODE"));
         mvc.perform(get("/api/barcodes/{code}", code))
                 .andExpect(jsonPath("$.product.storeItems[0].storeName").value("Testladen"));
+        mvc.perform(get("/api/inventory/40/batches"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].remaining", contains(2000)))
+                .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].unit", contains("g")))
+                .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].packs", contains(2)));
+        mvc.perform(get("/api/inventory/999999/batches"))
+                .andExpect(status().isNotFound());
+
+        // a typo in the store or brand must not create a new one
+        mvc.perform(post("/api/intake").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"storeName\": \"Testladn\", \"lines\": [{\"barcode\": \"" + code
+                                + "\", \"expirationDate\": \"2031-05-01\", \"pricePaid\": 1.0}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("UNKNOWN_STORE"));
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": 40, \"brand\": \"Zweitmarkee\", \"packSize\": 1, \"packUnit\": \"kg\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("UNKNOWN_BRAND"));
+        mvc.perform(get("/api/stores"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.name == 'Testladen')].id").isNotEmpty());
+        mvc.perform(get("/api/brands").param("q", "zweitmarke").param("pageSize", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].name").value("Zweitmarke"))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+        mvc.perform(get("/api/brands").param("pageSize", "0"))
+                .andExpect(status().isBadRequest());
 
         mvc.perform(post("/api/intake").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"storeName\": \"Testladen\", \"lines\": []}"))

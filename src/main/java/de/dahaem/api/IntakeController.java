@@ -25,8 +25,12 @@ public class IntakeController {
         this.mealPlanService = mealPlanService;
     }
 
-    /** Body: the store, the purchase day (default today, not in the future) and the lines. */
-    public record IntakeRequest(String storeName, LocalDate purchaseDate, List<IntakeService.Line> lines) {
+    /**
+     * Body: the store (an existing one, from {@code GET /api/stores}; {@code createStore: true} is needed to add a new
+     * one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines.
+     */
+    public record IntakeRequest(String storeName, Boolean createStore, LocalDate purchaseDate,
+                                List<IntakeService.Line> lines) {
     }
 
     /** {@code results} has one entry per line, in order; {@code recorded} / {@code failed} count them. */
@@ -38,7 +42,7 @@ public class IntakeController {
      * {@code pricePaid} (total for the packs; optional if the store item's price is known), and optionally
      * {@code packSize} + {@code packUnit} for a special package. The barcode must have been assigned
      * ({@code PUT /api/barcodes/{code}}). Stock grows by packs x pack size in the item's own unit and the expiry date is
-     * kept as a batch (the earliest is used first). Always answers 200 when the request itself is fine: a line that could
+     * kept as a batch (the earliest is used first). An unknown store is a 400 with code UNKNOWN_STORE unless {@code createStore} is true. Always answers 200 when the request itself is fine: a line that could
      * not be recorded has {@code ok: false} with a {@code code} (INVALID_BARCODE, BARCODE_CHECKSUM, BARCODE_UNKNOWN,
      * EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
      */
@@ -55,8 +59,8 @@ public class IntakeController {
         if (purchaseDate.isAfter(today)) {
             throw new BadRequestException("'purchaseDate' must not be in the future");
         }
-        List<IntakeService.LineResult> results = intakeService.intake(request.storeName().trim(), purchaseDate,
-                request.lines());
+        List<IntakeService.LineResult> results = intakeService.intake(request.storeName(),
+                Boolean.TRUE.equals(request.createStore()), purchaseDate, request.lines());
         int recorded = (int) results.stream().filter(IntakeService.LineResult::ok).count();
         return new IntakeResult(results, recorded, results.size() - recorded);
     }
