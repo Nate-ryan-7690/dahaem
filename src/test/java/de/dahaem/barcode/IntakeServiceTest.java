@@ -1,0 +1,176 @@
+package de.dahaem.barcode;
+
+import de.dahaem.finance.PurchaseRepository;
+import de.dahaem.finance.PurchaseService;
+import de.dahaem.finance.StockService;
+import de.dahaem.inventory.InventoryRepository;
+import de.dahaem.inventory.Item;
+import de.dahaem.shared.Database;
+import de.dahaem.stores.StoreRepository;
+import de.dahaem.testsupport.TestDatabase;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Putting groceries away by barcode on a throwaway MariaDB: stock in the item's unit, batches, store items, partial failure. */
+class IntakeServiceTest {
+
+    private static final String SPAGHETTI = "4006381333931";
+    private static final String MILK = "73513537";
+    private static final LocalDate TODAY = LocalDate.of(2026, 11, 11);
+
+    private IntakeService intake;
+    private StockService stock;
+
+    @BeforeEach
+    void setUp() throws IOException, SQLException {
+        TestDatabase.reset();
+        PurchaseRepository purchaseRepository = new PurchaseRepository();
+        StoreRepository stores = new StoreRepository();
+        InventoryRepository inventory = new InventoryRepository();
+        ProductBarcodeRepository barcodes = new ProductBarcodeRepository();
+        PurchaseService purchases = new PurchaseService(purchaseRepository, stores, inventory);
+        intake = new IntakeService(barcodes, purchases, stores);
+        stock = new StockService(purchaseRepository, inventory);
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, "
+                + "inventory_item_quantity, inventory_item_unit, inventory_item_category) VALUES "
+                + "(1, 'spaghetti', 'spaghetti', 0, 'g', 'pasta'), (2, 'milk', 'milch', 0, 'ml', 'dairy')");
+        BarcodeService barcodeService = new BarcodeService(barcodes, inventory, stores, ProductDataSource.disabled());
+        barcodeService.assign(SPAGHETTI, 1, "Barilla", 500, "g", "Spaghetti n. 5", null, TODAY);
+        barcodeService.assign(MILK, 2, null, 1, "l", null, null, TODAY);
+    }
+
+    @AfterEach
+    void tearDown() throws IOException {
+        TestDatabase.close();
+    }
+
+    @Test
+    void stockGrowsByPacksTimesPackSizeInTheItemsUnitAndTheStoreItemIsLinked() throws SQLException {
+        IntakeService.LineResult r = intake.intake("Aldi", TODAY, List.of(
+                new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null))).get(0);
+
+        assertTrue(r.ok(), r.message());
+        assertEquals(1000, r.stockAdded());
+        assertEquals("g", r.stockUnit());
+        assertEquals(1000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+        assertEquals("2026-12-01", text("SELECT inventory_item_earliest_exp_date FROM inventory_item WHERE inventory_item_id = 1"));
+        // the store item for (Aldi, Barilla, spaghetti, 500 g) exists and carries the barcode
+        assertEquals(1, count("SELECT COUNT(*) FROM store_item WHERE store_item_package_size = 500 AND store_item_package_unit = 'g'"));
+        assertEquals(1, count("SELECT COUNT(*) FROM product_barcode_store_item WHERE product_barcode_store_item_code = '"
+                + SPAGHETTI + "'"));
+        assertEquals(2, count("SELECT purchase_history_quantity_purchased FROM purchase_history"));
+        assertEquals(1, count("SELECT COUNT(*) FROM purchase_history WHERE purchase_history_quantity_remaining IS NULL"));
+    }
+
+    @Test
+    void useTakesFromTheEarliestExpiringBatchInGramsAndMovesTheDateOn() throws SQLException {
+        // 2 packs (1000 g) expiring 1 Dec, 1 pack (500 g) expiring 10 Dec
+        intake.intake("Aldi", TODAY, List.of(
+                new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 10), 1.29, null, null)));
+
+        Item item = stock.use(1, 1200).orElseThrow();
+
+        assertEquals(300, item.getQuantity());
+        assertEquals(LocalDate.of(2026, 12, 10), item.getEarliestExpDate());
+        assertEquals(0, count("SELECT purchase_history_quantity_remaining FROM purchase_history WHERE purchase_history_expiration_date = '2026-12-01'"));
+        assertEquals(300, count("SELECT purchase_history_quantity_remaining FROM purchase_history WHERE purchase_history_expiration_date = '2026-12-10'"));
+    }
+
+    @Test
+    void aLinePriceIsOptionalWhenTheStoreItemHasAKnownPrice() throws SQLException {
+        intake.intake("Aldi", TODAY, List.of(new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null)));
+        exec("UPDATE store_item SET store_item_price = 1.29");
+
+        IntakeService.LineResult r = intake.intake("Aldi", TODAY, List.of(
+                new IntakeService.Line(SPAGHETTI, 3, LocalDate.of(2026, 12, 5), null, null, null))).get(0);
+
+        assertTrue(r.ok(), r.message());
+        assertEquals(1, count("SELECT COUNT(*) FROM purchase_history WHERE purchase_history_price_paid = 3.87"));
+    }
+
+    @Test
+    void withoutAKnownPriceTheLineNeedsOneAndNothingIsCreated() throws SQLException {
+        IntakeService.LineResult r = intake.intake("Lidl", TODAY, List.of(
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), null, null, null))).get(0);
+
+        assertFalse(r.ok());
+        assertEquals("PRICE_REQUIRED", r.code());
+        assertEquals(0, count("SELECT COUNT(*) FROM store"), "a refused line must not create a store");
+        assertEquals(0, count("SELECT COUNT(*) FROM store_item"));
+        assertEquals(0, count("SELECT COUNT(*) FROM purchase_history"));
+    }
+
+    @Test
+    void aSpecialPackIsItsOwnStoreItemAndAddsItsOwnSize() throws SQLException {
+        IntakeService.LineResult r = intake.intake("Aldi", TODAY, List.of(
+                new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.98, 550, "g"))).get(0);
+
+        assertTrue(r.ok(), r.message());
+        assertEquals(1100, r.stockAdded());
+        assertEquals(1, count("SELECT COUNT(*) FROM store_item WHERE store_item_package_size = 550"));
+        assertEquals(1100, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+    }
+
+    @Test
+    void oneBadLineDoesNotStopTheOthers() throws SQLException {
+        List<IntakeService.LineResult> results = intake.intake("Aldi", TODAY, List.of(
+                new IntakeService.Line("4006381333932", 1, LocalDate.of(2026, 12, 1), 1.0, null, null),   // typo
+                new IntakeService.Line("4012345678901", 1, LocalDate.of(2026, 12, 1), 1.0, null, null),   // not assigned
+                new IntakeService.Line(SPAGHETTI, 1, null, 1.0, null, null),                              // no expiry
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.0, 500, "ml"),          // unit mismatch
+                new IntakeService.Line(MILK, 2, LocalDate.of(2026, 11, 20), 2.38, null, null)));          // fine
+
+        assertEquals("BARCODE_CHECKSUM", results.get(0).code());
+        assertEquals("BARCODE_UNKNOWN", results.get(1).code());
+        assertEquals("EXPIRY_REQUIRED", results.get(2).code());
+        assertEquals("PACK_UNIT_MISMATCH", results.get(3).code());
+        assertTrue(results.get(4).ok());
+        assertEquals(2000, results.get(4).stockAdded());
+        assertEquals("ml", results.get(4).stockUnit());
+        assertEquals(2000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 2"));
+        assertEquals(0, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+        assertNull(results.get(0).purchaseId());
+    }
+
+    // ---------- helpers ----------
+
+    private static int count(String sql) throws SQLException {
+        try (Connection con = Database.getConnection();
+             Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
+    private static String text(String sql) throws SQLException {
+        try (Connection con = Database.getConnection();
+             Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getString(1);
+        }
+    }
+
+    private static void exec(String sql) throws SQLException {
+        try (Connection con = Database.getConnection();
+             Statement st = con.createStatement()) {
+            st.execute(sql);
+        }
+    }
+}

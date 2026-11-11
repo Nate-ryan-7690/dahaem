@@ -28,7 +28,7 @@ public class ProductBarcodeRepository {
     /** The product a normalised barcode identifies, with the store items that carry it; empty if DAHÄM does not know it. */
     public Optional<BarcodeProduct> findByCode(String code) {
         String sql = "SELECT pb.product_barcode_item_id, ii.inventory_item_name_deutsch, ii.inventory_item_name_english, "
-                + "b.brand_name, pb.product_barcode_package_size, pb.product_barcode_package_unit, pb.product_barcode_name "
+                + "ii.inventory_item_unit, b.brand_name, pb.product_barcode_package_size, pb.product_barcode_package_unit, pb.product_barcode_name "
                 + "FROM product_barcode pb "
                 + "JOIN inventory_item ii ON ii.inventory_item_id = pb.product_barcode_item_id "
                 + "LEFT JOIN brand b ON b.brand_id = pb.product_barcode_brand_id "
@@ -47,7 +47,7 @@ public class ProductBarcodeRepository {
                         return Optional.empty();
                     }
                     partial = new BarcodeProduct(code, rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4),
-                            rs.getInt(5), rs.getString(6), rs.getString(7), List.of());
+                            rs.getString(5), rs.getInt(6), rs.getString(7), rs.getString(8), List.of());
                 }
             }
             List<BarcodeProduct.LinkedStoreItem> links = new ArrayList<>();
@@ -62,7 +62,8 @@ public class ProductBarcodeRepository {
                 }
             }
             return Optional.of(new BarcodeProduct(code, partial.inventoryItemId(), partial.nameDeutsch(),
-                    partial.nameEnglish(), partial.brand(), partial.packSize(), partial.packUnit(), partial.name(), links));
+                    partial.nameEnglish(), partial.itemUnit(), partial.brand(), partial.packSize(), partial.packUnit(),
+                    partial.name(), links));
         } catch (SQLException e) {
             throw new RuntimeException("Could not load barcode " + code, e);
         }
@@ -100,6 +101,15 @@ public class ProductBarcodeRepository {
             ps.setString(1, code);
             ps.setInt(2, storeItemId);
             ps.executeUpdate();
+        }
+    }
+
+    /** Links a store item to the barcode on its own connection (already linked is fine). */
+    public void link(String code, int storeItemId) {
+        try (Connection con = Database.getConnection()) {
+            link(con, code, storeItemId);
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not link store item " + storeItemId + " to barcode " + code, e);
         }
     }
 

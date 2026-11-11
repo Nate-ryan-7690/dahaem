@@ -472,12 +472,17 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   INVALID_BARCODE and BARCODE_CHECKSUM for typing errors) and `PUT /api/barcodes/{code}` (the user assigns the
   catalogue item; optional `storeItemId` links a store item of the same item). Unknown numbers may be described by Open
   Food Facts (suggestion only, never saved by itself; only the number is sent; OFF) when `DAHAEM_BARCODE_LOOKUP=openfoodfacts`
-  is set, default off. Next: the intake step (barcode + store + packs + expiry date -> find or create the store_item ->
-  purchase -> stock) once the stock unit question is settled: `inventory_item_quantity` is counted in the item's own
-  unit (g, ml, Stück; the shopping list compares it with the line's unit), but a purchase adds PACKS and the batches
-  of the stock use are in packs, so intake and use must agree (proposal: amount = packs x pack size converted to the
-  item's unit, per batch). Also open: image decoding (ZXing) for a photo of a barcode, and the spreadsheet / CSV import
-  of Nate's hand-written list.
+  is set, default off.
+  Intake done (Nate 2026-11-11: stock is counted in the item's own unit): `POST /api/intake` puts lines away
+  (barcode, expiry date, packs, price) for one store: store item found or created for (store, brand, item, pack) and linked
+  to the barcode, purchase recorded, stock grows by packs x pack size in the item's unit (`StockAmounts.perPack`; a pack that
+  cannot be converted counts as 1 per pack, as before), the expiry date stays a batch. A purchase now adds the same way, and
+  `purchase_history_quantity_remaining` (NULL = all of it) is in the item's unit, which `POST /api/inventory/{id}/use` reads
+  the same way. One bad line does not stop the rest (per-line `ok` / `code`). A price is needed unless the store item's
+  price is known (PRICE_REQUIRED); a special pack size per line (`packSize` + `packUnit`) is its own store item. Still open:
+  image decoding (ZXing) for a photo of a barcode, the spreadsheet / CSV import of Nate's hand-written list (it can call
+  `/api/intake` as it is), recording the price of a purchase from a receipt, and unit conversions for packs in pieces vs
+  items in g (counted as 1 per pack).
 - **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list
   summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
   PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN, INTERNAL_ERROR),

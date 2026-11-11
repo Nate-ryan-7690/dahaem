@@ -412,6 +412,33 @@ public class StoreRepository {
         }
     }
 
+    /**
+     * The normal price of the store item for (store, brand, item, unit, size), or empty if there is no such store item or it
+     * has no price. Looks only; creates nothing.
+     */
+    public java.util.Optional<Double> findStoreItemPrice(String storeName, String brandName, int itemId, String unit,
+                                                         int size) {
+        String sql = "SELECT si.store_item_price FROM store_item si "
+                + "JOIN store s ON s.store_id = si.store_item_store_id "
+                + "JOIN brand b ON b.brand_id = si.store_item_brand_id "
+                + "WHERE s.store_name = ? AND b.brand_name = ? AND si.store_item_item_id = ? "
+                + "AND si.store_item_package_unit = ? AND si.store_item_package_size = ? "
+                + "AND si.store_item_price IS NOT NULL LIMIT 1";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, storeName);
+            ps.setString(2, brandName);
+            ps.setInt(3, itemId);
+            ps.setString(4, unit);
+            ps.setInt(5, size);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? java.util.Optional.of(rs.getDouble(1)) : java.util.Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not look up the price of a store item", e);
+        }
+    }
+
     /** Removes promotion rows made before per-product keying existed (store_product_id IS NULL). One-time self-heal. */
     public int deleteLegacyStoreItems(Connection con) throws SQLException {
         try (Statement st = con.createStatement()) {

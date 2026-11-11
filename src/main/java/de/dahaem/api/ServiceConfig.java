@@ -6,6 +6,7 @@ import de.dahaem.diet.DietFilterRepository;
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietPresets;
 import de.dahaem.barcode.BarcodeService;
+import de.dahaem.barcode.IntakeService;
 import de.dahaem.barcode.OpenFoodFactsSource;
 import de.dahaem.barcode.ProductBarcodeRepository;
 import de.dahaem.barcode.ProductDataSource;
@@ -130,6 +131,12 @@ public class ServiceConfig {
                                          InventoryRepository inventoryRepository, StoreRepository storeRepository,
                                          ProductDataSource productDataSource) {
         return new BarcodeService(productBarcodeRepository, inventoryRepository, storeRepository, productDataSource);
+    }
+
+    @Bean
+    public IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository,
+                                       PurchaseService purchaseService, StoreRepository storeRepository) {
+        return new IntakeService(productBarcodeRepository, purchaseService, storeRepository);
     }
 
     @Bean

@@ -55,11 +55,14 @@ public class PurchaseService {
             int purchaseId = repository.insert(con, storeItemId, discountId, wasDiscounted, purchaseDate,
                     quantityPurchased, pricePaid, expirationDate);
 
-            Integer inventoryItemId = repository.findInventoryItemIdForStoreItem(con, storeItemId);
-            if (inventoryItemId == null) {
+            PurchaseRepository.StoreItemStock stock = repository.findStoreItemStock(con, storeItemId);
+            if (stock == null) {
                 throw new IllegalArgumentException("No store_item found with id " + storeItemId);
             }
-            repository.applyPurchaseToInventory(con, inventoryItemId, quantityPurchased, expirationDate);
+            // stock is counted in the item's own unit: each pack adds its size (500 g packs x 2 = 1000 g)
+            int added = Math.multiplyExact(quantityPurchased,
+                    StockAmounts.perPack(stock.packSize(), stock.packUnit(), stock.itemUnit()));
+            repository.applyPurchaseToInventory(con, stock.inventoryItemId(), added, expirationDate);
 
             con.commit();
             return purchaseId;
@@ -90,6 +93,19 @@ public class PurchaseService {
                                          String packageUnit, int packageSize, Double normalPrice,
                                          int quantityPurchased, double pricePaid, LocalDate purchaseDate,
                                          LocalDate expirationDate) {
+        int storeItemId = findOrCreateStoreItem(storeName, brandName, existingInventoryItemId, newItemNameEnglish,
+                newItemNameDeutsch, newItemCategory, packageUnit, packageSize, normalPrice);
+        return recordPurchase(storeItemId, null, false, purchaseDate, quantityPurchased, pricePaid, expirationDate);
+    }
+
+    /**
+     * Finds or creates the store, the brand, the catalogue item (an existing one, or a new generic one) and the store_item
+     * for (store, brand, item, unit, size), in one transaction, and returns the store_item's id. The first half of
+     * {@link #recordNewProductPurchase}, for callers that need the store item (a barcode intake links it).
+     */
+    public int findOrCreateStoreItem(String storeName, String brandName, Integer existingInventoryItemId,
+                                      String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory,
+                                      String packageUnit, int packageSize, Double normalPrice) {
         int storeId = storeRepository.findOrCreateStore(storeName);
 
         int storeItemId;
@@ -113,8 +129,7 @@ public class PurchaseService {
         } finally {
             close(con);
         }
-
-        return recordPurchase(storeItemId, null, false, purchaseDate, quantityPurchased, pricePaid, expirationDate);
+        return storeItemId;
     }
 
     private static void rollback(Connection con) {
