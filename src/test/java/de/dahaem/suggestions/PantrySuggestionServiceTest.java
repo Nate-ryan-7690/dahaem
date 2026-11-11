@@ -77,15 +77,15 @@ class PantrySuggestionServiceTest {
         seedStoreItem(100, 1, 12);
         seedDiscount(1000, 100, today.minusDays(1), today.plusDays(3), 0.99);
 
-        PantryCoverage c = repository.coverageByRecipe(today.plusDays(7), today, "Aldi").get(0);
+        PantryCoverage c = repository.coverageByRecipe(household, today.plusDays(7), today, "Aldi").get(0);
 
         assertEquals(4, c.needed());
         assertEquals(2, c.inStock());
         assertEquals(1, c.expiring());
         assertEquals(1, c.missingOnSale());
         assertEquals(1, c.missingOnSaleAtStore());
-        assertEquals(0, repository.coverageByRecipe(today.plusDays(7), today, "Edeka").get(0).missingOnSaleAtStore());
-        assertEquals(0, repository.coverageByRecipe(today.plusDays(7), today, null).get(0).missingOnSaleAtStore());
+        assertEquals(0, repository.coverageByRecipe(household, today.plusDays(7), today, "Edeka").get(0).missingOnSaleAtStore());
+        assertEquals(0, repository.coverageByRecipe(household, today.plusDays(7), today, null).get(0).missingOnSaleAtStore());
     }
 
     @Test
@@ -100,7 +100,7 @@ class PantrySuggestionServiceTest {
         seedDiscount(1000, 100, today.minusDays(10), today.minusDays(1), 0.99);   // expired
         seedDiscount(1001, 101, today.plusDays(1), today.plusDays(5), 0.99);      // starts tomorrow
 
-        assertEquals(0, repository.coverageByRecipe(today.plusDays(7), today, null).get(0).missingOnSale());
+        assertEquals(0, repository.coverageByRecipe(household, today.plusDays(7), today, null).get(0).missingOnSale());
         assertTrue(repository.offersOnSale(List.of(12, 13), today).isEmpty());
     }
 
@@ -208,7 +208,7 @@ class PantrySuggestionServiceTest {
         seedStoreItem(100, 1, 10);
         seedDiscount(1000, 100, today, today.plusDays(3), 0.99);
 
-        PantryCoverage c = repository.coverageByRecipe(today.plusDays(7), today, "Aldi").get(0);
+        PantryCoverage c = repository.coverageByRecipe(household, today.plusDays(7), today, "Aldi").get(0);
 
         assertEquals(3, c.needed());
         assertEquals(2, c.inStock(), "the expired onion is not usable stock");
