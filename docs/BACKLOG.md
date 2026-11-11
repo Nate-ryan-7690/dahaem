@@ -483,6 +483,20 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   image decoding (ZXing) for a photo of a barcode, the spreadsheet / CSV import of Nate's hand-written list (it can call
   `/api/intake` as it is), recording the price of a purchase from a receipt, and unit conversions for packs in pieces vs
   items in g (counted as 1 per pack).
+- **Accounts in the app (2026-11-11)** — Nate has one account, made on 2026-09-26 with the placeholder email
+  `you@example.com`, and wants a real one plus a way to add people without the command line. Done: `PUT /api/account/password`
+  and `PUT /api/account/email` (the acting user from `X-Acting-User`, believed only with the token; both need the current
+  password and a wrong one counts like a login attempt for the throttle; the email is trimmed and lower-cased, 409 `EMAIL_TAKEN`
+  if another account has it). Other PHP sessions of the user stay logged in after a password change (needs a session version,
+  see the frontend backlog). Open, needs Nate's decision (options and recommendation): how to ADD a member. (A) a household
+  ADMIN adds a member in the app: email, name and a temporary password the admin tells the person, who then changes it with the
+  endpoint above (small, no migration; the API checks that the acting user is an ADMIN of the household); (B) an invitation
+  link: the admin creates a single-use link that expires (random token, only its hash stored; table `household_invite`,
+  migration), the invited person opens it and chooses email, name and password themselves, so the admin never knows the
+  password (more work, a public page, a bit more attack surface); (C) open self-registration: not recommended; (D) keep the
+  command line (`UserAdminRunner`). Recommendation: (A) now for a two-adult household, (B) before anyone outside the family
+  gets an account. Also open: removing or disabling an account (needs a decision: delete the row, or a disabled flag with a
+  migration), roles beyond ADMIN / MEMBER, the placeholder email `you@example.com` is replaced by the new endpoint.
 - **Security audit of both repositories by Fable 5.2 (2026-11-11), backend items** — report: "DAHÄM security review before go-live".
   Done in the token-gate PR: **H1** the internal-token and audit filters decided on the raw, undecoded path
   (`getRequestURI().startsWith("/api/")`), so `/%61pi/...` skipped the token check and fell through to the session login; the

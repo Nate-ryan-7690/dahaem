@@ -28,6 +28,7 @@ public class AccountService {
 
     public static final String DEFAULT_HOUSEHOLD_NAME = "DAHÄM";
     public static final int MIN_PASSWORD_LENGTH = 10;
+    static final int MAX_EMAIL_LENGTH = 254;
     /** BCrypt cost of newly made hashes: 12 is about 4 times the work of the old default 10 (a login takes ~0.25 s). */
     public static final int DEFAULT_BCRYPT_STRENGTH = 12;
     // BCrypt only looks at the first 72 bytes; Spring's encoder rejects anything longer.
@@ -141,6 +142,40 @@ public class AccountService {
             repository.updatePasswordHash(found.getId(), passwordEncoder.encode(rawPassword));
         }
         return user;
+    }
+
+    public Optional<AppUser> findById(int userId) {
+        return repository.findUserById(userId);
+    }
+
+    /**
+     * Sets a new email for a user (the caller has already checked the user's password). The email is trimmed and
+     * lower-cased like at sign-up.
+     *
+     * @throws IllegalArgumentException for an address that is not valid
+     * @throws EmailTakenException      if another account has it
+     */
+    public AppUser changeEmail(int userId, String newEmail) {
+        String normalized = normalizeEmail(newEmail);
+        if (normalized == null || normalized.length() > MAX_EMAIL_LENGTH || !EMAIL.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("Not a valid email address");
+        }
+        Optional<AppUser> holder = repository.findUserByEmail(normalized);
+        if (holder.isPresent() && holder.get().getId() != userId) {
+            throw new EmailTakenException();
+        }
+        if (!repository.updateEmail(userId, normalized)) {
+            throw new NoSuchElementException("No user with id " + userId);
+        }
+        return repository.findUserById(userId).orElseThrow(() -> new NoSuchElementException("No user with id " + userId));
+    }
+
+    /** Sets a new password for a user (the caller has already checked the old one). */
+    public void changePassword(int userId, String newPassword) {
+        validatePassword(newPassword);
+        if (!repository.updatePasswordHash(userId, passwordEncoder.encode(newPassword))) {
+            throw new NoSuchElementException("No user with id " + userId);
+        }
     }
 
     public Optional<AppUser> findByEmail(String email) {

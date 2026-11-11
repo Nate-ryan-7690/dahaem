@@ -30,7 +30,7 @@ Every error has the same shape:
 
 `message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
 `BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH`, `UNKNOWN_STORE`, `UNKNOWN_BRAND` (400); `UNAUTHORIZED`,
-`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `TOO_MANY_ATTEMPTS` (429); `PAST_DAY`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `TOO_MANY_ATTEMPTS` (429); `PAST_DAY`, `EMAIL_TAKEN`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
 `CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
@@ -46,6 +46,8 @@ Every error has the same shape:
 
 | Method | Path | What it does |
 |---|---|---|
+| PUT | [`/api/account/email`](#put-apiaccountemail) | Changes the email (the login name) of the acting user. |
+| PUT | [`/api/account/password`](#put-apiaccountpassword) | Changes the password of the acting user. |
 | GET | [`/api/analytics/spending`](#get-apianalyticsspending) | Total spending: over all purchases, or between from and to (inclusive) when both are given. |
 | POST | [`/api/auth/verify`](#post-apiauthverify) | Checks an email and a password for the PHP front end, which owns the user's session. |
 | GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
@@ -93,6 +95,60 @@ Every error has the same shape:
 | GET | [`/api/suggestions/by-expiring`](#get-apisuggestionsby-expiring) | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
 | GET | [`/api/suggestions/by-savings`](#get-apisuggestionsby-savings) | Recipes ranked by how many ingredients are currently on sale. |
 | GET | [`/api/suggestions/pantry`](#get-apisuggestionspantry) | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
+
+### AccountController
+
+A logged-in user's own account. The PHP front end says who is logged in with the X-Acting-User header (the
+user id from POST /api/auth/verify); every call here also needs the user's current password.
+
+
+#### PUT /api/account/email
+
+Changes the email (the login name) of the acting user. Needs the user's password and the new
+email. 200 with the user (CurrentUserDto); 400 for an invalid address; 401 BAD_CREDENTIALS
+for a wrong password; 409 EMAIL_TAKEN if another account has it; 429 while the client address is slowed down.
+
+**Request body** `ChangeEmailRequest`
+
+```json
+{
+  "password": "…",
+  "email": "…"
+}
+```
+
+**Answer** 200 `CurrentUserDto`
+
+```json
+{
+  "id": 0,
+  "email": "…",
+  "displayName": "…",
+  "household": {
+    "id": 0,
+    "name": "…",
+    "role": "…"
+  }
+}
+```
+
+#### PUT /api/account/password
+
+Changes the password of the acting user. Needs currentPassword and a newPassword of at least 10
+characters that differs from it. 204 on success; 401 BAD_CREDENTIALS if the current password is wrong; 429
+TOO_MANY_ATTEMPTS while the client address is slowed down. Other sessions of the user stay logged in.
+
+**Request body** `ChangePasswordRequest`
+
+```json
+{
+  "currentPassword": "…",
+  "newPassword": "…"
+}
+```
+
+**Answer** 204 `void`
+
 
 ### PurchaseController
 
@@ -1970,6 +2026,32 @@ A brand: its id and name.
 |---|---|
 | `id` | `int` |
 | `name` | `String` |
+
+```json
+{ … }
+```
+
+### ChangeEmailRequest
+
+Body of PUT /api/account/email: the user's password and the new address.
+
+| Property | Type |
+|---|---|
+| `password` | `String` |
+| `email` | `String` |
+
+```json
+{ … }
+```
+
+### ChangePasswordRequest
+
+Body of PUT /api/account/password.
+
+| Property | Type |
+|---|---|
+| `currentPassword` | `String` |
+| `newPassword` | `String` |
 
 ```json
 { … }

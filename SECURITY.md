@@ -37,7 +37,9 @@ DAHÄM is a self-hosted, single/two-user household application. It is not a mult
   real user out). In memory; a restart clears it. The client address is the one the PHP passes in `X-Client-Ip`, so the PHP
   must send the real one; without it every login would share the PHP container's address. Passwords are salted BCrypt (cost
   12, older hashes are upgraded at the next login), minimum length 10.
-- There are no self-service sign-up or password reset: accounts are created and reset by the operator.
+- A logged-in user can change their own email and password (`PUT /api/account/email`, `/password`; the current password is
+  required and a wrong one is slowed down like a login attempt). There is no self-service sign-up and no email-based password
+  reset: accounts are created and reset by the operator.
 
 ## Supported versions
 

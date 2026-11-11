@@ -89,6 +89,36 @@ public class AccountRepository {
         }
     }
 
+    /** Finds the user with this id. */
+    public Optional<AppUser> findUserById(int userId) {
+        String sql = "SELECT user_id, user_email, user_display_name, user_password_hash, user_created_date "
+                + "FROM app_user WHERE user_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(mapUser(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not look up user " + userId, e);
+        }
+    }
+
+    /** Sets a user's (already normalized) email. Returns false when no user has this id; EmailTakenException if it is in use. */
+    public boolean updateEmail(int userId, String email) {
+        String sql = "UPDATE app_user SET user_email = ? WHERE user_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, email);
+            ps.setInt(2, userId);
+            return ps.executeUpdate() == 1;
+        } catch (java.sql.SQLIntegrityConstraintViolationException e) {
+            throw new EmailTakenException();   // the UNIQUE constraint: somebody took it in the meantime
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not update the email of user " + userId, e);
+        }
+    }
+
     /** Replaces a user's password hash. Returns false when no user has this id. */
     public boolean updatePasswordHash(int userId, String passwordHash) {
         String sql = "UPDATE app_user SET user_password_hash = ? WHERE user_id = ?";

@@ -4,13 +4,17 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling.
 
-92 types in 64 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+96 types in 68 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
 ```mermaid
 classDiagram
     direction LR
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
+    class api_ActingUser["ActingUser"]
     class api_AddMealRequest["AddMealRequest"] {
         <<record>>
     }
@@ -36,6 +40,12 @@ classDiagram
         <<controller>>
     }
     class api_BrandPageDto["BrandPageDto"] {
+        <<record>>
+    }
+    class api_ChangeEmailRequest["ChangeEmailRequest"] {
+        <<record>>
+    }
+    class api_ChangePasswordRequest["ChangePasswordRequest"] {
         <<record>>
     }
     class api_CreateMealPlanRequest["CreateMealPlanRequest"] {
@@ -271,6 +281,11 @@ classDiagram
     class api_VerifyRequest["VerifyRequest"] {
         <<record>>
     }
+    api_AccountController --> api_InternalTokenFilter
+    api_AccountController ..> api_ChangePasswordRequest
+    api_AccountController ..> api_ChangeEmailRequest
+    api_AccountController ..> api_CurrentUserDto
+    api_ActingUser ..> api_InternalTokenFilter
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> api_UnauthorizedException
@@ -361,6 +376,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
+| [`AccountController`](#accountcontroller) | class | REST controller | A logged-in user's own account. |
+| [`ActingUser`](#actinguser) | class |  | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in). |
 | [`AddMealRequest`](#addmealrequest) | record |  | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](#addplannedreciperequest) | record |  | Body of POST /api/meal-plans/{id}/recipes, e.g. |
 | [`AddTagRequest`](#addtagrequest) | record |  | Body of POST /api/recipes/{id}/tags. |
@@ -372,6 +389,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`BadRequestException`](#badrequestexception) | class |  | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](#barcodecontroller) | class | REST controller | Barcode numbers: what a number is, and remembering it. |
 | [`BrandPageDto`](#brandpagedto) | record |  | One page of GET /api/brands. |
+| [`ChangeEmailRequest`](#changeemailrequest) | record |  | Body of PUT /api/account/email: the user's password and the new address. |
+| [`ChangePasswordRequest`](#changepasswordrequest) | record |  | Body of PUT /api/account/password. |
 | [`CreateMealPlanRequest`](#createmealplanrequest) | record |  | Body of POST /api/meal-plans, e.g. |
 | [`CreatePurchaseRequest`](#createpurchaserequest) | record |  | Body of POST /api/purchases: a purchase of a known store_item. |
 | [`CurrentUserDto`](#currentuserdto) | record |  | Answer of POST /api/auth/verify. |
@@ -382,7 +401,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`DietDto.Item`](#dietdtoitem) | record |  |  |
 | [`DietDto.SoftHits`](#dietdtosofthits) | record |  |  |
 | [`DietDto.Unmatched`](#dietdtounmatched) | record |  |  |
-| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY |
+| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, EMAIL_TAKEN, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST |
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
@@ -453,6 +472,82 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`UnauthorizedException`](#unauthorizedexception) | class |  | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
 | [`UseStockRequest`](#usestockrequest) | record |  | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 | [`VerifyRequest`](#verifyrequest) | record |  | Body of POST /api/auth/verify: the login the PHP front end received from the user. |
+
+## AccountController
+
+*class · REST controller*
+
+A logged-in user's own account. The PHP front end says who is logged in with the X-Acting-User header (the
+user id from POST /api/auth/verify); every call here also needs the user's current password.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_AccountController["AccountController"] {
+        <<controller>>
+        -AccountService accounts
+        -AccountSelfService selfService
+        -InternalTokenFilter internalToken
+        +AccountController(AccountService accounts, AccountSelfService selfService, InternalTokenFilter internalToken)
+        +changePassword(ChangePasswordRequest request, HttpServletRequest http) void
+        +changeEmail(ChangeEmailRequest request, HttpServletRequest http) CurrentUserDto
+    }
+    class auth_AccountService["AccountService"]
+    class auth_AccountSelfService["AccountSelfService"]
+    class api_InternalTokenFilter["InternalTokenFilter"] {
+        <<spring>>
+    }
+    class api_ChangePasswordRequest["ChangePasswordRequest"] {
+        <<record>>
+    }
+    class api_ChangeEmailRequest["ChangeEmailRequest"] {
+        <<record>>
+    }
+    class api_CurrentUserDto["CurrentUserDto"] {
+        <<record>>
+    }
+    api_AccountController --> auth_AccountService
+    api_AccountController --> auth_AccountSelfService
+    api_AccountController --> api_InternalTokenFilter
+    api_AccountController ..> api_ChangePasswordRequest
+    api_AccountController ..> api_ChangeEmailRequest
+    api_AccountController ..> api_CurrentUserDto
+```
+
+| Field | Type |
+|---|---|
+| `accounts` | `AccountService` |
+| `selfService` | `AccountSelfService` |
+| `internalToken` | `InternalTokenFilter` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `AccountController(AccountService accounts, AccountSelfService selfService, InternalTokenFilter internalToken)` | public |  |
+| `void changePassword(ChangePasswordRequest request, HttpServletRequest http)` | public | Changes the password of the acting user. |
+| `CurrentUserDto changeEmail(ChangeEmailRequest request, HttpServletRequest http)` | public | Changes the email (the login name) of the acting user. |
+
+## ActingUser
+
+*class*
+
+The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on
+a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ActingUser["ActingUser"] {
+        ~require(HttpServletRequest request, InternalTokenFilter token) int$
+    }
+    class api_InternalTokenFilter["InternalTokenFilter"] {
+        <<spring>>
+    }
+    api_ActingUser ..> api_InternalTokenFilter
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `int require(HttpServletRequest request, InternalTokenFilter token)` | package static | The acting user's id; a missing, malformed or untrusted header is a BadRequestException (a bug in the caller). |
 
 ## AddMealRequest
 
@@ -566,6 +661,7 @@ classDiagram
         +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +invalidBarcode(InvalidBarcodeException e) ResponseEntity~ErrorResponse~
+        +emailTaken(EmailTakenException e) ResponseEntity~ErrorResponse~
         +invalidCredentials(InvalidCredentialsException e) ResponseEntity~ErrorResponse~
         +tooManyAttempts(TooManyAttemptsException e) ResponseEntity~ErrorResponse~
         +intakeConflict(IntakeConflictException e) ResponseEntity~ErrorResponse~
@@ -587,6 +683,7 @@ classDiagram
     class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
+    class auth_EmailTakenException["EmailTakenException"]
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
     class auth_TooManyAttemptsException["TooManyAttemptsException"]
     class barcode_IntakeConflictException["IntakeConflictException"]
@@ -600,6 +697,7 @@ classDiagram
     api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> barcode_InvalidBarcodeException
+    api_ApiExceptionHandler ..> auth_EmailTakenException
     api_ApiExceptionHandler ..> auth_InvalidCredentialsException
     api_ApiExceptionHandler ..> auth_TooManyAttemptsException
     api_ApiExceptionHandler ..> barcode_IntakeConflictException
@@ -620,6 +718,7 @@ classDiagram
 | `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e)` | public | A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). |
+| `ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e)` | public | The email address belongs to another account. |
 | `ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e)` | public | A wrong email or password (the same answer for both). |
 | `ResponseEntity<ErrorResponse> tooManyAttempts(TooManyAttemptsException e)` | public | Too many failed logins: the caller is slowed down; Retry-After says for how long. |
 | `ResponseEntity<ErrorResponse> intakeConflict(IntakeConflictException e)` | public | An intake request id that cannot be used again as it is: a conflict with a code of its own. |
@@ -896,6 +995,70 @@ classDiagram
 
 **Referenced by:** `StoreCatalogController`
 
+## ChangeEmailRequest
+
+*record*
+
+Body of PUT /api/account/email: the user's password and the new address.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ChangeEmailRequest["ChangeEmailRequest"] {
+        <<record>>
+        +String password
+        +String email
+        +toString() String
+    }
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
+    api_AccountController ..> api_ChangeEmailRequest
+```
+
+| Component | Type |
+|---|---|
+| `password` | `String` |
+| `email` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `String toString()` | public |  |
+
+**Referenced by:** `AccountController`
+
+## ChangePasswordRequest
+
+*record*
+
+Body of PUT /api/account/password.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_ChangePasswordRequest["ChangePasswordRequest"] {
+        <<record>>
+        +String currentPassword
+        +String newPassword
+        +toString() String
+    }
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
+    api_AccountController ..> api_ChangePasswordRequest
+```
+
+| Component | Type |
+|---|---|
+| `currentPassword` | `String` |
+| `newPassword` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `String toString()` | public |  |
+
+**Referenced by:** `AccountController`
+
 ## CreateMealPlanRequest
 
 *record*
@@ -983,12 +1146,16 @@ classDiagram
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
     }
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
     class api_AuthController["AuthController"] {
         <<controller>>
     }
     api_CurrentUserDto *-- api_CurrentUserDto_HouseholdDto
     api_CurrentUserDto ..> auth_AppUser
     api_CurrentUserDto ..> auth_HouseholdMembership
+    api_AccountController ..> api_CurrentUserDto
     api_AuthController ..> api_CurrentUserDto
 ```
 
@@ -1003,7 +1170,7 @@ classDiagram
 |---|---|---|
 | `CurrentUserDto from(AppUser user, HouseholdMembership membership)` | package static |  |
 
-**Referenced by:** `AuthController`
+**Referenced by:** `AccountController`, `AuthController`
 
 ## CurrentUserDto.HouseholdDto
 
@@ -1268,7 +1435,7 @@ classDiagram
 *record*
 
 JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable
-machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
+machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, EMAIL_TAKEN, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
 CSRF_INVALID, BAD_CREDENTIALS, TOO_MANY_ATTEMPTS, INVALID_TOKEN) that a client can map to its own text.
 
 ```mermaid
@@ -1540,15 +1707,21 @@ classDiagram
         #shouldNotFilter(HttpServletRequest request) boolean
         #doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) void
     }
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
     class api_AuditFilter["AuditFilter"] {
         <<spring>>
     }
     class api_AuthController["AuthController"] {
         <<controller>>
     }
+    class api_ActingUser["ActingUser"]
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
+    api_AccountController --> api_InternalTokenFilter
+    api_ActingUser ..> api_InternalTokenFilter
     api_AuditFilter --> api_InternalTokenFilter
     api_AuthController --> api_InternalTokenFilter
     api_SecurityConfig ..> api_InternalTokenFilter
@@ -1567,7 +1740,7 @@ classDiagram
 | `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
 | `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
 
-**Referenced by:** `AuditFilter`, `AuthController`, `SecurityConfig`
+**Referenced by:** `AccountController`, `ActingUser`, `AuditFilter`, `AuthController`, `SecurityConfig`
 
 ## InventoryController
 
@@ -3397,6 +3570,7 @@ classDiagram
         +barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource) BarcodeService
         +loginThrottle() LoginThrottle
         +loginService(AccountService accountService, LoginThrottle loginThrottle) LoginService
+        +accountSelfService(AccountService accountService, LoginThrottle loginThrottle) AccountSelfService
         +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
         +intakeRequestRepository() IntakeRequestRepository
         +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository) IntakeService
@@ -3445,7 +3619,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 15 more neighbours not drawn
+    %% 16 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -3468,6 +3642,7 @@ classDiagram
 | `BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource)` | public |  |
 | `LoginThrottle loginThrottle()` | public |  |
 | `LoginService loginService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
+| `AccountSelfService accountSelfService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
 | `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
 | `IntakeRequestRepository intakeRequestRepository()` | public |  |
 | `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository)` | public |  |

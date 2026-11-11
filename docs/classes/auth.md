@@ -4,7 +4,7 @@
 
 Logins, households and memberships; the `UserAdminRunner` command-line tool.
 
-14 types in 12 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
+16 types in 14 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -12,11 +12,13 @@ Logins, households and memberships; the `UserAdminRunner` command-line tool.
 classDiagram
     direction LR
     class auth_AccountRepository["AccountRepository"]
+    class auth_AccountSelfService["AccountSelfService"]
     class auth_AccountService["AccountService"]
     class auth_AppUser["AppUser"]
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
     }
+    class auth_EmailTakenException["EmailTakenException"]
     class auth_Household["Household"]
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
@@ -37,6 +39,9 @@ classDiagram
     auth_AccountRepository ..> auth_AppUser
     auth_AccountRepository ..> auth_HouseholdRole
     auth_AccountRepository ..> auth_HouseholdMembership
+    auth_AccountSelfService --> auth_AccountService
+    auth_AccountSelfService --> auth_LoginThrottle
+    auth_AccountSelfService ..> auth_AppUser
     auth_AccountService --> auth_AccountRepository
     auth_AccountService ..> auth_CreatedAccount
     auth_AccountService ..> auth_AppUser
@@ -59,9 +64,11 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`AccountRepository`](#accountrepository) | class |  | All SQL for the household, app_user and household_member tables lives here. |
+| [`AccountSelfService`](#accountselfservice) | class |  | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](#accountservice) | class |  | Business logic for user accounts and households. |
 | [`AppUser`](#appuser) | class |  | Plain data holder for one row of the app_user table. |
 | [`CreatedAccount`](#createdaccount) | record |  | Result of AccountService.createUser: the new user, the household they were added to, and whether that household was created for them (true for the very first user). |
+| [`EmailTakenException`](#emailtakenexception) | class |  | The email address already belongs to another account. |
 | [`Household`](#household) | class |  | Plain data holder for one row of the household table. |
 | [`HouseholdMembership`](#householdmembership) | record |  | A household together with the role one user has in it (one household_member row, joined to its household). |
 | [`HouseholdRole`](#householdrole) | enum |  | What a user may do in their household. |
@@ -92,6 +99,8 @@ classDiagram
         +insertUser(Connection con, String email, String displayName, String passwordHash, LocalDate createdDate) AppUser
         +insertMember(Connection con, int householdId, int userId, HouseholdRole role) int
         +findUserByEmail(String email) Optional~AppUser~
+        +findUserById(int userId) Optional~AppUser~
+        +updateEmail(int userId, String email) boolean
         +updatePasswordHash(int userId, String passwordHash) boolean
         +findFirstHousehold() Optional~Household~
         +findHousehold(int householdId) Optional~Household~
@@ -125,6 +134,8 @@ classDiagram
 | `AppUser insertUser(Connection con, String email, String displayName, String passwordHash, LocalDate createdDate)` | public | Inserts an app_user row, on the caller's transaction. |
 | `int insertMember(Connection con, int householdId, int userId, HouseholdRole role)` | public | Inserts a household_member row, on the caller's transaction. |
 | `Optional<AppUser> findUserByEmail(String email)` | public | Finds the user with exactly this (already normalized) email. |
+| `Optional<AppUser> findUserById(int userId)` | public | Finds the user with this id. |
+| `boolean updateEmail(int userId, String email)` | public | Sets a user's (already normalized) email. |
 | `boolean updatePasswordHash(int userId, String passwordHash)` | public | Replaces a user's password hash. |
 | `Optional<Household> findFirstHousehold()` | public | The oldest household, i.e. |
 | `Optional<Household> findHousehold(int householdId)` | public | The household with this id, or empty when there is none. |
@@ -132,6 +143,53 @@ classDiagram
 | `Optional<HouseholdMembership> findMembershipForUser(int userId)` | public | The household a user belongs to, with their role in it. |
 
 **Referenced by:** `AccountService`, `ServiceConfig`
+
+## AccountSelfService
+
+*class*
+
+What a logged-in user may do to their own account: change the email and the password. Both need the current password,
+and a wrong one counts as a login attempt from that client address (LoginThrottle), so a stolen session cannot
+be used to guess it. No SQL here, no UI here.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_AccountSelfService["AccountSelfService"] {
+        -AccountService accounts
+        -LoginThrottle throttle
+        +AccountSelfService(AccountService accounts, LoginThrottle throttle)
+        +changePassword(AppUser user, String currentPassword, String newPassword, String ip) void
+        +changeEmail(AppUser user, String password, String newEmail, String ip) AppUser
+    }
+    class auth_AccountService["AccountService"]
+    class auth_LoginThrottle["LoginThrottle"]
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
+    class auth_AppUser["AppUser"]
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    auth_AccountSelfService --> auth_AccountService
+    auth_AccountSelfService --> auth_LoginThrottle
+    auth_AccountSelfService ..> auth_AppUser
+    api_AccountController --> auth_AccountSelfService
+    api_ServiceConfig ..> auth_AccountSelfService
+```
+
+| Field | Type |
+|---|---|
+| `accounts` | `AccountService` |
+| `throttle` | `LoginThrottle` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `AccountSelfService(AccountService accounts, LoginThrottle throttle)` | public |  |
+| `void changePassword(AppUser user, String currentPassword, String newPassword, String ip)` | public |  |
+| `AppUser changeEmail(AppUser user, String password, String newEmail, String ip)` | public |  |
+
+**Referenced by:** `AccountController`, `ServiceConfig`
 
 ## AccountService
 
@@ -153,6 +211,7 @@ classDiagram
     class auth_AccountService["AccountService"] {
         +String DEFAULT_HOUSEHOLD_NAME$
         +int MIN_PASSWORD_LENGTH$
+        ~int MAX_EMAIL_LENGTH$
         +int DEFAULT_BCRYPT_STRENGTH$
         +int MAX_PASSWORD_BYTES$
         -Pattern EMAIL$
@@ -164,6 +223,9 @@ classDiagram
         +setPassword(String email, String rawPassword) void
         -String dummyHash
         +verifyPassword(String email, String rawPassword) Optional~AppUser~
+        +findById(int userId) Optional~AppUser~
+        +changeEmail(int userId, String newEmail) AppUser
+        +changePassword(int userId, String newPassword) void
         +findByEmail(String email) Optional~AppUser~
         +membershipFor(int userId) Optional~HouseholdMembership~
         +findFirstHousehold() Optional~Household~
@@ -171,6 +233,9 @@ classDiagram
         +setHouseholdPeople(int householdId, int people) Household
     }
     class auth_AccountRepository["AccountRepository"]
+    class api_AccountController["AccountController"] {
+        <<controller>>
+    }
     class api_HouseholdController["HouseholdController"] {
         <<controller>>
     }
@@ -181,6 +246,7 @@ classDiagram
         <<controller>>
     }
     class api_ScheduledMealServings["ScheduledMealServings"]
+    class auth_AccountSelfService["AccountSelfService"]
     class auth_LoginService["LoginService"]
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
@@ -201,12 +267,14 @@ classDiagram
     auth_AccountService ..> auth_AppUser
     auth_AccountService ..> auth_HouseholdMembership
     auth_AccountService ..> auth_Household
+    api_AccountController --> auth_AccountService
     api_HouseholdController --> auth_AccountService
     api_MealPlanController --> auth_AccountService
     api_MealServingsScheduleConfig ..> auth_AccountService
     api_PlannedMealController --> auth_AccountService
     api_ScheduledMealServings --> auth_AccountService
     api_ServiceConfig ..> auth_AccountService
+    auth_AccountSelfService --> auth_AccountService
     auth_LoginService --> auth_AccountService
 ```
 
@@ -214,6 +282,7 @@ classDiagram
 |---|---|
 | `DEFAULT_HOUSEHOLD_NAME` | `String` |
 | `MIN_PASSWORD_LENGTH` | `int` |
+| `MAX_EMAIL_LENGTH` | `int` |
 | `DEFAULT_BCRYPT_STRENGTH` | `int` |
 | `MAX_PASSWORD_BYTES` | `int` |
 | `EMAIL` | `Pattern` |
@@ -228,13 +297,16 @@ classDiagram
 | `CreatedAccount createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today)` | public | Creates a login. |
 | `void setPassword(String email, String rawPassword)` | public | Sets a new password for an existing user (the operator's stand-in for "forgot password"). |
 | `Optional<AppUser> verifyPassword(String email, String rawPassword)` | public | Checks a password. |
+| `Optional<AppUser> findById(int userId)` | public |  |
+| `AppUser changeEmail(int userId, String newEmail)` | public | Sets a new email for a user (the caller has already checked the user's password). |
+| `void changePassword(int userId, String newPassword)` | public | Sets a new password for a user (the caller has already checked the old one). |
 | `Optional<AppUser> findByEmail(String email)` | public |  |
 | `Optional<HouseholdMembership> membershipFor(int userId)` | public |  |
 | `Optional<Household> findFirstHousehold()` | public | The shared household of this installation (the oldest one), or empty on a fresh database. |
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
+**Referenced by:** `AccountController`, `AccountSelfService`, `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
 
 ## AppUser
 
@@ -271,9 +343,11 @@ classDiagram
         <<record>>
     }
     class auth_AccountRepository["AccountRepository"]
+    class auth_AccountSelfService["AccountSelfService"]
     class auth_AccountService["AccountService"]
     api_CurrentUserDto ..> auth_AppUser
     auth_AccountRepository ..> auth_AppUser
+    auth_AccountSelfService ..> auth_AppUser
     auth_AccountService ..> auth_AppUser
     auth_CreatedAccount --> auth_AppUser
     auth_LoginService_Verified --> auth_AppUser
@@ -297,7 +371,7 @@ classDiagram
 | `LocalDate getCreatedDate()` | public |  |
 | `String toString()` | public |  |
 
-**Referenced by:** `AccountRepository`, `AccountService`, `CreatedAccount`, `CurrentUserDto`
+**Referenced by:** `AccountRepository`, `AccountSelfService`, `AccountService`, `CreatedAccount`, `CurrentUserDto`
 
 ## CreatedAccount
 
@@ -332,6 +406,28 @@ classDiagram
 | `newHousehold` | `boolean` |
 
 **Referenced by:** `AccountService`
+
+## EmailTakenException
+
+*class · extends IllegalStateException*
+
+The email address already belongs to another account. A conflict (409) with its own code, EMAIL_TAKEN.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_EmailTakenException["EmailTakenException"] {
+        +EmailTakenException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> auth_EmailTakenException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `EmailTakenException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## Household
 
@@ -595,12 +691,14 @@ classDiagram
         +succeeded(String ip) void
     }
     class auth_LoginThrottle_Entry["LoginThrottle.Entry"]
+    class auth_AccountSelfService["AccountSelfService"]
     class auth_LoginService["LoginService"]
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
     auth_LoginThrottle *-- auth_LoginThrottle_Entry
     api_ServiceConfig ..> auth_LoginThrottle
+    auth_AccountSelfService --> auth_LoginThrottle
     auth_LoginService --> auth_LoginThrottle
 ```
 
@@ -621,7 +719,7 @@ classDiagram
 | `OptionalLong begin(String ip)` | public | Asks to make an attempt. |
 | `void succeeded(String ip)` | public | The password was right: the attempt does not count (and does not leave a block behind that only it caused). |
 
-**Referenced by:** `LoginService`, `ServiceConfig`
+**Referenced by:** `AccountSelfService`, `LoginService`, `ServiceConfig`
 
 ## LoginThrottle.Entry
 
