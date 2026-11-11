@@ -254,11 +254,31 @@ class ApiSmokeTest {
                 .andExpect(jsonPath("$.product.storeItems[0].storeName").value("Testladen"));
         mvc.perform(get("/api/inventory/40/batches"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].remaining", contains(2000)))
-                .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].unit", contains("g")))
+                .andExpect(jsonPath("$[?(@.storeName == 'Testladen' && @.packs == 2)].remaining", contains(2000)))
+                .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].unit", everyItem(org.hamcrest.Matchers.is("g"))))
                 .andExpect(jsonPath("$[?(@.storeName == 'Testladen')].packs", contains(2)));
         mvc.perform(get("/api/inventory/999999/batches"))
                 .andExpect(status().isNotFound());
+
+        // a repeated request id gets the stored answer back and records nothing twice
+        String repeat = "{\"storeName\": \"Testladen\", \"requestId\": \"smoke-req-0001\", \"lines\": [{\"barcode\": \""
+                + code + "\", \"packs\": 1, \"expirationDate\": \"2031-06-01\", \"pricePaid\": 0.99}]}";
+        mvc.perform(post("/api/intake").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(repeat))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(false))
+                .andExpect(jsonPath("$.recorded").value(1));
+        mvc.perform(post("/api/intake").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(repeat))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.replayed").value(true))
+                .andExpect(jsonPath("$.recorded").value(1))
+                .andExpect(jsonPath("$.results[0].ok").value(true));
+        mvc.perform(post("/api/intake").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(repeat.replace("0.99", "1.99")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQUEST_ID_REUSED"));
+        mvc.perform(post("/api/intake").with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(repeat.replace("smoke-req-0001", "no")))
+                .andExpect(status().isBadRequest());
 
         // a typo in the store or brand must not create a new one
         mvc.perform(post("/api/intake").with(csrf())
