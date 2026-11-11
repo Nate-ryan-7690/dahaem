@@ -8,8 +8,8 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (92)"]
-    auth["auth (14)"]
+    api["api (96)"]
+    auth["auth (16)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
     finance["finance (9)"]
@@ -21,7 +21,7 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|19| auth
+    api -->|24| auth
     api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
@@ -53,8 +53,8 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 92 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
-| [`auth`](auth.md) | 14 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
+| [`api`](api.md) | 96 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
+| [`auth`](auth.md) | 16 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
@@ -71,8 +71,11 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Type | Package | Kind | What it is |
 |---|---|---|---|
+| [`AccountController`](api.md#accountcontroller) | api | class | A logged-in user's own account. |
 | [`AccountRepository`](auth.md#accountrepository) | auth | class | All SQL for the household, app_user and household_member tables lives here. |
+| [`AccountSelfService`](auth.md#accountselfservice) | auth | class | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](auth.md#accountservice) | auth | class | Business logic for user accounts and households. |
+| [`ActingUser`](api.md#actinguser) | api | class | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in). |
 | [`AddMealRequest`](api.md#addmealrequest) | api | record | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](api.md#addplannedreciperequest) | api | record | Body of POST /api/meal-plans/{id}/recipes, e.g. |
 | [`AddTagRequest`](api.md#addtagrequest) | api | record | Body of POST /api/recipes/{id}/tags. |
@@ -111,6 +114,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`CatalogChange.Type`](stores.md#catalogchangetype) | stores | enum |  |
 | [`CatalogItem`](stores.md#catalogitem) | stores | record | One inventory_item catalog row, with its normalized names cached for matching. |
 | [`CatalogItem`](tags.md#catalogitem) | tags | record | One inventory_item as the tag logic sees it. |
+| [`ChangeEmailRequest`](api.md#changeemailrequest) | api | record | Body of PUT /api/account/email: the user's password and the new address. |
+| [`ChangePasswordRequest`](api.md#changepasswordrequest) | api | record | Body of PUT /api/account/password. |
 | [`CrawlResult`](stores.md#crawlresult) | stores | record | Result of crawling a chain's full range. |
 | [`CreatedAccount`](auth.md#createdaccount) | auth | record | Result of AccountService.createUser: the new user, the household they were added to, and whether that household was created for them (true for the very first user). |
 | [`CreateMealPlanRequest`](api.md#createmealplanrequest) | api | record | Body of POST /api/meal-plans, e.g. |
@@ -137,7 +142,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`DietVerdict.Hint`](diet.md#dietverdicthint) | diet | record | An item with possible animals of which at least one is excluded; allowedAnimals is what remains. |
 | [`DietVerdict.Item`](diet.md#dietverdictitem) | diet | record | A matched item (id and name). |
 | [`DietVerdict.SoftHits`](diet.md#dietverdictsofthits) | diet | record | Soft-rule hits: tags the recipe has, ingredient items it has, and items that MAY be an avoided animal (for an avoided animal tag). |
-| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY |
+| [`EmailTakenException`](auth.md#emailtakenexception) | auth | class | The email address already belongs to another account. |
+| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, EMAIL_TAKEN, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST |
 | [`GeneratedShoppingListDto`](api.md#generatedshoppinglistdto) | api | record | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`Gtin`](barcode.md#gtin) | barcode | class | Barcode numbers (GTIN: EAN-8, UPC-A, EAN-13, GTIN-14). |
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
