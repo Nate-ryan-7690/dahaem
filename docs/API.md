@@ -31,7 +31,7 @@ Every error has the same shape:
 ```
 
 `message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
-`BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY` (400); `UNAUTHORIZED`,
+`BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH` (400); `UNAUTHORIZED`,
 `LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`,
 `CONFLICT` (409); `INTERNAL_ERROR` (500).
 
@@ -53,8 +53,11 @@ Every error has the same shape:
 | POST | `/api/auth/login` | Log in (form fields `email`, `password`). 204 on success, 401 on a wrong email or password. Handled by Spring Security, not by a controller. |
 | POST | `/api/auth/logout` | End the session and delete the `JSESSIONID` cookie. 204. |
 | GET | [`/api/auth/me`](#get-apiauthme) | The logged-in user and their household. |
+| GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
+| PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
 | GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
 | PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
+| POST | [`/api/intake`](#post-apiintake) | Puts the lines away. |
 | GET | [`/api/inventory`](#get-apiinventory) |  |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
@@ -211,6 +214,122 @@ The logged-in user and their household.
 }
 ```
 
+### BarcodeController
+
+Barcode numbers: what a number is, and remembering it. Numbers can be typed; scanning in the app comes later.
+
+
+#### GET /api/barcodes/{code}
+
+What a barcode is. The number may be typed with spaces or hyphens; 8, 12, 13 or 14 digits with a fitting check
+digit (a 12-digit UPC-A is returned as its 13-digit form). status: KNOWN (see product: the
+catalogue item, brand, pack and the store items that carry it), FOUND (not known, an open data source describes it:
+see suggestion, nothing is saved), NOT_FOUND, DISABLED (outside lookup switched off) or UNAVAILABLE
+(outside lookup failed). A wrong length or non-digits is a 400 with code INVALID_BARCODE, a check digit that does
+not fit (a typing error) a 400 with code BARCODE_CHECKSUM.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `code` | `String` |
+
+**Answer** 200 `BarcodeLookup`
+
+```json
+{
+  "code": "…",
+  "status": "…",
+  "product": {
+    "code": "…",
+    "inventoryItemId": 0,
+    "nameDeutsch": "…",
+    "nameEnglish": "…",
+    "itemUnit": "…",
+    "brand": "…",
+    "packSize": 0,
+    "packUnit": "…",
+    "name": "…",
+    "storeItems": [
+      {
+        "storeItemId": 0,
+        "storeName": "…",
+        "price": 0.0
+      }
+    ]
+  },
+  "suggestion": {
+    "name": "…",
+    "brand": "…",
+    "packSize": 0,
+    "packUnit": "…",
+    "quantityText": "…",
+    "source": "…"
+  }
+}
+```
+
+#### PUT /api/barcodes/{code}
+
+Remembers what the barcode is, or replaces it (AssignBarcodeRequest). The user chooses the catalogue item;
+nothing is guessed. Returns the barcode as it is now (status KNOWN). 400 for an unknown item or store item, a store
+item of another catalogue item, a bad pack, or a pack that cannot be stocked in the item's unit (400
+PACK_UNIT_MISMATCH: an item counted in g takes a pack in g or kg, not in ml).
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `code` | `String` |
+
+**Request body** `AssignBarcodeRequest`
+
+```json
+{
+  "inventoryItemId": 0,
+  "brand": "…",
+  "packSize": 0,
+  "packUnit": "…",
+  "name": "…",
+  "storeItemId": 0
+}
+```
+
+**Answer** 200 `BarcodeLookup`
+
+```json
+{
+  "code": "…",
+  "status": "…",
+  "product": {
+    "code": "…",
+    "inventoryItemId": 0,
+    "nameDeutsch": "…",
+    "nameEnglish": "…",
+    "itemUnit": "…",
+    "brand": "…",
+    "packSize": 0,
+    "packUnit": "…",
+    "name": "…",
+    "storeItems": [
+      {
+        "storeItemId": 0,
+        "storeName": "…",
+        "price": 0.0
+      }
+    ]
+  },
+  "suggestion": {
+    "name": "…",
+    "brand": "…",
+    "packSize": 0,
+    "packUnit": "…",
+    "quantityText": "…",
+    "source": "…"
+  }
+}
+```
+
 ### HouseholdController
 
 The household's head count, so the app can scale portions to the people it feeds. The PHP decides
@@ -263,6 +382,41 @@ Sets the head count and returns the household. 400 when people is missing or bel
   "name": "…",
   "people": 0,
   "createdDate": "2026-10-14"
+}
+```
+
+### IntakeController
+
+Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items.
+
+
+#### POST /api/intake
+
+Puts the lines away. Each line: barcode, expirationDate (required), packs (default 1),
+pricePaid (total for the packs; optional if the store item's price is known), and optionally
+packSize + packUnit for a special package. The barcode must have been assigned
+(PUT /api/barcodes/{code}). Stock grows by packs x pack size in the item's own unit and the expiry date is
+kept as a batch (the earliest is used first). Always answers 200 when the request itself is fine: a line that could
+not be recorded has ok: false with a code (INVALID_BARCODE, BARCODE_CHECKSUM, BARCODE_UNKNOWN,
+EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
+
+**Request body** `IntakeRequest`
+
+```json
+{
+  "storeName": "…",
+  "purchaseDate": "2026-10-14",
+  "lines": ["…"]
+}
+```
+
+**Answer** 200 `IntakeResult`
+
+```json
+{
+  "results": ["…"],
+  "recorded": 0,
+  "failed": 0
 }
 ```
 
@@ -1632,6 +1786,81 @@ Body of POST /api/recipes/{id}/tags. category is only used when the tag does not
 { … }
 ```
 
+### AssignBarcodeRequest
+
+Body of PUT /api/barcodes/{code}: what the barcode is. inventoryItemId (the catalogue item), packSize
+and packUnit (500 g, 1 kg, 1,5 l, 6 stück) are required; the pack is stored in g, ml or stück like a store
+item (1 kg becomes 1000 g, 1,5 l is sent as 1.5 l or 1500 ml) and must fit the item's unit (else 400 PACK_UNIT_MISMATCH); brand (blank or missing =
+no brand), name (as printed) and storeItemId (also link the store item that carries it, which must be
+for the same catalogue item) are optional.
+
+| Property | Type |
+|---|---|
+| `inventoryItemId` | `Integer` |
+| `brand` | `String` |
+| `packSize` | `Integer` |
+| `packUnit` | `String` |
+| `name` | `String` |
+| `storeItemId` | `Integer` |
+
+```json
+{ … }
+```
+
+### BarcodeLookup
+
+The answer to "what is this barcode?". code is the normalised number. status:
+KNOWN (it is in DAHÄM, see product); FOUND (not in DAHÄM, an open data source describes it, see
+suggestion); NOT_FOUND (neither); DISABLED (not in DAHÄM and the outside lookup is switched off);
+UNAVAILABLE (the outside lookup was tried and failed: try again or enter the product by hand).
+
+| Property | Type |
+|---|---|
+| `code` | `String` |
+| `status` | `String` |
+| `product` | `BarcodeProduct` |
+| `suggestion` | `ProductSuggestion` |
+
+```json
+{ … }
+```
+
+### BarcodeProduct
+
+What DAHÄM knows about a barcode: the catalogue item it is (itemUnit is the unit its stock is counted in), the brand (null = none), the pack (size in unit, like a
+store item) and the name as printed (may be null), plus the store items that carry it (one per store that sells it).
+
+| Property | Type |
+|---|---|
+| `code` | `String` |
+| `inventoryItemId` | `int` |
+| `nameDeutsch` | `String` |
+| `nameEnglish` | `String` |
+| `itemUnit` | `String` |
+| `brand` | `String` |
+| `packSize` | `int` |
+| `packUnit` | `String` |
+| `name` | `String` |
+| `storeItems` | `List<LinkedStoreItem>` |
+
+```json
+{ … }
+```
+
+### BarcodeProduct.LinkedStoreItem
+
+A store item that carries the barcode: which store, and its current normal price (null if unknown).
+
+| Property | Type |
+|---|---|
+| `storeItemId` | `int` |
+| `storeName` | `String` |
+| `price` | `Double` |
+
+```json
+{ … }
+```
+
 ### CreateMealPlanRequest
 
 Body of POST /api/meal-plans, e.g. {"weekStartDate": "2026-09-28"}.
@@ -1796,6 +2025,34 @@ A household as the API shows it. people is the head count and null until someone
 | `name` | `String` |
 | `people` | `Integer` |
 | `createdDate` | `LocalDate` |
+
+```json
+{ … }
+```
+
+### IntakeController.IntakeRequest
+
+Body: the store, the purchase day (default today, not in the future) and the lines.
+
+| Property | Type |
+|---|---|
+| `storeName` | `String` |
+| `purchaseDate` | `LocalDate` |
+| `lines` | `List<IntakeService.Line>` |
+
+```json
+{ … }
+```
+
+### IntakeController.IntakeResult
+
+results has one entry per line, in order; recorded / failed count them.
+
+| Property | Type |
+|---|---|
+| `results` | `List<IntakeService.LineResult>` |
+| `recorded` | `int` |
+| `failed` | `int` |
 
 ```json
 { … }
@@ -2100,6 +2357,24 @@ A recipe's permanent preferred servings ("this meal is always for X people"); nu
 |---|---|
 | `recipeId` | `int` |
 | `preferredServings` | `Integer` |
+
+```json
+{ … }
+```
+
+### ProductSuggestion
+
+What an open data source says about a barcode DAHÄM does not know yet. A suggestion only: nothing is saved until the
+user assigns the barcode to a catalogue item. packSize / packUnit are null when the quantity text could not be read.
+
+| Property | Type |
+|---|---|
+| `name` | `String` |
+| `brand` | `String` |
+| `packSize` | `Integer` |
+| `packUnit` | `String` |
+| `quantityText` | `String` |
+| `source` | `String` |
 
 ```json
 { … }

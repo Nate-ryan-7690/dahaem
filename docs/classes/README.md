@@ -8,10 +8,11 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (82)"]
+    api["api (87)"]
     auth["auth (8)"]
+    barcode["barcode (16)"]
     diet["diet (14)"]
-    finance["finance (5)"]
+    finance["finance (7)"]
     inventory["inventory (4)"]
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
@@ -21,14 +22,18 @@ flowchart TD
     suggestions["suggestions (12)"]
     tags["tags (29)"]
     api -->|14| auth
+    api -->|10| barcode
     api -->|12| diet
     api -->|6| finance
     api -->|5| inventory
-    api -->|32| mealplanner
+    api -->|34| mealplanner
     api -->|15| shopping
     api -->|2| stores
     api -->|10| suggestions
     api -->|6| tags
+    barcode -->|2| finance
+    barcode -->|2| inventory
+    barcode -->|3| stores
     diet -->|12| tags
     finance -->|3| inventory
     finance -->|1| stores
@@ -42,16 +47,17 @@ flowchart TD
     suggestions -->|1| tags
 ```
 
-Arrows point from the importing package to the imported one; the number is how many import lines. `shared` is left out of the drawing: 11 of the other packages import it, and it imports none of them. A package that imports nothing else here is a leaf.
+Arrows point from the importing package to the imported one; the number is how many import lines. `shared` is left out of the drawing: 12 of the other packages import it, and it imports none of them. A package that imports nothing else here is a leaf.
 
 ## Packages
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 82 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 87 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
+| [`barcode`](barcode.md) | 16 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
-| [`finance`](finance.md) | 5 | Purchases and spending analytics. |
+| [`finance`](finance.md) | 7 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 4 | The item catalogue and the pantry. |
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
@@ -85,8 +91,15 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`Animals`](tags.md#animals) | tags | class | The animal values an item can have: the Tier tags, in display order. |
 | [`ApiExceptionHandler`](api.md#apiexceptionhandler) | api | class | Turns exceptions into JSON error responses with sensible status codes. |
 | [`AppUser`](auth.md#appuser) | auth | class | Plain data holder for one row of the app_user table. |
+| [`AssignBarcodeRequest`](api.md#assignbarcoderequest) | api | record | Body of PUT /api/barcodes/{code}: what the barcode is. |
 | [`AuthController`](api.md#authcontroller) | api | class | The parts of the login flow that are plain endpoints. |
 | [`BadRequestException`](api.md#badrequestexception) | api | class | Thrown by a controller when request input fails validation; mapped to 400. |
+| [`BarcodeController`](api.md#barcodecontroller) | api | class | Barcode numbers: what a number is, and remembering it. |
+| [`BarcodeLookup`](barcode.md#barcodelookup) | barcode | record | The answer to "what is this barcode?". |
+| [`BarcodeProduct`](barcode.md#barcodeproduct) | barcode | record | What DAHÄM knows about a barcode: the catalogue item it is (itemUnit is the unit its stock is counted in), the brand (null = none), the pack (size in unit, like a store item) and the name as printed (may be null), plus the store items that  |
+| [`BarcodeProduct.LinkedStoreItem`](barcode.md#barcodeproductlinkedstoreitem) | barcode | record | A store item that carries the barcode: which store, and its current normal price (null if unknown). |
+| [`BarcodeService`](barcode.md#barcodeservice) | barcode | class | Barcodes: what a number is, and remembering it. |
+| [`BarcodeService.Pack`](barcode.md#barcodeservicepack) | barcode | record | A pack as it is stored: the same units a store item and the shopping list use. |
 | [`BasePrice`](shared.md#baseprice) | shared | class | The price of a pack as a price per kilogram, per litre or per piece, so the comparison (and wrong pack data) shows up in one place instead of in every client. |
 | [`BasePrice.Base`](shared.md#basepricebase) | shared | record | value euros per unit ("kg", "l" or "Stück"). |
 | [`CatalogChange`](stores.md#catalogchange) | stores | record | One difference found by the range comparator between the last pull and this one. |
@@ -120,8 +133,9 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`DietVerdict.Hint`](diet.md#dietverdicthint) | diet | record | An item with possible animals of which at least one is excluded; allowedAnimals is what remains. |
 | [`DietVerdict.Item`](diet.md#dietverdictitem) | diet | record | A matched item (id and name). |
 | [`DietVerdict.SoftHits`](diet.md#dietverdictsofthits) | diet | record | Soft-rule hits: tags the recipe has, ingredient items it has, and items that MAY be an avoided animal (for an avoided animal tag). |
-| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, LIST_COMPLETED, CONFLICT, LOGIN_REQUIR |
+| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PAC |
 | [`GeneratedShoppingListDto`](api.md#generatedshoppinglistdto) | api | record | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
+| [`Gtin`](barcode.md#gtin) | barcode | class | Barcode numbers (GTIN: EAN-8, UPC-A, EAN-13, GTIN-14). |
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
 | [`HouseholdController`](api.md#householdcontroller) | api | class | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](api.md#householddto) | api | record | A household as the API shows it. |
@@ -129,7 +143,15 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`HouseholdRole`](auth.md#householdrole) | auth | enum | What a user may do in their household. |
 | [`HttpFetcher`](stores.md#httpfetcher) | stores | class | Fetches public web pages / JSON politely: a normal browser User-Agent, timeouts, a few retries with growing backoff, and a pause after every successful request. |
 | [`ImportSummary`](stores.md#importsummary) | stores | record | What one import run did; printed by StoreImportRunner. |
+| [`IntakeController`](api.md#intakecontroller) | api | class | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
+| [`IntakeController.IntakeRequest`](api.md#intakecontrollerintakerequest) | api | record | Body: the store, the purchase day (default today, not in the future) and the lines. |
+| [`IntakeController.IntakeResult`](api.md#intakecontrollerintakeresult) | api | record | results has one entry per line, in order; recorded / failed count them. |
+| [`IntakeService`](barcode.md#intakeservice) | barcode | class | Puts groceries away by barcode: for each line (barcode, packs, expiry date, price) the store item for (store, brand, catalogue item, pack) is found or created, linked to the barcode, and the purchase recorded, which adds packs x pack size t |
+| [`IntakeService.Line`](barcode.md#intakeserviceline) | barcode | record | One line to put away. |
+| [`IntakeService.LineException`](barcode.md#intakeservicelineexception) | barcode | class |  |
+| [`IntakeService.LineResult`](barcode.md#intakeservicelineresult) | barcode | record | What happened to one line: recorded (purchase, store item, how much stock was added in which unit) or why not. |
 | [`InternalTokenFilter`](api.md#internaltokenfilter) | api | class | Shared-secret gate for the internal API. |
+| [`InvalidBarcodeException`](barcode.md#invalidbarcodeexception) | barcode | class | A barcode number that cannot be right: not digits, a length no barcode has (INVALID_BARCODE), or a check digit that does not fit the other digits, which is what a typing error looks like (BARCODE_CHECKSUM). |
 | [`InventoryController`](api.md#inventorycontroller) | api | class |  |
 | [`InventoryRepository`](inventory.md#inventoryrepository) | inventory | class | All SQL for the inventory_item table lives here and nowhere else. |
 | [`InventoryService`](inventory.md#inventoryservice) | inventory | class | Business logic for inventory. |
@@ -171,6 +193,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`OfferScope`](stores.md#offerscope) | stores | record | Which region an offer pull is for. |
 | [`OfferSource`](stores.md#offersource) | stores | interface | One place weekly offers can be pulled from: a chain's own site or one chain on an aggregator. |
 | [`OfferSourceFactory`](stores.md#offersourcefactory) | stores | class | Creates the OfferSource for a source key: "aldi", "penny" and "aggregator:<chain>" for every chain in AggregatorClient.STORES. |
+| [`OpenFoodFactsSource`](barcode.md#openfoodfactssource) | barcode | class | Open Food Facts (open data, no key): name, brand and quantity of a product by its barcode. |
+| [`PackUnitException`](barcode.md#packunitexception) | barcode | class | The pack of a barcode cannot be stocked in the catalogue item's unit (a pack in ml for an item counted in g, or a unit nobody knows). |
 | [`PageRequest`](shared.md#pagerequest) | shared | record | Which page of a list a caller wants: page counts from 1, pageSize is 1 - #MAX_PAGE_SIZE. |
 | [`PantryCoverage`](suggestions.md#pantrycoverage) | suggestions | record | How well one recipe is covered by what the household already has and by what is on sale. |
 | [`PantryIngredientDto`](api.md#pantryingredientdto) | api | record | One ingredient of a suggested recipe. |
@@ -204,13 +228,17 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PlannedMealDto`](api.md#plannedmealdto) | api | record | One planned meal. |
 | [`Portions`](shared.md#portions) | shared | class | The single definition of portion scaling: a recipe written for servings people is scaled to people by the factor people / servings. |
 | [`PreferredServingsDto`](api.md#preferredservingsdto) | api | record | A recipe's permanent preferred servings ("this meal is always for X people"); null = no preference. |
+| [`ProductBarcodeRepository`](barcode.md#productbarcoderepository) | barcode | class | All SQL for product_barcode and product_barcode_store_item lives here and nowhere else. |
+| [`ProductDataSource`](barcode.md#productdatasource) | barcode | interface | Where a barcode DAHÄM does not know can be looked up (an open data source). |
+| [`ProductSuggestion`](barcode.md#productsuggestion) | barcode | record | What an open data source says about a barcode DAHÄM does not know yet. |
 | [`ProductVariant`](stores.md#productvariant) | stores | record | One flavour/size of a store product, e.g. |
 | [`PromotableProduct`](stores.md#promotableproduct) | stores | record | A matched store_product considered for promotion into the verified store_item layer. |
 | [`Purchase`](finance.md#purchase) | finance | class | Plain data holder for one row of the purchase_history table. |
 | [`PurchaseController`](api.md#purchasecontroller) | api | class |  |
 | [`PurchaseDto`](api.md#purchasedto) | api | record |  |
 | [`PurchaseRepository`](finance.md#purchaserepository) | finance | class | All SQL for the purchase_history table lives here and nowhere else. |
-| [`PurchaseRepository.Batch`](finance.md#purchaserepositorybatch) | finance | record | What is left of one purchase (a batch of one inventory item). |
+| [`PurchaseRepository.Batch`](finance.md#purchaserepositorybatch) | finance | record | One purchase (a batch of one inventory item) with what it needs to tell how much is left: remaining in the item's unit (null = nothing used yet, all of it is left), the packs bought and the pack (size + unit). |
+| [`PurchaseRepository.StoreItemStock`](finance.md#purchaserepositorystoreitemstock) | finance | record | What a purchase of a store item adds to stock: the catalogue item, the pack (size + unit) and the item's own unit. |
 | [`PurchaseService`](finance.md#purchaseservice) | finance | class | Business logic for purchases. |
 | [`ReceiptAdjustment`](receipts.md#receiptadjustment) | receipts | record | A discount or deposit movement, kept apart from products (paid price != listed price != offer; deposit != discount). |
 | [`ReceiptBuilder`](receipts.md#receiptbuilder) | receipts | class | Mutable accumulator shared by the store handlers. |
@@ -310,7 +338,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`StepAmounts.Amount`](mealplanner.md#stepamountsamount) | mealplanner | record | A parsed amount: one value or a range, and its unit (null when none). |
 | [`StepAmounts.Context`](mealplanner.md#stepamountscontext) | mealplanner | record |  |
 | [`StepAmounts.Replacement`](mealplanner.md#stepamountsreplacement) | mealplanner | record | What replaces before[replaceFrom..] + bracket. |
-| [`StockService`](finance.md#stockservice) | finance | class | Takes food out of stock. |
+| [`StockAmounts`](finance.md#stockamounts) | finance | class | Stock is counted in the catalogue item's own unit (g, ml, Stück), as the shopping list compares it with a line's unit. |
+| [`StockService`](finance.md#stockservice) | finance | class | Takes food out of stock, in the item's own unit (g, ml, Stück). |
 | [`StoreConfig`](stores.md#storeconfig) | stores | class | Settings for the store importers, read from config/stores.properties (relative to the working directory, like the database path). |
 | [`StoreDiscountService`](stores.md#storediscountservice) | stores | class | Turns pulled flyer offers into the verified layer: each matched offer becomes (or refreshes) a store_item shell for its chain, plus a store_discount holding the flyer price and dates. |
 | [`StoreDiscountService.BrandSplit`](stores.md#storediscountservicebrandsplit) | stores | record | Brand to file the offer under (null = no brand) and the text to match against the catalog. |
