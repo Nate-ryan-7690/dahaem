@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-92 types in 64 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+93 types in 65 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -271,12 +271,17 @@ classDiagram
     class api_UseStockRequest["UseStockRequest"] {
         <<record>>
     }
+    class api_VerifyRequest["VerifyRequest"] {
+        <<record>>
+    }
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_AuditFilter --> api_InternalTokenFilter
-    api_AuthController ..> api_CsrfTokenDto
+    api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
+    api_AuthController ..> api_VerifyRequest
+    api_AuthController ..> api_CsrfTokenDto
     api_BarcodeController ..> api_AssignBarcodeRequest
     api_CurrentUserDto *-- api_CurrentUserDto_HouseholdDto
     api_DietDto *-- api_DietDto_Hint
@@ -452,6 +457,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`TagDto`](#tagdto) | record |  |  |
 | [`UnauthorizedException`](#unauthorizedexception) | class |  | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
 | [`UseStockRequest`](#usestockrequest) | record |  | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
+| [`VerifyRequest`](#verifyrequest) | record |  | Body of POST /api/auth/verify: the login the PHP front end received from the user. |
 
 ## AddMealRequest
 
@@ -565,6 +571,8 @@ classDiagram
         +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +invalidBarcode(InvalidBarcodeException e) ResponseEntity~ErrorResponse~
+        +invalidCredentials(InvalidCredentialsException e) ResponseEntity~ErrorResponse~
+        +tooManyAttempts(TooManyAttemptsException e) ResponseEntity~ErrorResponse~
         +intakeConflict(IntakeConflictException e) ResponseEntity~ErrorResponse~
         +unknownStore(UnknownStoreException e) ResponseEntity~ErrorResponse~
         +unknownBrand(UnknownBrandException e) ResponseEntity~ErrorResponse~
@@ -584,6 +592,8 @@ classDiagram
     class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
+    class auth_InvalidCredentialsException["InvalidCredentialsException"]
+    class auth_TooManyAttemptsException["TooManyAttemptsException"]
     class barcode_IntakeConflictException["IntakeConflictException"]
     class stores_UnknownStoreException["UnknownStoreException"]
     class stores_UnknownBrandException["UnknownBrandException"]
@@ -595,6 +605,8 @@ classDiagram
     api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> barcode_InvalidBarcodeException
+    api_ApiExceptionHandler ..> auth_InvalidCredentialsException
+    api_ApiExceptionHandler ..> auth_TooManyAttemptsException
     api_ApiExceptionHandler ..> barcode_IntakeConflictException
     api_ApiExceptionHandler ..> stores_UnknownStoreException
     api_ApiExceptionHandler ..> stores_UnknownBrandException
@@ -613,6 +625,8 @@ classDiagram
 | `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e)` | public | A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). |
+| `ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e)` | public | A wrong email or password (the same answer for both). |
+| `ResponseEntity<ErrorResponse> tooManyAttempts(TooManyAttemptsException e)` | public | Too many failed logins: the caller is slowed down; Retry-After says for how long. |
 | `ResponseEntity<ErrorResponse> intakeConflict(IntakeConflictException e)` | public | An intake request id that cannot be used again as it is: a conflict with a code of its own. |
 | `ResponseEntity<ErrorResponse> unknownStore(UnknownStoreException e)` | public | A store or brand name that does not exist, where creating one was not asked for: a bad request with its own code. |
 | `ResponseEntity<ErrorResponse> unknownBrand(UnknownBrandException e)` | public |  |
@@ -671,7 +685,7 @@ classDiagram
 
 Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403.
 It runs before Spring Security, so refused requests (a wrong token, a missing login) are seen too. Logins are logged
-by the login handlers with the typed email, so that path is skipped here.
+by the login handlers and the verify endpoint with the typed email, so those paths are skipped here.
 
 ```mermaid
 classDiagram
@@ -718,9 +732,12 @@ classDiagram
         -Pattern IP_LITERAL$
         -Pattern EMAIL_SHAPE$
         +String CLIENT_IP_HEADER$
+        +String ACTING_USER_HEADER$
+        -Pattern USER_ID$
         ~clientIp(String headerValue, String remoteAddr, boolean tokenValid) String$
+        ~actingUser(String headerValue, boolean tokenValid) String$
         ~clean(String value, int max) String$
-        +request(String method, String path, int status, String caller, String ip) void$
+        +request(String method, String path, int status, String caller, String ip, String user) void$
         +login(boolean success, String typedEmail, String ip) void$
     }
 ```
@@ -731,12 +748,15 @@ classDiagram
 | `IP_LITERAL` | `Pattern` |
 | `EMAIL_SHAPE` | `Pattern` |
 | `CLIENT_IP_HEADER` | `String` |
+| `ACTING_USER_HEADER` | `String` |
+| `USER_ID` | `Pattern` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `String clientIp(String headerValue, String remoteAddr, boolean tokenValid)` | package static | The client address to log. |
+| `String actingUser(String headerValue, boolean tokenValid)` | package static | The acting user id for the log: the header, but only with the internal token and only a plain number; else "-". |
 | `String clean(String value, int max)` | package static | Takes anything that could break a log line out of a value and shortens it. |
-| `void request(String method, String path, int status, String caller, String ip)` | public static | A request worth keeping: a write, or any request that was refused (401 / 403). |
+| `void request(String method, String path, int status, String caller, String ip, String user)` | public static | A request worth keeping: a write, or any request that was refused (401 / 403). |
 | `void login(boolean success, String typedEmail, String ip)` | public static | A login attempt. |
 
 ## AuthController
@@ -752,29 +772,45 @@ classDiagram
     class api_AuthController["AuthController"] {
         <<controller>>
         -AccountService accountService
-        +AuthController(AccountService accountService)
+        -LoginService loginService
+        -InternalTokenFilter internalToken
+        +AuthController(AccountService accountService, LoginService loginService, InternalTokenFilter internalToken)
+        +verify(VerifyRequest request, HttpServletRequest http) CurrentUserDto
         +csrf(CsrfToken token) CsrfTokenDto
         +me(Authentication authentication) CurrentUserDto
     }
     class auth_AccountService["AccountService"]
-    class api_CsrfTokenDto["CsrfTokenDto"] {
-        <<record>>
+    class auth_LoginService["LoginService"]
+    class api_InternalTokenFilter["InternalTokenFilter"] {
+        <<spring>>
     }
     class api_CurrentUserDto["CurrentUserDto"] {
         <<record>>
     }
+    class api_VerifyRequest["VerifyRequest"] {
+        <<record>>
+    }
+    class api_CsrfTokenDto["CsrfTokenDto"] {
+        <<record>>
+    }
     api_AuthController --> auth_AccountService
-    api_AuthController ..> api_CsrfTokenDto
+    api_AuthController --> auth_LoginService
+    api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
+    api_AuthController ..> api_VerifyRequest
+    api_AuthController ..> api_CsrfTokenDto
 ```
 
 | Field | Type |
 |---|---|
 | `accountService` | `AccountService` |
+| `loginService` | `LoginService` |
+| `internalToken` | `InternalTokenFilter` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `AuthController(AccountService accountService)` | public |  |
+| `AuthController(AccountService accountService, LoginService loginService, InternalTokenFilter internalToken)` | public |  |
+| `CurrentUserDto verify(VerifyRequest request, HttpServletRequest http)` | public | Checks an email and a password for the PHP front end, which owns the user's session. |
 | `CsrfTokenDto csrf(CsrfToken token)` | public | The CSRF token to send with the next POST/PUT/DELETE. |
 | `CurrentUserDto me(Authentication authentication)` | public | The logged-in user and their household. |
 
@@ -1279,7 +1315,7 @@ classDiagram
 
 JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable
 machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
-CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN) that a client can map to its own text.
+CSRF_INVALID, BAD_CREDENTIALS, TOO_MANY_ATTEMPTS, INVALID_TOKEN) that a client can map to its own text.
 
 ```mermaid
 classDiagram
@@ -1553,10 +1589,14 @@ classDiagram
     class api_AuditFilter["AuditFilter"] {
         <<spring>>
     }
+    class api_AuthController["AuthController"] {
+        <<controller>>
+    }
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
     api_AuditFilter --> api_InternalTokenFilter
+    api_AuthController --> api_InternalTokenFilter
     api_SecurityConfig ..> api_InternalTokenFilter
 ```
 
@@ -1573,7 +1613,7 @@ classDiagram
 | `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
 | `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
 
-**Referenced by:** `AuditFilter`, `SecurityConfig`
+**Referenced by:** `AuditFilter`, `AuthController`, `SecurityConfig`
 
 ## InventoryController
 
@@ -3340,7 +3380,7 @@ classDiagram
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
         +internalTokenFilterRegistration(InternalTokenFilter filter) FilterRegistrationBean~InternalTokenFilter~
-        +passwordEncoder() PasswordEncoder
+        +passwordEncoder(int strength) PasswordEncoder
         +userDetailsService(AccountService accountService) UserDetailsService
         +securityFilterChain(HttpSecurity http, ObjectMapper objectMapper, InternalTokenFilter internalToken) SecurityFilterChain
     }
@@ -3355,7 +3395,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `FilterRegistrationBean<InternalTokenFilter> internalTokenFilterRegistration(InternalTokenFilter filter)` | public | The token filter belongs in the Spring Security chain only, not also in the servlet container's chain. |
-| `PasswordEncoder passwordEncoder()` | public |  |
+| `PasswordEncoder passwordEncoder(int strength)` | public | BCrypt (salted per hash). |
 | `UserDetailsService userDetailsService(AccountService accountService)` | public | Looks users up by email (the login name) through the account service; roles are not used yet. |
 | `SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper, InternalTokenFilter internalToken)` | public |  |
 
@@ -3414,6 +3454,8 @@ classDiagram
         +productBarcodeRepository() ProductBarcodeRepository
         +productDataSource(String mode, String url, int perMinute) ProductDataSource
         +barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource) BarcodeService
+        +loginThrottle() LoginThrottle
+        +loginService(AccountService accountService, LoginThrottle loginThrottle) LoginService
         +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
         +intakeRequestRepository() IntakeRequestRepository
         +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository) IntakeService
@@ -3462,7 +3504,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 13 more neighbours not drawn
+    %% 15 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -3483,6 +3525,8 @@ classDiagram
 | `ProductBarcodeRepository productBarcodeRepository()` | public |  |
 | `ProductDataSource productDataSource(String mode, String url, int perMinute)` | public | Where unknown barcodes are looked up: dahaem.barcode.lookup=openfoodfacts (env DAHAEM_BARCODE_LOOKUP) asks Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on. |
 | `BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource)` | public |  |
+| `LoginThrottle loginThrottle()` | public |  |
+| `LoginService loginService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
 | `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
 | `IntakeRequestRepository intakeRequestRepository()` | public |  |
 | `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository)` | public |  |
@@ -4351,3 +4395,35 @@ classDiagram
 | `quantity` | `Integer` |
 
 **Referenced by:** `InventoryController`
+
+## VerifyRequest
+
+*record*
+
+Body of POST /api/auth/verify: the login the PHP front end received from the user.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_VerifyRequest["VerifyRequest"] {
+        <<record>>
+        +String email
+        +String password
+        +toString() String
+    }
+    class api_AuthController["AuthController"] {
+        <<controller>>
+    }
+    api_AuthController ..> api_VerifyRequest
+```
+
+| Component | Type |
+|---|---|
+| `email` | `String` |
+| `password` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `String toString()` | public |  |
+
+**Referenced by:** `AuthController`

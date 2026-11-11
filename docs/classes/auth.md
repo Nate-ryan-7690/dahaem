@@ -4,7 +4,7 @@
 
 Logins, households and memberships; the `UserAdminRunner` command-line tool.
 
-8 types in 8 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
+14 types in 12 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -24,6 +24,14 @@ classDiagram
     class auth_HouseholdRole["HouseholdRole"] {
         <<enumeration>>
     }
+    class auth_InvalidCredentialsException["InvalidCredentialsException"]
+    class auth_LoginService["LoginService"]
+    class auth_LoginService_Verified["LoginService.Verified"] {
+        <<record>>
+    }
+    class auth_LoginThrottle["LoginThrottle"]
+    class auth_LoginThrottle_Entry["LoginThrottle.Entry"]
+    class auth_TooManyAttemptsException["TooManyAttemptsException"]
     class auth_UserAdminRunner["UserAdminRunner"]
     auth_AccountRepository ..> auth_Household
     auth_AccountRepository ..> auth_AppUser
@@ -38,6 +46,12 @@ classDiagram
     auth_CreatedAccount --> auth_HouseholdMembership
     auth_HouseholdMembership --> auth_Household
     auth_HouseholdMembership --> auth_HouseholdRole
+    auth_LoginService *-- auth_LoginService_Verified
+    auth_LoginService --> auth_AccountService
+    auth_LoginService --> auth_LoginThrottle
+    auth_LoginService_Verified --> auth_AppUser
+    auth_LoginService_Verified --> auth_HouseholdMembership
+    auth_LoginThrottle *-- auth_LoginThrottle_Entry
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -51,6 +65,12 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`Household`](#household) | class |  | Plain data holder for one row of the household table. |
 | [`HouseholdMembership`](#householdmembership) | record |  | A household together with the role one user has in it (one household_member row, joined to its household). |
 | [`HouseholdRole`](#householdrole) | enum |  | What a user may do in their household. |
+| [`InvalidCredentialsException`](#invalidcredentialsexception) | class |  | The email or the password is wrong. |
+| [`LoginService`](#loginservice) | class |  | Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the answer says who the user is. |
+| [`LoginService.Verified`](#loginserviceverified) | record |  | The user and their household membership (null if in no household). |
+| [`LoginThrottle`](#loginthrottle) | class |  | A delay that grows with failed logins, not a lockout. |
+| [`LoginThrottle.Entry`](#loginthrottleentry) | class |  |  |
+| [`TooManyAttemptsException`](#toomanyattemptsexception) | class |  | Too many failed logins from this address or for this email: try again after retryAfterSeconds. |
 | [`UserAdminRunner`](#useradminrunner) | class | command-line tool | Command-line entry point for managing logins. |
 
 ## AccountRepository
@@ -133,6 +153,7 @@ classDiagram
     class auth_AccountService["AccountService"] {
         +String DEFAULT_HOUSEHOLD_NAME$
         +int MIN_PASSWORD_LENGTH$
+        +int DEFAULT_BCRYPT_STRENGTH$
         +int MAX_PASSWORD_BYTES$
         -Pattern EMAIL$
         -AccountRepository repository
@@ -141,6 +162,8 @@ classDiagram
         +normalizeEmail(String email) String$
         +createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today) CreatedAccount
         +setPassword(String email, String rawPassword) void
+        -String dummyHash
+        +verifyPassword(String email, String rawPassword) Optional~AppUser~
         +findByEmail(String email) Optional~AppUser~
         +membershipFor(int userId) Optional~HouseholdMembership~
         +findFirstHousehold() Optional~Household~
@@ -161,6 +184,7 @@ classDiagram
         <<controller>>
     }
     class api_ScheduledMealServings["ScheduledMealServings"]
+    class auth_LoginService["LoginService"]
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
     }
@@ -191,16 +215,19 @@ classDiagram
     api_ScheduledMealServings --> auth_AccountService
     api_SecurityConfig ..> auth_AccountService
     api_ServiceConfig ..> auth_AccountService
+    auth_LoginService --> auth_AccountService
 ```
 
 | Field | Type |
 |---|---|
 | `DEFAULT_HOUSEHOLD_NAME` | `String` |
 | `MIN_PASSWORD_LENGTH` | `int` |
+| `DEFAULT_BCRYPT_STRENGTH` | `int` |
 | `MAX_PASSWORD_BYTES` | `int` |
 | `EMAIL` | `Pattern` |
 | `repository` | `AccountRepository` |
 | `passwordEncoder` | `PasswordEncoder` |
+| `dummyHash` | `String` |
 
 | Member | Visibility | What it does |
 |---|---|---|
@@ -208,13 +235,14 @@ classDiagram
 | `String normalizeEmail(String email)` | public static | Trims and lower-cases an email so lookups and the UNIQUE constraint ignore case. |
 | `CreatedAccount createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today)` | public | Creates a login. |
 | `void setPassword(String email, String rawPassword)` | public | Sets a new password for an existing user (the operator's stand-in for "forgot password"). |
+| `Optional<AppUser> verifyPassword(String email, String rawPassword)` | public | Checks a password. |
 | `Optional<AppUser> findByEmail(String email)` | public |  |
 | `Optional<HouseholdMembership> membershipFor(int userId)` | public |  |
 | `Optional<Household> findFirstHousehold()` | public | The shared household of this installation (the oldest one), or empty on a fresh database. |
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AuthController`, `HouseholdController`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `SecurityConfig`, `ServiceConfig`
+**Referenced by:** `AuthController`, `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `SecurityConfig`, `ServiceConfig`
 
 ## AppUser
 
@@ -244,6 +272,9 @@ classDiagram
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
     }
+    class auth_LoginService_Verified["LoginService.Verified"] {
+        <<record>>
+    }
     class api_CurrentUserDto["CurrentUserDto"] {
         <<record>>
     }
@@ -253,6 +284,7 @@ classDiagram
     auth_AccountRepository ..> auth_AppUser
     auth_AccountService ..> auth_AppUser
     auth_CreatedAccount --> auth_AppUser
+    auth_LoginService_Verified --> auth_AppUser
 ```
 
 | Field | Type |
@@ -389,6 +421,9 @@ classDiagram
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
     }
+    class auth_LoginService_Verified["LoginService.Verified"] {
+        <<record>>
+    }
     class api_CurrentUserDto["CurrentUserDto"] {
         <<record>>
     }
@@ -400,6 +435,7 @@ classDiagram
     auth_AccountRepository ..> auth_HouseholdMembership
     auth_AccountService ..> auth_HouseholdMembership
     auth_CreatedAccount --> auth_HouseholdMembership
+    auth_LoginService_Verified --> auth_HouseholdMembership
 ```
 
 | Component | Type |
@@ -436,6 +472,223 @@ classDiagram
 **Values:** `ADMIN`, `MEMBER`
 
 **Referenced by:** `AccountRepository`, `HouseholdMembership`
+
+## InvalidCredentialsException
+
+*class · extends RuntimeException*
+
+The email or the password is wrong. One exception for both on purpose, so an answer never says which.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvalidCredentialsException["InvalidCredentialsException"] {
+        +InvalidCredentialsException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> auth_InvalidCredentialsException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `InvalidCredentialsException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
+
+## LoginService
+
+*class*
+
+Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the
+answer says who the user is. Failed attempts slow the caller down (LoginThrottle). No SQL here, no UI here.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_LoginService["LoginService"] {
+        -AccountService accounts
+        -LoginThrottle throttle
+        +LoginService(AccountService accounts, LoginThrottle throttle)
+        +verify(String email, String rawPassword, String ip) Verified
+    }
+    class auth_LoginService_Verified["LoginService.Verified"] {
+        <<record>>
+    }
+    class auth_AccountService["AccountService"]
+    class auth_LoginThrottle["LoginThrottle"]
+    class api_AuthController["AuthController"] {
+        <<controller>>
+    }
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    auth_LoginService *-- auth_LoginService_Verified
+    auth_LoginService --> auth_AccountService
+    auth_LoginService --> auth_LoginThrottle
+    api_AuthController --> auth_LoginService
+    api_ServiceConfig ..> auth_LoginService
+```
+
+| Field | Type |
+|---|---|
+| `accounts` | `AccountService` |
+| `throttle` | `LoginThrottle` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `LoginService(AccountService accounts, LoginThrottle throttle)` | public |  |
+| `Verified verify(String email, String rawPassword, String ip)` | public |  |
+
+**Referenced by:** `AuthController`, `ServiceConfig`
+
+## LoginService.Verified
+
+*record*
+
+The user and their household membership (null if in no household).
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_LoginService_Verified["LoginService.Verified"] {
+        <<record>>
+        +AppUser user
+        +HouseholdMembership membership
+    }
+    class auth_LoginService["LoginService"]
+    class auth_AppUser["AppUser"]
+    class auth_HouseholdMembership["HouseholdMembership"] {
+        <<record>>
+    }
+    auth_LoginService_Verified --> auth_AppUser
+    auth_LoginService_Verified --> auth_HouseholdMembership
+    auth_LoginService *-- auth_LoginService_Verified
+```
+
+| Component | Type |
+|---|---|
+| `user` | `AppUser` |
+| `membership` | `HouseholdMembership` |
+
+**Referenced by:** `LoginService`
+
+## LoginThrottle
+
+*class*
+
+A delay that grows with failed logins, not a lockout. After #IP_THRESHOLD failures from one client address
+(or #EMAIL_THRESHOLD for one email) further attempts are refused for 30 seconds, then 60, 120 ... up to 15
+minutes for an address and 5 minutes for an email. The address limit is strict; the email limit is generous and short,
+so somebody guessing wrong passwords for the real user's email from elsewhere can slow the real user down by at most
+a few minutes and never lock them out. Failures are forgotten after an hour without one. A correct login clears the
+email's count but not the address's (otherwise a login to one's own account would reset the guessing against another).
+In memory: a restart clears it. Thread-safe.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_LoginThrottle["LoginThrottle"] {
+        +int IP_THRESHOLD$
+        +int EMAIL_THRESHOLD$
+        -long SECOND$
+        -long BASE_COOLDOWN$
+        -long IP_MAX_COOLDOWN$
+        -long EMAIL_MAX_COOLDOWN$
+        -long FORGET_AFTER$
+        -int MAX_ENTRIES$
+        -Map~String, Entry~ byIp
+        -Map~String, Entry~ byEmail
+        -LongSupplier nanoClock
+        +LoginThrottle(LongSupplier nanoClock)
+        +retryAfterSeconds(String ip, String email) OptionalLong
+        +failure(String ip, String email) void
+        +success(String email) void
+    }
+    class auth_LoginThrottle_Entry["LoginThrottle.Entry"]
+    class auth_LoginService["LoginService"]
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    auth_LoginThrottle *-- auth_LoginThrottle_Entry
+    api_ServiceConfig ..> auth_LoginThrottle
+    auth_LoginService --> auth_LoginThrottle
+```
+
+| Field | Type |
+|---|---|
+| `IP_THRESHOLD` | `int` |
+| `EMAIL_THRESHOLD` | `int` |
+| `SECOND` | `long` |
+| `BASE_COOLDOWN` | `long` |
+| `IP_MAX_COOLDOWN` | `long` |
+| `EMAIL_MAX_COOLDOWN` | `long` |
+| `FORGET_AFTER` | `long` |
+| `MAX_ENTRIES` | `int` |
+| `byIp` | `Map<String, Entry>` |
+| `byEmail` | `Map<String, Entry>` |
+| `nanoClock` | `LongSupplier` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `LoginThrottle(LongSupplier nanoClock)` | public |  |
+| `OptionalLong retryAfterSeconds(String ip, String email)` | public | Seconds to wait before this address / email may try again, or empty if it may try now. |
+| `void failure(String ip, String email)` | public |  |
+| `void success(String email)` | public | A correct login: forget the failures for this email (not for the address). |
+
+**Referenced by:** `LoginService`, `ServiceConfig`
+
+## LoginThrottle.Entry
+
+*class*
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_LoginThrottle_Entry["LoginThrottle.Entry"] {
+        ~int failures
+        ~long lastFailure
+        ~long blockedUntil
+    }
+    class auth_LoginThrottle["LoginThrottle"]
+    auth_LoginThrottle *-- auth_LoginThrottle_Entry
+```
+
+| Field | Type |
+|---|---|
+| `failures` | `int` |
+| `lastFailure` | `long` |
+| `blockedUntil` | `long` |
+
+**Referenced by:** `LoginThrottle`
+
+## TooManyAttemptsException
+
+*class · extends RuntimeException*
+
+Too many failed logins from this address or for this email: try again after retryAfterSeconds.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_TooManyAttemptsException["TooManyAttemptsException"] {
+        -long retryAfterSeconds
+        +TooManyAttemptsException(long retryAfterSeconds)
+        +retryAfterSeconds() long
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> auth_TooManyAttemptsException
+```
+
+| Field | Type |
+|---|---|
+| `retryAfterSeconds` | `long` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `TooManyAttemptsException(long retryAfterSeconds)` | public |  |
+| `long retryAfterSeconds()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## UserAdminRunner
 
