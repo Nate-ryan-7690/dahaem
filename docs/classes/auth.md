@@ -256,6 +256,7 @@ classDiagram
         +AccountService(AccountRepository repository, PasswordEncoder passwordEncoder)
         +normalizeEmail(String email) String$
         +createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today) CreatedAccount
+        +createUserInNewHousehold(String email, String displayName, String rawPassword, String householdName, LocalDate today) CreatedAccount
         +prepareNewUser(String email, String displayName, String rawPassword) NewUser
         +setPassword(String email, String rawPassword) void
         -String dummyHash
@@ -341,6 +342,7 @@ classDiagram
 | `AccountService(AccountRepository repository, PasswordEncoder passwordEncoder)` | public |  |
 | `String normalizeEmail(String email)` | public static | Trims and lower-cases an email so lookups and the UNIQUE constraint ignore case. |
 | `CreatedAccount createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today)` | public | Creates a login. |
+| `CreatedAccount createUserInNewHousehold(String email, String displayName, String rawPassword, String householdName, LocalDate today)` | public | Creates a login in a NEW household (named householdName, which must not be blank), whatever households exist: the user is its ADMIN. |
 | `NewUser prepareNewUser(String email, String displayName, String rawPassword)` | public | Checks the data of a new account and hashes the password, without saving anything (the caller saves it in its own transaction, e.g. |
 | `void setPassword(String email, String rawPassword)` | public | Sets a new password for an existing user (the operator's stand-in for "forgot password"). |
 | `Optional<AppUser> verifyPassword(String email, String rawPassword)` | public | Checks a password. |
@@ -1143,6 +1145,9 @@ sign-up endpoint: the operator creates the accounts on the server. Run it from t
   create-user   [householdName]
       The first user creates the household (default name "DAHÄM") and becomes its ADMIN;
       later users join that household as MEMBER.
+  create-household-user
+      Starts a NEW household with this user as its ADMIN, even if households exist (a second household). Everyone else
+      joins it by invitation (the admin makes one in the app).
   set-password
       Sets a new password for an existing user (there are no password-reset emails).
 
