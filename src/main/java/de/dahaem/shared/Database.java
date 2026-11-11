@@ -23,9 +23,9 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class Database {
 
-    static final String URL_ENV = "DAHAEM_DB_URL";
-    static final String USER_ENV = "DAHAEM_DB_USER";
-    static final String PASSWORD_ENV = "DAHAEM_DB_PASSWORD";
+    public static final String URL_ENV = "DAHAEM_DB_URL";
+    public static final String USER_ENV = "DAHAEM_DB_USER";
+    public static final String PASSWORD_ENV = "DAHAEM_DB_PASSWORD";
 
     private static HikariDataSource dataSource;
     private static final AtomicLong GENERATION = new AtomicLong();

@@ -90,10 +90,16 @@ public class SecurityConfig {
                         .loginProcessingUrl("/api/auth/login")
                         .usernameParameter("email")
                         .passwordParameter("password")
-                        .successHandler((request, response, authentication) ->
-                                response.setStatus(HttpStatus.NO_CONTENT.value()))
-                        .failureHandler((request, response, exception) ->
-                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Wrong email or password")))
+                        .successHandler((request, response, authentication) -> {
+                            AuditLog.login(true, authentication.getName(),
+                                    AuditFilter.ipOf(request, internalToken.hasValidToken(request)));
+                            response.setStatus(HttpStatus.NO_CONTENT.value());
+                        })
+                        .failureHandler((request, response, exception) -> {
+                            AuditLog.login(false, request.getParameter("email"),
+                                    AuditFilter.ipOf(request, internalToken.hasValidToken(request)));
+                            writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Wrong email or password");
+                        }))
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .deleteCookies("JSESSIONID")

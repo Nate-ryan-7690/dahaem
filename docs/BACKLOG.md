@@ -483,6 +483,54 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   image decoding (ZXing) for a photo of a barcode, the spreadsheet / CSV import of Nate's hand-written list (it can call
   `/api/intake` as it is), recording the price of a purchase from a receipt, and unit conversions for packs in pieces vs
   items in g (counted as 1 per pack).
+- **Go-live review of the Java side (2026-11-11, before the Cloudflare tunnel is started)** — fixed in the review PR:
+  fail-closed start-up (`StartupGuard`: no start without `INTERNAL_API_TOKEN` and the three DB variables;
+  `-Ddahaem.require-secrets=false` for local development only), audit log (logger `audit`, client IP from `X-Client-Ip`,
+  believed only with the internal token), a ceiling of 30 outside barcode lookups per minute, at most 100 recipes for the
+  shopping list preview, SECURITY.md brought up to date. Checked and fine: every SQL statement is parameterised (dynamic
+  parts are placeholder counts or enum-controlled ORDER BY), the token check covers every `/api/**` path in constant time,
+  no actuator, no uploads, no stack traces or SQL in responses, passwords are BCrypt with a salt (min 10 characters, the
+  72-byte limit enforced), a login with an unknown email answers like a wrong password, no accounts are seeded by the repo,
+  the 5 Dependabot alerts (jackson-databind) are all fixed, Spring Boot 3.5.16. Open, in the order I would take them,
+  each needs Nate's decision (options and recommendation):
+  1. **Who owns login and the session?** Today the API has a session login (`/api/auth/login`) and the PHP has the shared
+     token; the PHP needs a way to check a password without the API opening its own session. Options: (a) PHP owns the
+     session; the API gets `POST /api/auth/verify` (email + password -> user id, household, role; no session, no cookie) and
+     PHP sends the acting user in `X-Acting-User` (believed only with the token); (b) the API keeps the session and PHP
+     forwards the cookie (two session stores, harder to reason about); (c) keep both as they are (not recommended).
+     Recommendation: (a); it also unblocks household scoping (2) and makes the audit log say who did what.
+  2. **Household scoping (IDOR).** No endpoint checks an owner: ids of meal plans, shopping lists, purchases, households
+     (`GET/PUT /api/households/{id}...`) and so on are accepted from the request. Harmless while there is one household
+     (SECURITY.md says so), a real hole with a second. Options: (a) stay single-household and say so; (b) with (1a), scope
+     every query by the acting user's household and answer 404 for other ids; (c) both: (a) now, (b) before a second
+     household exists. Recommendation: (c).
+  3. **Login lockout / rate limit.** None in the API. Options: (a) a Cloudflare rate-limiting rule on the login path (no
+     code); (b) in the API (in memory, per client IP and per email, progressive delay instead of a hard lockout, so nobody
+     can lock the real user out by guessing wrong); (c) in PHP. Recommendation: (a) plus (b) per IP with a delay.
+  4. **Cloudflare Access identity (option, not built).** If the Access identity is ever used, accept it only after
+     validating `Cf-Access-Jwt-Assertion` (signature against the team JWKS, audience, expiry), never the plain email header.
+     Recommendation: do not use it; the app's own login stays the only identity.
+  5. **Password hashing.** BCrypt with the default cost 10 is acceptable; options: raise the cost to 12 (about 4x slower
+     login, still well under a second), or move to Argon2id (needs a library). Recommendation: cost 12 with the next
+     auth change; Argon2id not needed.
+  6. **Request body size.** JSON bodies have no size cap (headers 8 KB, form posts 2 MB by Tomcat default). Behind the token
+     this is low risk; a 1 MB cap in a filter is small. Free-text fields (labels, tag names, household name) have no length
+     limits either, the database truncates or rejects.
+  7. **Unpaged list endpoints.** `GET /api/recipes` (all ~11,000 recipes), `GET /api/inventory` (whole catalogue) and
+     `GET /api/purchases` return everything; the paged `.../search` variants exist. Low (token required); the frontend
+     should use the paged ones.
+  8. **Static shell.** The jar still serves an old PWA shell (`static/`) and `anyRequest().permitAll()` for everything
+     outside `/api/**`; unreachable from outside (no host port) but it could be `denyAll`. Option: remove the shell.
+  9. **Container hygiene.** The image uses unpinned base tags (`eclipse-temurin:21-jre`, `maven:3.9-eclipse-temurin-21`),
+     has no `HEALTHCHECK`, and runs Java 21 while the code is built for 17 and CI uses 17. Option: pin by digest, add a
+     healthcheck, align the Java version.
+  10. **Dependency scanning.** Dependabot alerts and security updates are on (all 5 alerts fixed). Option: Dependabot version
+     updates (monthly) or OWASP dependency-check in CI. Both create work or PRs on their own, which collides with the "one PR
+     at a time" rule, so not added unasked.
+  11. **Audit log retention.** The audit lines go to the container log. Option: a size-limited docker log driver for
+     `dahaem-api` (compose setting in the frontend repo) so the log does not fill the disk and old lines are kept for a while.
+  12. **CSRF.** Requests that carry the internal token are exempt from CSRF in the API by design (CSRF protects browser
+     sessions); the PHP front end must have its own CSRF tokens on every state-changing form (it does: `src/csrf.php`).
 - **Barcode UI support (2026-11-11, frontend agent's list)** — done: a store or brand name must already exist, so a
   typo cannot add a bogus one (`POST /api/intake` needs `createStore: true` for a new store, `PUT /api/barcodes/{code}`
   needs `createBrand: true` for a new brand; otherwise 400 `UNKNOWN_STORE` / `UNKNOWN_BRAND`; matching ignores case);

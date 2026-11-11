@@ -11,6 +11,7 @@ import de.dahaem.barcode.IntakeService;
 import de.dahaem.barcode.OpenFoodFactsSource;
 import de.dahaem.barcode.ProductBarcodeRepository;
 import de.dahaem.barcode.ProductDataSource;
+import de.dahaem.barcode.RateLimitedSource;
 import de.dahaem.finance.PurchaseRepository;
 import de.dahaem.finance.PurchaseService;
 import de.dahaem.finance.StockService;
@@ -124,8 +125,11 @@ public class ServiceConfig {
     @Bean
     public ProductDataSource productDataSource(
             @org.springframework.beans.factory.annotation.Value("${dahaem.barcode.lookup:off}") String mode,
-            @org.springframework.beans.factory.annotation.Value("${dahaem.barcode.openfoodfacts-url:https://world.openfoodfacts.org}") String url) {
-        return "openfoodfacts".equalsIgnoreCase(mode.trim()) ? new OpenFoodFactsSource(url) : ProductDataSource.disabled();
+            @org.springframework.beans.factory.annotation.Value("${dahaem.barcode.openfoodfacts-url:https://world.openfoodfacts.org}") String url,
+            @org.springframework.beans.factory.annotation.Value("${dahaem.barcode.lookups-per-minute:30}") int perMinute) {
+        return "openfoodfacts".equalsIgnoreCase(mode.trim())
+                ? new RateLimitedSource(new OpenFoodFactsSource(url), perMinute, System::nanoTime)
+                : ProductDataSource.disabled();
     }
 
     @Bean
