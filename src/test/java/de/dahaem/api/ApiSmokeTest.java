@@ -930,6 +930,15 @@ class ApiSmokeTest {
     }
 
     @Test
+    void theShoppingListPreviewTakesAtMostOneHundredRecipes() throws Exception {
+        String many = java.util.stream.IntStream.rangeClosed(1, 101).mapToObj(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+        mvc.perform(get("/api/shopping-list").param("recipeIds", many))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
     void shoppingListCanBeTickedEditedAddedToRemovedFromCompletedAndReopened() throws Exception {
         String created = mvc.perform(post("/api/meal-plans/{id}/shopping-list", 1).with(csrf())
                         .param("from", "2000-01-01"))

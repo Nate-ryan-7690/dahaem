@@ -16,6 +16,9 @@ import java.util.List;
 @RequestMapping("/api/shopping-list")
 public class ShoppingListController {
 
+    /** A shopping list for more recipes than this is not a shopping list (and the ids end up in an SQL IN list). */
+    static final int MAX_RECIPES = 100;
+
     private final ShoppingListService shoppingListService;
     private final RecipeService recipeService;
 
@@ -35,6 +38,9 @@ public class ShoppingListController {
         List<Integer> ids = recipeIds.stream().distinct().toList();
         if (ids.isEmpty() || ids.contains(null)) {
             throw new BadRequestException("'recipeIds' must list at least one recipe id");
+        }
+        if (ids.size() > MAX_RECIPES) {
+            throw new BadRequestException("'recipeIds' takes at most " + MAX_RECIPES + " recipes");
         }
         if (people != null && !Portions.isValidPeople(people)) {
             throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
