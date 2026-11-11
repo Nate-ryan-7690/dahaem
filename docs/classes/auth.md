@@ -4,7 +4,7 @@
 
 Logins, households and memberships; the `UserAdminRunner` command-line tool.
 
-23 types in 17 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
+25 types in 18 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -12,6 +12,9 @@ Logins, households and memberships; the `UserAdminRunner` command-line tool.
 classDiagram
     direction LR
     class auth_AccountRepository["AccountRepository"]
+    class auth_AccountRepository_Member["AccountRepository.Member"] {
+        <<record>>
+    }
     class auth_AccountSelfService["AccountSelfService"]
     class auth_AccountService["AccountService"]
     class auth_AccountService_NewUser["AccountService.NewUser"] {
@@ -31,6 +34,7 @@ classDiagram
     }
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
     class auth_InvalidInvitationException["InvalidInvitationException"]
+    class auth_InvitationLimitException["InvitationLimitException"]
     class auth_InvitationRepository["InvitationRepository"]
     class auth_InvitationRepository_Invite["InvitationRepository.Invite"] {
         <<record>>
@@ -50,10 +54,12 @@ classDiagram
     class auth_LoginThrottle_Entry["LoginThrottle.Entry"]
     class auth_TooManyAttemptsException["TooManyAttemptsException"]
     class auth_UserAdminRunner["UserAdminRunner"]
+    auth_AccountRepository *-- auth_AccountRepository_Member
     auth_AccountRepository ..> auth_Household
     auth_AccountRepository ..> auth_AppUser
     auth_AccountRepository ..> auth_HouseholdRole
     auth_AccountRepository ..> auth_HouseholdMembership
+    auth_AccountRepository_Member --> auth_HouseholdRole
     auth_AccountSelfService --> auth_AccountService
     auth_AccountSelfService --> auth_LoginThrottle
     auth_AccountSelfService ..> auth_AppUser
@@ -88,6 +94,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`AccountRepository`](#accountrepository) | class |  | All SQL for the household, app_user and household_member tables lives here. |
+| [`AccountRepository.Member`](#accountrepositorymember) | record |  | One member of a household with the account's name and email. |
 | [`AccountSelfService`](#accountselfservice) | class |  | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](#accountservice) | class |  | Business logic for user accounts and households. |
 | [`AccountService.NewUser`](#accountservicenewuser) | record |  | A validated new account, not saved yet: the email as it is stored, the name, and the BCrypt hash of the password. |
@@ -99,6 +106,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`HouseholdRole`](#householdrole) | enum |  | What a user may do in their household. |
 | [`InvalidCredentialsException`](#invalidcredentialsexception) | class |  | The email or the password is wrong. |
 | [`InvalidInvitationException`](#invalidinvitationexception) | class |  | The invitation code is not usable: wrong, used, revoked or expired. |
+| [`InvitationLimitException`](#invitationlimitexception) | class |  | The household already has the most open invitations it may have. |
 | [`InvitationRepository`](#invitationrepository) | class |  | All SQL for the household_invite table lives here and nowhere else. |
 | [`InvitationRepository.Invite`](#invitationrepositoryinvite) | record |  | One invitation. |
 | [`InvitationService`](#invitationservice) | class |  | Invitations into a household: an admin makes one, the code is shown ONCE, and whoever enters it (with an email, a name and a password) becomes a HouseholdRole.MEMBER of that household. |
@@ -138,6 +146,10 @@ classDiagram
         +findHousehold(int householdId) Optional~Household~
         +updateHouseholdPeople(int householdId, int people) boolean
         +findMembershipForUser(int userId) Optional~HouseholdMembership~
+        +findMembers(int householdId) java.util.List~Member~
+    }
+    class auth_AccountRepository_Member["AccountRepository.Member"] {
+        <<record>>
     }
     class auth_AccountService["AccountService"]
     class auth_InvitationService["InvitationService"]
@@ -152,6 +164,7 @@ classDiagram
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
+    auth_AccountRepository *-- auth_AccountRepository_Member
     auth_AccountRepository ..> auth_Household
     auth_AccountRepository ..> auth_AppUser
     auth_AccountRepository ..> auth_HouseholdRole
@@ -176,8 +189,42 @@ classDiagram
 | `Optional<Household> findHousehold(int householdId)` | public | The household with this id, or empty when there is none. |
 | `boolean updateHouseholdPeople(int householdId, int people)` | public | Sets the household's head count. |
 | `Optional<HouseholdMembership> findMembershipForUser(int userId)` | public | The household a user belongs to, with their role in it. |
+| `java.util.List<Member> findMembers(int householdId)` | public | The members of a household, the oldest membership first. |
 
 **Referenced by:** `AccountService`, `InvitationService`, `ServiceConfig`
+
+## AccountRepository.Member
+
+*record*
+
+One member of a household with the account's name and email.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_AccountRepository_Member["AccountRepository.Member"] {
+        <<record>>
+        +int userId
+        +String displayName
+        +String email
+        +HouseholdRole role
+    }
+    class auth_AccountRepository["AccountRepository"]
+    class auth_HouseholdRole["HouseholdRole"] {
+        <<enumeration>>
+    }
+    auth_AccountRepository_Member --> auth_HouseholdRole
+    auth_AccountRepository *-- auth_AccountRepository_Member
+```
+
+| Component | Type |
+|---|---|
+| `userId` | `int` |
+| `displayName` | `String` |
+| `email` | `String` |
+| `role` | `HouseholdRole` |
+
+**Referenced by:** `AccountRepository`
 
 ## AccountSelfService
 
@@ -268,6 +315,7 @@ classDiagram
         +membershipFor(int userId) Optional~HouseholdMembership~
         +findFirstHousehold() Optional~Household~
         +allHouseholds() java.util.List~Household~
+        +members(int householdId) java.util.List~AccountRepository.Member~
         +findHousehold(int householdId) Optional~Household~
         +setHouseholdPeople(int householdId, int people) Household
     }
@@ -282,6 +330,9 @@ classDiagram
         <<spring>>
     }
     class api_HouseholdController["HouseholdController"] {
+        <<controller>>
+    }
+    class api_HouseholdMemberController["HouseholdMemberController"] {
         <<controller>>
     }
     class api_MealPlanController["MealPlanController"] {
@@ -302,9 +353,6 @@ classDiagram
         <<record>>
     }
     class auth_Household["Household"]
-    class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
-        <<spring>>
-    }
     auth_AccountService *-- auth_AccountService_NewUser
     auth_AccountService --> auth_AccountRepository
     auth_AccountService ..> auth_CreatedAccount
@@ -314,14 +362,14 @@ classDiagram
     api_AccountController --> auth_AccountService
     api_CallerArgumentResolver --> auth_AccountService
     api_HouseholdController --> auth_AccountService
+    api_HouseholdMemberController --> auth_AccountService
     api_MealPlanController --> auth_AccountService
-    api_MealServingsScheduleConfig ..> auth_AccountService
     api_PlannedMealController --> auth_AccountService
     api_ScheduledMealServings --> auth_AccountService
     auth_AccountSelfService --> auth_AccountService
     auth_InvitationService --> auth_AccountService
     auth_LoginService --> auth_AccountService
-    %% 1 more neighbours not drawn
+    %% 2 more neighbours not drawn
 ```
 
 | Field | Type |
@@ -353,10 +401,11 @@ classDiagram
 | `Optional<HouseholdMembership> membershipFor(int userId)` | public |  |
 | `Optional<Household> findFirstHousehold()` | public | The shared household of this installation (the oldest one), or empty on a fresh database. |
 | `java.util.List<Household> allHouseholds()` | public | Every household, oldest first. |
+| `java.util.List<AccountRepository.Member> members(int householdId)` | public | The members of a household, the oldest membership first. |
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AccountController`, `AccountSelfService`, `CallerArgumentResolver`, `HouseholdController`, `InvitationService`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
+**Referenced by:** `AccountController`, `AccountSelfService`, `CallerArgumentResolver`, `HouseholdController`, `HouseholdMemberController`, `InvitationService`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
 
 ## AccountService.NewUser
 
@@ -631,12 +680,16 @@ classDiagram
     class api_Caller["Caller"] {
         <<record>>
     }
+    class auth_AccountRepository_Member["AccountRepository.Member"] {
+        <<record>>
+    }
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
     }
     class auth_AccountRepository["AccountRepository"]
     api_Caller --> auth_HouseholdRole
     auth_AccountRepository ..> auth_HouseholdRole
+    auth_AccountRepository_Member --> auth_HouseholdRole
     auth_HouseholdMembership --> auth_HouseholdRole
 ```
 
@@ -686,6 +739,28 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `InvalidInvitationException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
+
+## InvitationLimitException
+
+*class · extends RuntimeException*
+
+The household already has the most open invitations it may have. A conflict (409) with its own code, INVITATION_LIMIT.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvitationLimitException["InvitationLimitException"] {
+        +InvitationLimitException(int limit)
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> auth_InvitationLimitException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `InvitationLimitException(int limit)` | public |  |
 
 **Referenced by:** `ApiExceptionHandler`
 

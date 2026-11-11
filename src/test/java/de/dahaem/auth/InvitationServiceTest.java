@@ -176,7 +176,7 @@ class InvitationServiceTest {
         for (int i = 0; i < InvitationService.MAX_OPEN; i++) {
             invitations.create(household, admin.getId(), null);
         }
-        assertThrows(IllegalArgumentException.class, () -> invitations.create(household, admin.getId(), null));
+        assertThrows(InvitationLimitException.class, () -> invitations.create(household, admin.getId(), null));
 
         invitations.revoke(household, invitations.list(household).get(0).id());
         invitations.create(household, admin.getId(), null);   // one place free again

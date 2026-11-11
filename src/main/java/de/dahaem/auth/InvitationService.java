@@ -65,8 +65,8 @@ public class InvitationService {
     /**
      * Makes an invitation into the household and returns its code, which is not stored and cannot be shown again.
      *
-     * @throws IllegalArgumentException for a note that is too long, or when the household already has {@value #MAX_OPEN}
-     *                                  invitations open (revoke one first)
+     * @throws IllegalArgumentException for a note that is too long
+     * @throws InvitationLimitException when the household already has {@value #MAX_OPEN} invitations open (revoke one first)
      */
     public Created create(int householdId, int createdBy, String note) {
         String cleanNote = note == null || note.isBlank() ? null : note.trim();
@@ -75,7 +75,7 @@ public class InvitationService {
         }
         LocalDateTime now = now();
         if (invitations.countOpen(householdId, now) >= MAX_OPEN) {
-            throw new IllegalArgumentException("There are already " + MAX_OPEN + " open invitations: revoke one first");
+            throw new InvitationLimitException(MAX_OPEN);
         }
         String raw = randomCode();
         LocalDateTime expires = now.plus(Duration.ofDays(VALID_DAYS));

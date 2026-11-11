@@ -24,73 +24,76 @@ flowchart LR
         u6(["GET /api/households/{id}"])
         u7(["PUT /api/households/{id}/people"])
     end
+    subgraph g_HouseholdMember["HouseholdMember"]
+        u8(["GET /api/household/members"])
+    end
     subgraph g_Intake["Intake"]
-        u8(["POST /api/intake"])
+        u9(["POST /api/intake"])
     end
     subgraph g_Inventory["Inventory"]
-        u9(["GET /api/inventory"])
-        u10(["GET /api/inventory/expiring"])
-        u11(["GET /api/inventory/low-stock"])
-        u12(["GET /api/inventory/search"])
-        u13(["GET /api/inventory/{id}/batches"])
-        u14(["POST /api/inventory/{id}/use"])
+        u10(["GET /api/inventory"])
+        u11(["GET /api/inventory/expiring"])
+        u12(["GET /api/inventory/low-stock"])
+        u13(["GET /api/inventory/search"])
+        u14(["GET /api/inventory/{id}/batches"])
+        u15(["POST /api/inventory/{id}/use"])
     end
     subgraph g_Invitation["Invitation"]
-        u15(["GET /api/household/invitations"])
-        u16(["POST /api/household/invitations"])
-        u17(["DELETE /api/household/invitations/{id}"])
-        u18(["POST /api/invitations/accept"])
+        u16(["GET /api/household/invitations"])
+        u17(["POST /api/household/invitations"])
+        u18(["DELETE /api/household/invitations/{id}"])
+        u19(["POST /api/invitations/accept"])
     end
     subgraph g_MealPlan["MealPlan"]
-        u19(["GET /api/meal-plans"])
-        u20(["POST /api/meal-plans"])
-        u21(["POST /api/meal-plans/{id}/recipes"])
-        u22(["DELETE /api/meal-plans/{id}/recipes/{recipeId}"])
-        u23(["POST /api/meal-plans/{id}/shopping-list"])
-        u24(["GET /api/meal-plans/{id}/shopping-lists"])
+        u20(["GET /api/meal-plans"])
+        u21(["POST /api/meal-plans"])
+        u22(["POST /api/meal-plans/{id}/recipes"])
+        u23(["DELETE /api/meal-plans/{id}/recipes/{recipeId}"])
+        u24(["POST /api/meal-plans/{id}/shopping-list"])
+        u25(["GET /api/meal-plans/{id}/shopping-lists"])
     end
     subgraph g_PlannedMeal["PlannedMeal"]
-        u25(["POST /api/meal-plans/meals"])
-        u26(["DELETE /api/meal-plans/meals/{entryId}"])
-        u27(["PATCH /api/meal-plans/meals/{entryId}"])
-        u28(["GET /api/meal-plans/week"])
-        u29(["PUT /api/recipes/{id}/preferred-servings"])
+        u26(["POST /api/meal-plans/meals"])
+        u27(["DELETE /api/meal-plans/meals/{entryId}"])
+        u28(["PATCH /api/meal-plans/meals/{entryId}"])
+        u29(["GET /api/meal-plans/week"])
+        u30(["PUT /api/recipes/{id}/preferred-servings"])
     end
     subgraph g_Purchase["Purchase"]
-        u30(["GET /api/analytics/spending"])
-        u31(["GET /api/purchases"])
-        u32(["POST /api/purchases"])
+        u31(["GET /api/analytics/spending"])
+        u32(["GET /api/purchases"])
+        u33(["POST /api/purchases"])
     end
     subgraph g_Recipe["Recipe"]
-        u33(["GET /api/recipes"])
-        u34(["GET /api/recipes/search"])
-        u35(["GET /api/recipes/{id}"])
-        u36(["GET /api/recipes/{id}/tags"])
-        u37(["POST /api/recipes/{id}/tags"])
+        u34(["GET /api/recipes"])
+        u35(["GET /api/recipes/search"])
+        u36(["GET /api/recipes/{id}"])
+        u37(["GET /api/recipes/{id}/tags"])
+        u38(["POST /api/recipes/{id}/tags"])
     end
     subgraph g_ShoppingList["ShoppingList"]
-        u38(["GET /api/shopping-list"])
+        u39(["GET /api/shopping-list"])
     end
     subgraph g_ShoppingListItem["ShoppingListItem"]
-        u39(["GET /api/shopping-lists"])
-        u40(["POST /api/shopping-lists"])
-        u41(["GET /api/shopping-lists/{listId}"])
-        u42(["PUT /api/shopping-lists/{listId}/archived"])
-        u43(["POST /api/shopping-lists/{listId}/items"])
-        u44(["DELETE /api/shopping-lists/{listId}/items/{itemId}"])
-        u45(["PUT /api/shopping-lists/{listId}/items/{itemId}/purchased"])
-        u46(["PUT /api/shopping-lists/{listId}/items/{itemId}/quantity"])
-        u47(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
-        u48(["PUT /api/shopping-lists/{listId}/status"])
+        u40(["GET /api/shopping-lists"])
+        u41(["POST /api/shopping-lists"])
+        u42(["GET /api/shopping-lists/{listId}"])
+        u43(["PUT /api/shopping-lists/{listId}/archived"])
+        u44(["POST /api/shopping-lists/{listId}/items"])
+        u45(["DELETE /api/shopping-lists/{listId}/items/{itemId}"])
+        u46(["PUT /api/shopping-lists/{listId}/items/{itemId}/purchased"])
+        u47(["PUT /api/shopping-lists/{listId}/items/{itemId}/quantity"])
+        u48(["PUT /api/shopping-lists/{listId}/items/{itemId}/store-item"])
+        u49(["PUT /api/shopping-lists/{listId}/status"])
     end
     subgraph g_StoreCatalog["StoreCatalog"]
-        u49(["GET /api/brands"])
-        u50(["GET /api/stores"])
+        u50(["GET /api/brands"])
+        u51(["GET /api/stores"])
     end
     subgraph g_Suggestion["Suggestion"]
-        u51(["GET /api/suggestions/by-expiring"])
-        u52(["GET /api/suggestions/by-savings"])
-        u53(["GET /api/suggestions/pantry"])
+        u52(["GET /api/suggestions/by-expiring"])
+        u53(["GET /api/suggestions/by-savings"])
+        u54(["GET /api/suggestions/pantry"])
     end
     member --> u1
     member --> u2
@@ -145,6 +148,7 @@ flowchart LR
     member --> u51
     member --> u52
     member --> u53
+    member --> u54
 ```
 
 Each use case is one endpoint; the parameters, bodies and answers are in [API.md](API.md). What a member actually does with them:

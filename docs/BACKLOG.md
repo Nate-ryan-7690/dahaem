@@ -682,6 +682,8 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
   them, but `seed/demo_data.sql` inserts plans and lists before any household exists, so the seed must change first);
   (c) `purchase_receipt` has no household yet: there is no receipts API, only the operator's import command, so nothing leaks;
   add the column when receipts get an API or a second household imports its own.
+- [x] API for the household/account pages: `GET /api/household/members` (name, role, `you`; the email only for admins and for your own row) and a
+  dedicated `409 INVITATION_LIMIT` for the 20-open-invitations limit (was a generic 400).
 - [x] PR 5: operator command for a second household: `UserAdminRunner create-household-user <email> <displayName> <householdName>` starts
   a NEW household with that user as its ADMIN (plain `create-user` still joins the oldest one). Everyone else joins it with an
   invitation. With this the household work is complete; the open items above (frozen columns, NOT NULL, receipts) stay Nate's call.
