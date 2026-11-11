@@ -2,9 +2,9 @@
 
 # Package `api`
 
-The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
+The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling.
 
-93 types in 65 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+92 types in 64 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -42,9 +42,6 @@ classDiagram
         <<record>>
     }
     class api_CreatePurchaseRequest["CreatePurchaseRequest"] {
-        <<record>>
-    }
-    class api_CsrfTokenDto["CsrfTokenDto"] {
         <<record>>
     }
     class api_CurrentUserDto["CurrentUserDto"] {
@@ -281,7 +278,6 @@ classDiagram
     api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
     api_AuthController ..> api_VerifyRequest
-    api_AuthController ..> api_CsrfTokenDto
     api_BarcodeController ..> api_AssignBarcodeRequest
     api_CurrentUserDto *-- api_CurrentUserDto_HouseholdDto
     api_DietDto *-- api_DietDto_Hint
@@ -370,16 +366,15 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`AddTagRequest`](#addtagrequest) | record |  | Body of POST /api/recipes/{id}/tags. |
 | [`ApiExceptionHandler`](#apiexceptionhandler) | class | error handler | Turns exceptions into JSON error responses with sensible status codes. |
 | [`AssignBarcodeRequest`](#assignbarcoderequest) | record |  | Body of PUT /api/barcodes/{code}: what the barcode is. |
-| [`AuditFilter`](#auditfilter) | class | Spring component | Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403. |
+| [`AuditFilter`](#auditfilter) | class | Spring component | Writes the audit line (see AuditLog) for every request, on any path, that is a write or was refused with 401 / 403. |
 | [`AuditLog`](#auditlog) | class |  | The audit trail: one line per login, failed login, write and refused request, in the logger "audit", with the client IP the PHP front end passes on. |
-| [`AuthController`](#authcontroller) | class | REST controller | The parts of the login flow that are plain endpoints. |
+| [`AuthController`](#authcontroller) | class | REST controller | Checking a login for the PHP front end, which owns the user's session. |
 | [`BadRequestException`](#badrequestexception) | class |  | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](#barcodecontroller) | class | REST controller | Barcode numbers: what a number is, and remembering it. |
 | [`BrandPageDto`](#brandpagedto) | record |  | One page of GET /api/brands. |
 | [`CreateMealPlanRequest`](#createmealplanrequest) | record |  | Body of POST /api/meal-plans, e.g. |
 | [`CreatePurchaseRequest`](#createpurchaserequest) | record |  | Body of POST /api/purchases: a purchase of a known store_item. |
-| [`CsrfTokenDto`](#csrftokendto) | record |  | A CSRF token and where to put it: in the headerName header (or the parameterName form field). |
-| [`CurrentUserDto`](#currentuserdto) | record |  | Answer of GET /api/auth/me. |
+| [`CurrentUserDto`](#currentuserdto) | record |  | Answer of POST /api/auth/verify. |
 | [`CurrentUserDto.HouseholdDto`](#currentuserdtohouseholddto) | record |  |  |
 | [`DahaemApplication`](#dahaemapplication) | class | command-line tool | Entry point for the REST API. |
 | [`DietDto`](#dietdto) | record |  | What the diet rules say about a recipe, present only when rules were passed. |
@@ -429,7 +424,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`RecipeSuggestionDto`](#recipesuggestiondto) | record |  | A ranked recipe suggestion: which recipe, how strongly it matched the signal, and why. |
 | [`RecipeSummaryDto`](#recipesummarydto) | record |  | A recipe in a list: identity and the numbers you'd scan a list by. |
 | [`ScheduledMealServings`](#scheduledmealservings) | class |  | The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when the household number |
-| [`SecurityConfig`](#securityconfig) | class | configuration | Who may call the API. |
+| [`SecurityConfig`](#securityconfig) | class | configuration | Who may call the API: only the PHP front end, which proves it with the shared secret in the X-Internal-Token header on EVERY request (see InternalTokenFilter). |
 | [`SelectStoreItemRequest`](#selectstoreitemrequest) | record |  | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](#serviceconfig) | class | configuration | Wires the existing plain-Java repositories and services as Spring beans. |
 | [`SetHouseholdPeopleRequest`](#sethouseholdpeoplerequest) | record |  | Body of PUT /api/households/{id}/people. |
@@ -683,9 +678,9 @@ classDiagram
 
 *class · Spring component · extends OncePerRequestFilter*
 
-Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403.
-It runs before Spring Security, so refused requests (a wrong token, a missing login) are seen too. Logins are logged
-by the login handlers and the verify endpoint with the typed email, so those paths are skipped here.
+Writes the audit line (see AuditLog) for every request, on any path, that is a write or was refused with 401 /
+403. It runs before Spring Security, so refused requests (a wrong token) are seen too. The verify endpoint logs its own
+line with the typed email. The path is not used to decide what to log (the raw path can be percent-encoded).
 
 ```mermaid
 classDiagram
@@ -713,7 +708,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `AuditFilter(InternalTokenFilter token)` | public |  |
-| `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
+| `boolean shouldNotFilter(HttpServletRequest request)` | protected | The verify endpoint writes its own audit line (with the typed email); decided on the decoded path. |
 | `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
 | `String ipOf(HttpServletRequest request, boolean tokenValid)` | package static | The client address for a request (see AuditLog.clientIp). |
 
@@ -763,23 +758,19 @@ classDiagram
 
 *class · REST controller*
 
-The parts of the login flow that are plain endpoints. Login and logout themselves are handled
-by Spring Security's filters (see SecurityConfig) before a request reaches a controller.
+Checking a login for the PHP front end, which owns the user's session. The API itself has no login page, no session
+login and no CSRF endpoint.
 
 ```mermaid
 classDiagram
     direction LR
     class api_AuthController["AuthController"] {
         <<controller>>
-        -AccountService accountService
         -LoginService loginService
         -InternalTokenFilter internalToken
-        +AuthController(AccountService accountService, LoginService loginService, InternalTokenFilter internalToken)
+        +AuthController(LoginService loginService, InternalTokenFilter internalToken)
         +verify(VerifyRequest request, HttpServletRequest http) CurrentUserDto
-        +csrf(CsrfToken token) CsrfTokenDto
-        +me(Authentication authentication) CurrentUserDto
     }
-    class auth_AccountService["AccountService"]
     class auth_LoginService["LoginService"]
     class api_InternalTokenFilter["InternalTokenFilter"] {
         <<spring>>
@@ -790,29 +781,21 @@ classDiagram
     class api_VerifyRequest["VerifyRequest"] {
         <<record>>
     }
-    class api_CsrfTokenDto["CsrfTokenDto"] {
-        <<record>>
-    }
-    api_AuthController --> auth_AccountService
     api_AuthController --> auth_LoginService
     api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
     api_AuthController ..> api_VerifyRequest
-    api_AuthController ..> api_CsrfTokenDto
 ```
 
 | Field | Type |
 |---|---|
-| `accountService` | `AccountService` |
 | `loginService` | `LoginService` |
 | `internalToken` | `InternalTokenFilter` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `AuthController(AccountService accountService, LoginService loginService, InternalTokenFilter internalToken)` | public |  |
+| `AuthController(LoginService loginService, InternalTokenFilter internalToken)` | public |  |
 | `CurrentUserDto verify(VerifyRequest request, HttpServletRequest http)` | public | Checks an email and a password for the PHP front end, which owns the user's session. |
-| `CsrfTokenDto csrf(CsrfToken token)` | public | The CSRF token to send with the next POST/PUT/DELETE. |
-| `CurrentUserDto me(Authentication authentication)` | public | The logged-in user and their household. |
 
 ## BadRequestException
 
@@ -976,40 +959,11 @@ classDiagram
 
 **Referenced by:** `PurchaseController`
 
-## CsrfTokenDto
-
-*record*
-
-A CSRF token and where to put it: in the headerName header (or the parameterName form field).
-
-```mermaid
-classDiagram
-    direction LR
-    class api_CsrfTokenDto["CsrfTokenDto"] {
-        <<record>>
-        +String headerName
-        +String parameterName
-        +String token
-    }
-    class api_AuthController["AuthController"] {
-        <<controller>>
-    }
-    api_AuthController ..> api_CsrfTokenDto
-```
-
-| Component | Type |
-|---|---|
-| `headerName` | `String` |
-| `parameterName` | `String` |
-| `token` | `String` |
-
-**Referenced by:** `AuthController`
-
 ## CurrentUserDto
 
 *record*
 
-Answer of GET /api/auth/me. household is null for a user who is in no household. The password hash is never sent.
+Answer of POST /api/auth/verify. household is null for a user who is in no household. The password hash is never sent.
 
 ```mermaid
 classDiagram
@@ -1565,13 +1519,13 @@ classDiagram
 *class · Spring component · extends OncePerRequestFilter*
 
 Shared-secret gate for the internal API. When INTERNAL_API_TOKEN is set (property
-dahaem.internal-token), every /api/** request must carry it in the
+dahaem.internal-token), EVERY request, whatever its path, must carry it in the
 X-Internal-Token header: a missing or wrong token is answered with 401 and goes no
 further. A request with the right token counts as authenticated (it is the PHP front end, which
-does its own user login) and is exempt from CSRF, which only protects browser sessions.
+owns the user login) and is exempt from CSRF, which only protects browser sessions.
 
-When no token is configured the filter does nothing and the session login in
-SecurityConfig applies as before (local development, tests).
+When no token is configured the filter does nothing and nobody is authenticated (the API starts without a token
+only for local development and tests, see StartupGuard).
 
 ```mermaid
 classDiagram
@@ -3353,26 +3307,17 @@ classDiagram
 
 *class · configuration*
 
-Who may call the API. Session-based form login, meant for the same-origin PWA:
+Who may call the API: only the PHP front end, which proves it with the shared secret in the X-Internal-Token
+header on EVERY request (see InternalTokenFilter). The PHP front end owns the user login and the user session
+(POST /api/auth/verify checks a password); the API has no login page, no session login and no static pages.
 
-- POST /api/auth/login (form fields email, password) checks the password
-      against the BCrypt hash in app_user and starts an HTTP session (JSESSIONID cookie).
-      204 on success, 401 on a wrong email or password.
+- /api/** needs the token (or, in tests, a mock user), else 401 as JSON, never a redirect.
 
-- POST /api/auth/logout ends the session. 204.
+- Everything else is denied (the API serves no pages). /error stays open only so that error responses can
+      be rendered.
 
-- Every other /api/** request needs a logged-in session, else 401 (JSON, never a redirect,
-      so the frontend can react by showing its login screen).
-
-- Everything outside /api/** is the static PWA shell and stays public, so the login
-      screen itself can load.
-
-When INTERNAL_API_TOKEN is set, InternalTokenFilter additionally requires it on
-every /api/** request and lets such requests through without a session or CSRF token.
-
-CSRF protection is on for every state-changing request, the login and logout included. The
-token lives in the session; the frontend fetches it from GET /api/auth/csrf and sends it
-back in the header that endpoint names. Logging in rotates both the session id and the token.
+CSRF protection stays on for state-changing requests that do not carry the token; with the token required on every
+path none can reach a controller in production. The PHP front end has its own CSRF tokens on its forms.
 
 ```mermaid
 classDiagram
@@ -3381,22 +3326,18 @@ classDiagram
         <<spring>>
         +internalTokenFilterRegistration(InternalTokenFilter filter) FilterRegistrationBean~InternalTokenFilter~
         +passwordEncoder(int strength) PasswordEncoder
-        +userDetailsService(AccountService accountService) UserDetailsService
         +securityFilterChain(HttpSecurity http, ObjectMapper objectMapper, InternalTokenFilter internalToken) SecurityFilterChain
     }
     class api_InternalTokenFilter["InternalTokenFilter"] {
         <<spring>>
     }
-    class auth_AccountService["AccountService"]
     api_SecurityConfig ..> api_InternalTokenFilter
-    api_SecurityConfig ..> auth_AccountService
 ```
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `FilterRegistrationBean<InternalTokenFilter> internalTokenFilterRegistration(InternalTokenFilter filter)` | public | The token filter belongs in the Spring Security chain only, not also in the servlet container's chain. |
 | `PasswordEncoder passwordEncoder(int strength)` | public | BCrypt (salted per hash). |
-| `UserDetailsService userDetailsService(AccountService accountService)` | public | Looks users up by email (the login name) through the account service; roles are not used yet. |
 | `SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper, InternalTokenFilter internalToken)` | public |  |
 
 ## SelectStoreItemRequest

@@ -9,15 +9,13 @@ each controller method is the source of the descriptions.
 
 ## Calling it
 
-| | PHP frontend (production) | Browser PWA / local development |
-|---|---|---|
-| How you authenticate | header `X-Internal-Token: <INTERNAL_API_TOKEN>` on every request | `POST /api/auth/login` (form fields `email`, `password`), then the `JSESSIONID` cookie |
-| CSRF token for POST / PUT / DELETE | not needed | needed: read it from `GET /api/auth/csrf` and send it in the header that answer names |
-| When it applies | when the `INTERNAL_API_TOKEN` environment variable is set | when no token is configured |
+Every request, on every path, needs the header `X-Internal-Token: <INTERNAL_API_TOKEN>`; the API refuses to start without
+that variable. The PHP frontend owns the user login and the user session: it checks a password with `POST /api/auth/verify`
+and sends `X-Client-Ip` (the real client address) and `X-Acting-User` (the logged-in user's id) with its calls. The API has
+no login page, no session login and no CSRF endpoint.
 
-- A missing or wrong token, or no session, answers **401** with the JSON error body below (never a redirect).
-- A missing or expired CSRF token answers **403**; fetch a new one and retry.
-- `POST /api/auth/login` answers 204 (a session starts) or 401; `POST /api/auth/logout` answers 204.
+- A missing or wrong token answers **401** with the JSON error body below (never a redirect). A path outside `/api` answers
+  **403**.
 - Requests and answers are UTF-8 JSON. Dates are `YYYY-MM-DD`, date-times ISO 8601. Money is a plain JSON number (euros).
 - Lists are returned as plain JSON arrays, except `GET /api/recipes/search`: it is paged and answers `{items, total, page, pageSize, totalPages}` (24 per page unless `pageSize` says otherwise). `GET /api/recipes` still returns every recipe as a plain array.
 - The service never decides for the user: it returns prices, savings and options, and the user chooses.
@@ -38,8 +36,8 @@ Every error has the same shape:
 | Status | When |
 |---|---|
 | 400 | a missing or malformed parameter or body, an unknown diet preset, an invalid value |
-| 401 | no valid token or session |
-| 403 | missing or expired CSRF token |
+| 401 | no valid internal token (or a wrong password at `/api/auth/verify`) |
+| 403 | the request is not allowed (for example a path outside `/api`) |
 | 404 | the id does not exist |
 | 409 | the write conflicts with existing data (a foreign key, unique or primary key constraint) |
 | 500 | anything else; the details are in the service log only |
@@ -49,10 +47,6 @@ Every error has the same shape:
 | Method | Path | What it does |
 |---|---|---|
 | GET | [`/api/analytics/spending`](#get-apianalyticsspending) | Total spending: over all purchases, or between from and to (inclusive) when both are given. |
-| GET | [`/api/auth/csrf`](#get-apiauthcsrf) | The CSRF token to send with the next POST/PUT/DELETE. |
-| POST | `/api/auth/login` | Log in (form fields `email`, `password`). 204 on success, 401 on a wrong email or password. Handled by Spring Security, not by a controller. |
-| POST | `/api/auth/logout` | End the session and delete the `JSESSIONID` cookie. 204. |
-| GET | [`/api/auth/me`](#get-apiauthme) | The logged-in user and their household. |
 | POST | [`/api/auth/verify`](#post-apiauthverify) | Checks an email and a password for the PHP front end, which owns the user's session. |
 | GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
 | PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
@@ -181,50 +175,17 @@ An unknown storeItemId/discountId violates a foreign key and comes back as 409.
 
 ### AuthController
 
-The parts of the login flow that are plain endpoints. Login and logout themselves are handled
-by Spring Security's filters (see SecurityConfig) before a request reaches a controller.
+Checking a login for the PHP front end, which owns the user's session. The API itself has no login page, no session
+login and no CSRF endpoint.
 
-
-#### GET /api/auth/csrf
-
-The CSRF token to send with the next POST/PUT/DELETE. Public, because the login needs one too.
-
-**Answer** 200 `CsrfTokenDto`
-
-```json
-{
-  "headerName": "…",
-  "parameterName": "…",
-  "token": "…"
-}
-```
-
-#### GET /api/auth/me
-
-The logged-in user and their household.
-
-**Answer** 200 `CurrentUserDto`
-
-```json
-{
-  "id": 0,
-  "email": "…",
-  "displayName": "…",
-  "household": {
-    "id": 0,
-    "name": "…",
-    "role": "…"
-  }
-}
-```
 
 #### POST /api/auth/verify
 
 Checks an email and a password for the PHP front end, which owns the user's session. Answers 200 with the user and
 their household and role (CurrentUserDto); starts NO session and sets NO cookie. A wrong password and an
-unknown email give the same 401 (code BAD_CREDENTIALS). After repeated failures from one client address (or for one
-email) the answer is 429 (code TOO_MANY_ATTEMPTS) with a Retry-After header, without looking at the password.
-The client address comes from the X-Client-Ip header the PHP sends; the attempt is written to the audit log.
+unknown email give the same 401 (code BAD_CREDENTIALS). After repeated attempts from one client address the answer is
+429 (code TOO_MANY_ATTEMPTS) with a Retry-After header, without looking at the password. The client address
+comes from the X-Client-Ip header the PHP sends; the attempt is written to the audit log.
 
 **Request body** `VerifyRequest`
 
@@ -2045,23 +2006,9 @@ wasDiscounted defaults to false, purchaseDate defaults to today.
 { … }
 ```
 
-### CsrfTokenDto
-
-A CSRF token and where to put it: in the headerName header (or the parameterName form field).
-
-| Property | Type |
-|---|---|
-| `headerName` | `String` |
-| `parameterName` | `String` |
-| `token` | `String` |
-
-```json
-{ … }
-```
-
 ### CurrentUserDto
 
-Answer of GET /api/auth/me. household is null for a user who is in no household. The password hash is never sent.
+Answer of POST /api/auth/verify. household is null for a user who is in no household. The password hash is never sent.
 
 | Property | Type |
 |---|---|
