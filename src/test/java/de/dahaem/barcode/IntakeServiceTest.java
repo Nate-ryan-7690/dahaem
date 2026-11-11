@@ -2,11 +2,13 @@ package de.dahaem.barcode;
 
 import de.dahaem.finance.PurchaseRepository;
 import de.dahaem.finance.PurchaseService;
+import de.dahaem.finance.StockBatch;
 import de.dahaem.finance.StockService;
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.Item;
 import de.dahaem.shared.Database;
 import de.dahaem.stores.StoreRepository;
+import de.dahaem.stores.UnknownStoreException;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +25,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Putting groceries away by barcode on a throwaway MariaDB: stock in the item's unit, batches, store items, partial failure. */
@@ -60,7 +63,7 @@ class IntakeServiceTest {
 
     @Test
     void stockGrowsByPacksTimesPackSizeInTheItemsUnitAndTheStoreItemIsLinked() throws SQLException {
-        IntakeService.LineResult r = intake.intake("Aldi", TODAY, List.of(
+        IntakeService.LineResult r = intake.intake("Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null))).get(0);
 
         assertTrue(r.ok(), r.message());
@@ -79,7 +82,7 @@ class IntakeServiceTest {
     @Test
     void useTakesFromTheEarliestExpiringBatchInGramsAndMovesTheDateOn() throws SQLException {
         // 2 packs (1000 g) expiring 1 Dec, 1 pack (500 g) expiring 10 Dec
-        intake.intake("Aldi", TODAY, List.of(
+        intake.intake("Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 10), 1.29, null, null)));
 
@@ -93,10 +96,10 @@ class IntakeServiceTest {
 
     @Test
     void aLinePriceIsOptionalWhenTheStoreItemHasAKnownPrice() throws SQLException {
-        intake.intake("Aldi", TODAY, List.of(new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null)));
+        intake.intake("Aldi", true, TODAY, List.of(new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null)));
         exec("UPDATE store_item SET store_item_price = 1.29");
 
-        IntakeService.LineResult r = intake.intake("Aldi", TODAY, List.of(
+        IntakeService.LineResult r = intake.intake("Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 3, LocalDate.of(2026, 12, 5), null, null, null))).get(0);
 
         assertTrue(r.ok(), r.message());
@@ -105,7 +108,7 @@ class IntakeServiceTest {
 
     @Test
     void withoutAKnownPriceTheLineNeedsOneAndNothingIsCreated() throws SQLException {
-        IntakeService.LineResult r = intake.intake("Lidl", TODAY, List.of(
+        IntakeService.LineResult r = intake.intake("Lidl", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), null, null, null))).get(0);
 
         assertFalse(r.ok());
@@ -117,7 +120,7 @@ class IntakeServiceTest {
 
     @Test
     void aSpecialPackIsItsOwnStoreItemAndAddsItsOwnSize() throws SQLException {
-        IntakeService.LineResult r = intake.intake("Aldi", TODAY, List.of(
+        IntakeService.LineResult r = intake.intake("Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.98, 550, "g"))).get(0);
 
         assertTrue(r.ok(), r.message());
@@ -128,7 +131,7 @@ class IntakeServiceTest {
 
     @Test
     void oneBadLineDoesNotStopTheOthers() throws SQLException {
-        List<IntakeService.LineResult> results = intake.intake("Aldi", TODAY, List.of(
+        List<IntakeService.LineResult> results = intake.intake("Aldi", true, TODAY, List.of(
                 new IntakeService.Line("4006381333932", 1, LocalDate.of(2026, 12, 1), 1.0, null, null),   // typo
                 new IntakeService.Line("4012345678901", 1, LocalDate.of(2026, 12, 1), 1.0, null, null),   // not assigned
                 new IntakeService.Line(SPAGHETTI, 1, null, 1.0, null, null),                              // no expiry
@@ -145,6 +148,52 @@ class IntakeServiceTest {
         assertEquals(2000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 2"));
         assertEquals(0, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
         assertNull(results.get(0).purchaseId());
+    }
+
+    @Test
+    void anUnknownStoreIsRefusedUnlessAskedAndTheCaseOfAnExistingOneDoesNotMatter() throws SQLException {
+        IntakeService.Line line = new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null);
+        intake.intake("Aldi", true, TODAY, List.of(line));   // asked to create it: the store now exists
+
+        assertThrows(UnknownStoreException.class, () -> intake.intake("Aldii", false, TODAY, List.of(line)));
+        assertEquals(1, count("SELECT COUNT(*) FROM store"), "a refused store must not be created");
+        assertEquals(1, count("SELECT COUNT(*) FROM purchase_history"), "and nothing is recorded for it");
+
+        IntakeService.LineResult r = intake.intake("  aldi ", false, TODAY, List.of(line)).get(0);
+        assertTrue(r.ok(), r.message());
+        assertEquals(1, count("SELECT COUNT(*) FROM store"), "'aldi' is the existing Aldi, not a new store");
+        assertEquals(2, count("SELECT COUNT(*) FROM purchase_history"));
+    }
+
+    @Test
+    void batchesListWhatIsLeftOfEachPurchaseInUseOrder() {
+        intake.intake("Aldi", true, TODAY, List.of(
+                new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 10), 1.29, null, null)));
+
+        List<StockBatch> batches = stock.batches(1, false).orElseThrow();
+
+        assertEquals(2, batches.size());
+        StockBatch first = batches.get(0);
+        assertEquals(LocalDate.of(2026, 12, 1), first.expirationDate());
+        assertEquals("Aldi", first.storeName());
+        assertEquals("Barilla", first.brandName());
+        assertEquals(TODAY, first.purchaseDate());
+        assertEquals(2, first.packs());
+        assertEquals(500, first.packSize());
+        assertEquals(1000, first.remaining());
+        assertEquals("g", first.unit());
+        assertEquals(500, batches.get(1).remaining());
+
+        stock.use(1, 1200);   // the first batch is used up, 300 g are left of the second
+
+        List<StockBatch> left = stock.batches(1, false).orElseThrow();
+        assertEquals(1, left.size());
+        assertEquals(300, left.get(0).remaining());
+        List<StockBatch> all = stock.batches(1, true).orElseThrow();
+        assertEquals(2, all.size());
+        assertEquals(0, all.get(0).remaining());
+        assertTrue(stock.batches(999, false).isEmpty(), "no such item");
     }
 
     // ---------- helpers ----------

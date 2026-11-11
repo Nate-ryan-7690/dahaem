@@ -48,6 +48,7 @@ public class BarcodeController {
             throw new BadRequestException("'inventoryItemId' and 'packSize' are required");
         }
         return barcodeService.assign(code, request.inventoryItemId(), request.brand(), request.packSize(),
-                request.packUnit(), request.name(), request.storeItemId(), mealPlanService.today());
+                request.packUnit(), request.name(), request.storeItemId(), Boolean.TRUE.equals(request.createBrand()),
+                mealPlanService.today());
     }
 }

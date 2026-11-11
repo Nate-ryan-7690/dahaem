@@ -126,6 +126,43 @@ public class PurchaseRepository {
         }
     }
 
+    /** One purchase of an item with the facts a batch listing needs; {@code remaining} is null = nothing used yet. */
+    public record BatchRow(int purchaseId, int storeItemId, String storeName, String brandName, LocalDate purchaseDate,
+                           LocalDate expirationDate, int quantityPurchased, int packSize, String packUnit,
+                           Integer remaining) {
+    }
+
+    /** Every purchase of an inventory item, earliest expiry first (older purchase first on a tie). Looks only. */
+    public List<BatchRow> findBatchesOfItem(int inventoryItemId) {
+        String sql = "SELECT ph.purchase_history_purchase_id, ph.purchase_history_store_item_id, s.store_name, b.brand_name, "
+                + "ph.purchase_history_purchase_date, ph.purchase_history_expiration_date, "
+                + "ph.purchase_history_quantity_purchased, si.store_item_package_size, si.store_item_package_unit, "
+                + "ph.purchase_history_quantity_remaining "
+                + "FROM purchase_history ph "
+                + "JOIN store_item si ON si.store_item_id = ph.purchase_history_store_item_id "
+                + "JOIN store s ON s.store_id = si.store_item_store_id "
+                + "JOIN brand b ON b.brand_id = si.store_item_brand_id "
+                + "WHERE si.store_item_item_id = ? "
+                + "ORDER BY ph.purchase_history_expiration_date, ph.purchase_history_purchase_id";
+        List<BatchRow> out = new ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, inventoryItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    int remaining = rs.getInt(10);
+                    boolean untouched = rs.wasNull();   // right after reading the column
+                    out.add(new BatchRow(rs.getInt(1), rs.getInt(2), rs.getString(3), rs.getString(4),
+                            rs.getObject(5, LocalDate.class), rs.getObject(6, LocalDate.class), rs.getInt(7),
+                            rs.getInt(8), rs.getString(9), untouched ? null : remaining));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not list the batches of inventory item " + inventoryItemId, e);
+        }
+        return out;
+    }
+
     /** What a purchase of a store item adds to stock: the catalogue item, the pack (size + unit) and the item's own unit. */
     public record StoreItemStock(int inventoryItemId, int packSize, String packUnit, String itemUnit) {
     }

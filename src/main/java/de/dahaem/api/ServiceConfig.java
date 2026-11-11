@@ -22,6 +22,7 @@ import de.dahaem.mealplanner.RecipeSearchService;
 import de.dahaem.mealplanner.RecipeService;
 import de.dahaem.shopping.ShoppingListRepository;
 import de.dahaem.shopping.ShoppingListService;
+import de.dahaem.stores.StoreCatalogService;
 import de.dahaem.stores.StoreRepository;
 import de.dahaem.suggestions.PantrySuggestionService;
 import de.dahaem.suggestions.SuggestionRepository;
@@ -131,6 +132,11 @@ public class ServiceConfig {
                                          InventoryRepository inventoryRepository, StoreRepository storeRepository,
                                          ProductDataSource productDataSource) {
         return new BarcodeService(productBarcodeRepository, inventoryRepository, storeRepository, productDataSource);
+    }
+
+    @Bean
+    public StoreCatalogService storeCatalogService(StoreRepository storeRepository) {
+        return new StoreCatalogService(storeRepository);
     }
 
     @Bean

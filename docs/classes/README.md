@@ -8,32 +8,32 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (87)"]
+    api["api (89)"]
     auth["auth (8)"]
     barcode["barcode (16)"]
     diet["diet (14)"]
-    finance["finance (7)"]
+    finance["finance (9)"]
     inventory["inventory (4)"]
     mealplanner["mealplanner (25)"]
     receipts["receipts (30)"]
     shared["shared (9)"]
     shopping["shopping (16)"]
-    stores["stores (47)"]
+    stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
     api -->|14| auth
     api -->|10| barcode
     api -->|12| diet
-    api -->|6| finance
+    api -->|7| finance
     api -->|5| inventory
     api -->|34| mealplanner
     api -->|15| shopping
-    api -->|2| stores
+    api -->|9| stores
     api -->|10| suggestions
     api -->|6| tags
     barcode -->|2| finance
     barcode -->|2| inventory
-    barcode -->|3| stores
+    barcode -->|7| stores
     diet -->|12| tags
     finance -->|3| inventory
     finance -->|1| stores
@@ -53,17 +53,17 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 87 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 89 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 16 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
-| [`finance`](finance.md) | 7 | Purchases and spending analytics. |
+| [`finance`](finance.md) | 9 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 4 | The item catalogue and the pantry. |
 | [`mealplanner`](mealplanner.md) | 25 | Recipes, ingredients, instructions, scaling and meal plans. |
 | [`receipts`](receipts.md) | 30 | Receipt parsing (Penny, ALDI), matching to catalogue items and import. |
 | [`shared`](shared.md) | 9 | The database connection pool, units and portion arithmetic. |
 | [`shopping`](shopping.md) | 16 | Shopping-list generation from recipes and the store options per line. |
-| [`stores`](stores.md) | 47 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
+| [`stores`](stores.md) | 53 | Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh. |
 | [`suggestions`](suggestions.md) | 12 | Recipe suggestions by savings and by expiring stock. |
 | [`tags`](tags.md) | 29 | Recipe tags derived from the data, animals per item, the tagger and its runners. |
 
@@ -102,6 +102,9 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`BarcodeService.Pack`](barcode.md#barcodeservicepack) | barcode | record | A pack as it is stored: the same units a store item and the shopping list use. |
 | [`BasePrice`](shared.md#baseprice) | shared | class | The price of a pack as a price per kilogram, per litre or per piece, so the comparison (and wrong pack data) shows up in one place instead of in every client. |
 | [`BasePrice.Base`](shared.md#basepricebase) | shared | record | value euros per unit ("kg", "l" or "Stück"). |
+| [`BrandPage`](stores.md#brandpage) | stores | record | One page of brands plus how many match in all pages. |
+| [`BrandPageDto`](api.md#brandpagedto) | api | record | One page of GET /api/brands. |
+| [`BrandRef`](stores.md#brandref) | stores | record | A brand: its id and name. |
 | [`CatalogChange`](stores.md#catalogchange) | stores | record | One difference found by the range comparator between the last pull and this one. |
 | [`CatalogChange.Type`](stores.md#catalogchangetype) | stores | enum |  |
 | [`CatalogItem`](stores.md#catalogitem) | stores | record | One inventory_item catalog row, with its normalized names cached for matching. |
@@ -144,7 +147,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`HttpFetcher`](stores.md#httpfetcher) | stores | class | Fetches public web pages / JSON politely: a normal browser User-Agent, timeouts, a few retries with growing backoff, and a pause after every successful request. |
 | [`ImportSummary`](stores.md#importsummary) | stores | record | What one import run did; printed by StoreImportRunner. |
 | [`IntakeController`](api.md#intakecontroller) | api | class | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
-| [`IntakeController.IntakeRequest`](api.md#intakecontrollerintakerequest) | api | record | Body: the store, the purchase day (default today, not in the future) and the lines. |
+| [`IntakeController.IntakeRequest`](api.md#intakecontrollerintakerequest) | api | record | Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines. |
 | [`IntakeController.IntakeResult`](api.md#intakecontrollerintakeresult) | api | record | results has one entry per line, in order; recorded / failed count them. |
 | [`IntakeService`](barcode.md#intakeservice) | barcode | class | Puts groceries away by barcode: for each line (barcode, packs, expiry date, price) the store item for (store, brand, catalogue item, pack) is found or created, linked to the barcode, and the purchase recorded, which adds packs x pack size t |
 | [`IntakeService.Line`](barcode.md#intakeserviceline) | barcode | record | One line to put away. |
@@ -238,6 +241,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PurchaseDto`](api.md#purchasedto) | api | record |  |
 | [`PurchaseRepository`](finance.md#purchaserepository) | finance | class | All SQL for the purchase_history table lives here and nowhere else. |
 | [`PurchaseRepository.Batch`](finance.md#purchaserepositorybatch) | finance | record | One purchase (a batch of one inventory item) with what it needs to tell how much is left: remaining in the item's unit (null = nothing used yet, all of it is left), the packs bought and the pack (size + unit). |
+| [`PurchaseRepository.BatchRow`](finance.md#purchaserepositorybatchrow) | finance | record | One purchase of an item with the facts a batch listing needs; remaining is null = nothing used yet. |
 | [`PurchaseRepository.StoreItemStock`](finance.md#purchaserepositorystoreitemstock) | finance | record | What a purchase of a store item adds to stock: the catalogue item, the pack (size + unit) and the item's own unit. |
 | [`PurchaseService`](finance.md#purchaseservice) | finance | class | Business logic for purchases. |
 | [`ReceiptAdjustment`](receipts.md#receiptadjustment) | receipts | record | A discount or deposit movement, kept apart from products (paid price != listed price != offer; deposit != discount). |
@@ -339,7 +343,10 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`StepAmounts.Context`](mealplanner.md#stepamountscontext) | mealplanner | record |  |
 | [`StepAmounts.Replacement`](mealplanner.md#stepamountsreplacement) | mealplanner | record | What replaces before[replaceFrom..] + bracket. |
 | [`StockAmounts`](finance.md#stockamounts) | finance | class | Stock is counted in the catalogue item's own unit (g, ml, Stück), as the shopping list compares it with a line's unit. |
+| [`StockBatch`](finance.md#stockbatch) | finance | record | One batch of an item's stock = one purchase: where and when it was bought, when it expires, how many packs of which size were bought, and how much of it is left in the item's own unit (unit). |
 | [`StockService`](finance.md#stockservice) | finance | class | Takes food out of stock, in the item's own unit (g, ml, Stück). |
+| [`StoreCatalogController`](api.md#storecatalogcontroller) | api | class | The stores and brands DAHÄM has, for pickers (so nobody types a store or brand name that does not exist). |
+| [`StoreCatalogService`](stores.md#storecatalogservice) | stores | class | The stores and brands DAHÄM has, for pickers. |
 | [`StoreConfig`](stores.md#storeconfig) | stores | class | Settings for the store importers, read from config/stores.properties (relative to the working directory, like the database path). |
 | [`StoreDiscountService`](stores.md#storediscountservice) | stores | class | Turns pulled flyer offers into the verified layer: each matched offer becomes (or refreshes) a store_item shell for its chain, plus a store_discount holding the flyer price and dates. |
 | [`StoreDiscountService.BrandSplit`](stores.md#storediscountservicebrandsplit) | stores | record | Brand to file the offer under (null = no brand) and the text to match against the catalog. |
@@ -356,6 +363,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`StoreProductRef`](stores.md#storeproductref) | stores | record | Minimal store_product row for matching: id, name, category. |
 | [`StorePromotionService`](stores.md#storepromotionservice) | stores | class | Promotes RAW store_product rows into the VERIFIED store_item layer that the shopping list reads. |
 | [`StorePromotionService.Pack`](stores.md#storepromotionservicepack) | stores | record | A pack size reduced to an integer count of a base unit. |
+| [`StoreRef`](stores.md#storeref) | stores | record | A store: its id and name (as listed in the pickers). |
 | [`StoreRepository`](stores.md#storerepository) | stores | class | All SQL for pulled store data: store_product (+ variants, price history), store_offer, store_catalog_change and store_import_run. |
 | [`StoreTotal`](shopping.md#storetotal) | shopping | record | What the lines still to buy would cost at one store, for the user to compare. |
 | [`SuggestionController`](api.md#suggestioncontroller) | api | class | Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf, it only ranks and presents (see SuggestionService). |
@@ -372,6 +380,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`Units`](shared.md#units) | shared | class | Parses a recipe/store unit string into a physical dimension plus a factor to its base unit, so quantities can be compared or converted only when it is actually meaningful. |
 | [`Units.Dimension`](shared.md#unitsdimension) | shared | enum |  |
 | [`Units.Parsed`](shared.md#unitsparsed) | shared | record | A parsed unit: its dimension, and the factor that converts a quantity in it to the dimension's base unit. |
+| [`UnknownBrandException`](stores.md#unknownbrandexception) | stores | class | A brand name DAHÄM does not have, where creating a new brand was not asked for. |
+| [`UnknownStoreException`](stores.md#unknownstoreexception) | stores | class | A store name DAHÄM does not have, where creating a new store was not asked for. |
 | [`UserAdminRunner`](auth.md#useradminrunner) | auth | class | Command-line entry point for managing logins. |
 | [`UseStockRequest`](api.md#usestockrequest) | api | record | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 | [`VariantParser`](stores.md#variantparser) | stores | class | Splits the "Sorten:" block of an ALDI product description into flavour/size variants. |

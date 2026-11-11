@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import de.dahaem.finance.StockBatch;
 import de.dahaem.finance.StockService;
 import de.dahaem.inventory.InventoryService;
 import de.dahaem.inventory.ItemPage;
@@ -36,6 +37,18 @@ public class InventoryController {
             throw new BadRequestException("'quantity' must be greater than 0");
         }
         return stockService.use(id, request.quantity()).map(ItemDto::from)
+                .orElseThrow(() -> new NotFoundException("No inventory item with id " + id));
+    }
+
+    /**
+     * The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date,
+     * expiry date, packs and pack size bought, and what is left in the item's own unit ({@code remaining}, {@code unit}).
+     * Used-up batches are left out; {@code ?all=true} includes them. 404 if there is no such item.
+     */
+    @GetMapping("/{id}/batches")
+    public List<StockBatch> batches(@PathVariable("id") int id,
+                                    @RequestParam(name = "all", defaultValue = "false") boolean all) {
+        return stockService.batches(id, all)
                 .orElseThrow(() -> new NotFoundException("No inventory item with id " + id));
     }
 

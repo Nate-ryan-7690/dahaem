@@ -5,8 +5,9 @@ package de.dahaem.api;
  * and {@code packUnit} (500 g, 1 kg, 1,5 l, 6 stück) are required; the pack is stored in g, ml or stück like a store
  * item (1 kg becomes 1000 g, 1,5 l is sent as 1.5 l or 1500 ml) and must fit the item's unit (else 400 PACK_UNIT_MISMATCH); {@code brand} (blank or missing =
  * no brand), {@code name} (as printed) and {@code storeItemId} (also link the store item that carries it, which must be
- * for the same catalogue item) are optional.
+ * for the same catalogue item) are optional. The brand must be an existing one ({@code GET /api/brands}); {@code
+ * createBrand: true} is needed to add a new brand, so a typo cannot create a bogus one (400 UNKNOWN_BRAND).
  */
 public record AssignBarcodeRequest(Integer inventoryItemId, String brand, Integer packSize, String packUnit,
-                                   String name, Integer storeItemId) {
+                                   String name, Integer storeItemId, Boolean createBrand) {
 }
