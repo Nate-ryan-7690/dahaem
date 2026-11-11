@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Optional;
 
 /** All SQL for intake_request lives here and nowhere else. */
@@ -21,12 +22,15 @@ public class IntakeRequestRepository {
      */
     public boolean claim(String requestId, String hash) {
         String sql = "INSERT INTO intake_request (intake_request_id, intake_request_hash, intake_request_created) "
-                + "VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE intake_request_id = intake_request_id";
+                + "VALUES (?, ?, NOW())";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, requestId);
             ps.setString(2, hash);
-            return ps.executeUpdate() == 1;
+            ps.executeUpdate();
+            return true;
+        } catch (SQLIntegrityConstraintViolationException e) {
+            return false;   // the primary key: this id was claimed before
         } catch (SQLException e) {
             throw new RuntimeException("Could not claim intake request " + requestId, e);
         }
