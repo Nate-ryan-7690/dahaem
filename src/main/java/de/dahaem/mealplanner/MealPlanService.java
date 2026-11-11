@@ -13,6 +13,10 @@ import java.util.Optional;
  * Business logic for meal plans. No SQL here, no UI here.
  * It asks the repository for data and answers questions about it.
  * This is the class future web controllers will call.
+ *
+ * <p>Meal plans belong to a household. The injected service is not bound to one ({@link #today()} and
+ * {@link #forHousehold} work, nothing else); {@code forHousehold(id)} gives the service for one household, and every
+ * plan and meal it reads, creates, changes or removes is that household's. Another household's ids are simply not found.
  */
 
 public class MealPlanService {
@@ -21,19 +25,40 @@ public class MealPlanService {
 
     private final MealPlanRepository repository;
     private final Clock clock;
+    private final Integer householdId;   // null = not bound to a household
 
     public MealPlanService(MealPlanRepository repository) { this(repository, Clock.system(DEFAULT_ZONE)); }
 
     /** The clock decides what "today" is, so tests (and a configured time zone) control which days are past. */
     public MealPlanService(MealPlanRepository repository, Clock clock) {
+        this(repository, clock, null);
+    }
+
+    private MealPlanService(MealPlanRepository repository, Clock clock, Integer householdId) {
         this.repository = repository;
         this.clock = clock;
+        this.householdId = householdId;
+    }
+
+    /** The meal plans of one household: the same service, bound to that household. */
+    public MealPlanService forHousehold(int householdId) {
+        return new MealPlanService(repository, clock, householdId);
+    }
+
+    private int household() {
+        if (householdId == null) {
+            throw new IllegalStateException("This meal plan service is not bound to a household: use forHousehold(id)");
+        }
+        return householdId;
     }
 
     /** Today's date on the service's clock. */
     public LocalDate today() { return LocalDate.now(clock); }
 
-    public int createWeeklyPlan(LocalDate weekStart) { return repository.create(weekStart); }
+    public int createWeeklyPlan(LocalDate weekStart) { return repository.create(household(), weekStart); }
+
+    /** The plan with this id if it is the household's, else empty. */
+    public Optional<MealPlan> findPlan(int planId) { return repository.findPlan(household(), planId); }
 
     public void addRecipe(int planId, int recipeId, String mealTime) {
         repository.addRecipe(planId, recipeId, mealTime);
@@ -46,7 +71,7 @@ public class MealPlanService {
 
     public List<MealPlanRecipe> recipesForPlan(int planId) { return repository.findRecipesForPlan(planId); }
 
-    public List<MealPlan> allPlans() { return repository.findAll(); }
+    public List<MealPlan> allPlans() { return repository.findAll(household()); }
 
     // ---------- planned meals by date: any day, any number of meals, each addressed by its own entry id ----------
 
@@ -72,7 +97,7 @@ public class MealPlanService {
             throw new IllegalArgumentException("A date is required");
         }
         LocalDate monday = mondayOf(anyDay);
-        Optional<MealPlan> plan = repository.findPlanByWeekStart(monday);
+        Optional<MealPlan> plan = repository.findPlanByWeekStart(household(), monday);
         List<PlannedMeal> meals = plan.map(p -> repository.findMeals(p.getId())).orElse(List.of());
         List<Day> days = new ArrayList<>();
         for (int i = 0; i < 7; i++) {
@@ -100,7 +125,7 @@ public class MealPlanService {
         int planId = planIdForWeek(mondayOf(date));
         int at = position != null ? position : repository.nextPosition(planId, date);
         int entryId = repository.insertMeal(planId, recipeId, date, cleanText(label), servings, at, cleanText(note));
-        return repository.findMeal(entryId)
+        return repository.findMeal(household(), entryId)
                 .orElseThrow(() -> new IllegalStateException("Planned meal " + entryId + " vanished after insert"));
     }
 
@@ -119,7 +144,7 @@ public class MealPlanService {
         }
         requireServings(change.servings());
         requirePosition(change.position());
-        Optional<PlannedMeal> found = repository.findMeal(entryId);
+        Optional<PlannedMeal> found = repository.findMeal(household(), entryId);
         if (found.isEmpty()) {
             return Optional.empty();
         }
@@ -139,14 +164,14 @@ public class MealPlanService {
         } else if (!date.equals(meal.getDate())) {
             position = repository.nextPosition(planId, date);
         }
-        repository.updateMeal(entryId, planId,
+        repository.updateMeal(household(), entryId, planId,
                 change.recipeId() != null ? change.recipeId() : meal.getRecipeId(),
                 date,
                 change.setLabel() ? cleanText(change.label()) : meal.getLabel(),
                 change.setServings() ? change.servings() : meal.getOwnServings(),
                 position,
                 change.setNote() ? cleanText(change.note()) : meal.getNote());
-        return repository.findMeal(entryId);
+        return repository.findMeal(household(), entryId);
     }
 
     /**
@@ -155,7 +180,7 @@ public class MealPlanService {
      * @throws PastDayException when the meal is on a past day
      */
     public boolean removeMeal(int entryId) {
-        Optional<PlannedMeal> found = repository.findMeal(entryId);
+        Optional<PlannedMeal> found = repository.findMeal(household(), entryId);
         if (found.isEmpty()) {
             return false;
         }
@@ -174,7 +199,7 @@ public class MealPlanService {
      */
     public int freezePastServings(Integer householdPeople) {
         int frozen = 0;
-        for (PlannedMeal meal : repository.findUnfrozenMealsBefore(today())) {
+        for (PlannedMeal meal : repository.findUnfrozenMealsBefore(household(), today())) {
             if (repository.freezeServings(meal.getEntryId(), MealServings.resolve(meal, householdPeople).servings())) {
                 frozen++;
             }
@@ -183,20 +208,20 @@ public class MealPlanService {
     }
 
     public Optional<PlannedMeal> findMeal(int entryId) {
-        return repository.findMeal(entryId);
+        return repository.findMeal(household(), entryId);
     }
 
-    // The plan of a week: the existing one, or a new one. Two requests creating the same week at once
-    // hit the UNIQUE week start; the loser looks the winner's plan up instead of failing.
+    // The plan of a week of this household: the existing one, or a new one. Two requests creating the same week at once
+    // hit the UNIQUE (household, week); the loser looks the winner's plan up instead of failing.
     private int planIdForWeek(LocalDate monday) {
-        Optional<MealPlan> existing = repository.findPlanByWeekStart(monday);
+        Optional<MealPlan> existing = repository.findPlanByWeekStart(household(), monday);
         if (existing.isPresent()) {
             return existing.get().getId();
         }
         try {
-            return repository.create(monday);
+            return repository.create(household(), monday);
         } catch (RuntimeException e) {
-            return repository.findPlanByWeekStart(monday).map(MealPlan::getId).orElseThrow(() -> e);
+            return repository.findPlanByWeekStart(household(), monday).map(MealPlan::getId).orElseThrow(() -> e);
         }
     }
 

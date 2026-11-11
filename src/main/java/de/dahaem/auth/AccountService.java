@@ -192,6 +192,11 @@ public class AccountService {
         return repository.findFirstHousehold();
     }
 
+    /** Every household, oldest first. */
+    public java.util.List<Household> allHouseholds() {
+        return repository.findAllHouseholds();
+    }
+
     public Optional<Household> findHousehold(int householdId) {
         return repository.findHousehold(householdId);
     }

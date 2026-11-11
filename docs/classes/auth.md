@@ -102,6 +102,7 @@ classDiagram
         +findUserById(int userId) Optional~AppUser~
         +updateEmail(int userId, String email) boolean
         +updatePasswordHash(int userId, String passwordHash) boolean
+        +findAllHouseholds() java.util.List~Household~
         +findFirstHousehold() Optional~Household~
         +findHousehold(int householdId) Optional~Household~
         +updateHouseholdPeople(int householdId, int people) boolean
@@ -137,6 +138,7 @@ classDiagram
 | `Optional<AppUser> findUserById(int userId)` | public | Finds the user with this id. |
 | `boolean updateEmail(int userId, String email)` | public | Sets a user's (already normalized) email. |
 | `boolean updatePasswordHash(int userId, String passwordHash)` | public | Replaces a user's password hash. |
+| `java.util.List<Household> findAllHouseholds()` | public | Every household, oldest first. |
 | `Optional<Household> findFirstHousehold()` | public | The oldest household, i.e. |
 | `Optional<Household> findHousehold(int householdId)` | public | The household with this id, or empty when there is none. |
 | `boolean updateHouseholdPeople(int householdId, int people)` | public | Sets the household's head count. |
@@ -229,12 +231,16 @@ classDiagram
         +findByEmail(String email) Optional~AppUser~
         +membershipFor(int userId) Optional~HouseholdMembership~
         +findFirstHousehold() Optional~Household~
+        +allHouseholds() java.util.List~Household~
         +findHousehold(int householdId) Optional~Household~
         +setHouseholdPeople(int householdId, int people) Household
     }
     class auth_AccountRepository["AccountRepository"]
     class api_AccountController["AccountController"] {
         <<controller>>
+    }
+    class api_CallerArgumentResolver["CallerArgumentResolver"] {
+        <<spring>>
     }
     class api_HouseholdController["HouseholdController"] {
         <<controller>>
@@ -268,6 +274,7 @@ classDiagram
     auth_AccountService ..> auth_HouseholdMembership
     auth_AccountService ..> auth_Household
     api_AccountController --> auth_AccountService
+    api_CallerArgumentResolver --> auth_AccountService
     api_HouseholdController --> auth_AccountService
     api_MealPlanController --> auth_AccountService
     api_MealServingsScheduleConfig ..> auth_AccountService
@@ -303,10 +310,11 @@ classDiagram
 | `Optional<AppUser> findByEmail(String email)` | public |  |
 | `Optional<HouseholdMembership> membershipFor(int userId)` | public |  |
 | `Optional<Household> findFirstHousehold()` | public | The shared household of this installation (the oldest one), or empty on a fresh database. |
+| `java.util.List<Household> allHouseholds()` | public | Every household, oldest first. |
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AccountController`, `AccountSelfService`, `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
+**Referenced by:** `AccountController`, `AccountSelfService`, `CallerArgumentResolver`, `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
 
 ## AppUser
 
@@ -549,17 +557,21 @@ classDiagram
         ADMIN
         MEMBER
     }
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
     }
     class auth_AccountRepository["AccountRepository"]
+    api_Caller --> auth_HouseholdRole
     auth_AccountRepository ..> auth_HouseholdRole
     auth_HouseholdMembership --> auth_HouseholdRole
 ```
 
 **Values:** `ADMIN`, `MEMBER`
 
-**Referenced by:** `AccountRepository`, `HouseholdMembership`
+**Referenced by:** `AccountRepository`, `Caller`, `HouseholdMembership`
 
 ## InvalidCredentialsException
 

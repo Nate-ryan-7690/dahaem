@@ -133,10 +133,11 @@ class MariaDbDialectTest {
         MealPlanRepository repository = new MealPlanRepository();
         LocalDate week = LocalDate.of(2026, 10, 5);
 
-        int id = repository.create(week);
+        int household = de.dahaem.testsupport.TestHousehold.createHousehold("Zuhause", null);
+        int id = repository.create(household, week);
 
         assertTrue(id > 0, "generated key from the meal_plan AUTO_INCREMENT");
-        MealPlan plan = repository.findAll().get(0);
+        MealPlan plan = repository.findAll(household).get(0);
         assertEquals(id, plan.getId());
         assertEquals(week, plan.getWeekStartDate());
     }

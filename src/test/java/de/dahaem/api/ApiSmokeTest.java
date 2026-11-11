@@ -3,13 +3,16 @@ package de.dahaem.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.dahaem.shared.Database;
+import de.dahaem.testsupport.ActingUserTestConfig;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -62,6 +65,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser
+@Import(ActingUserTestConfig.class)
 class ApiSmokeTest {
 
     private static final List<Path> SCRIPTS = List.of(
@@ -76,6 +80,9 @@ class ApiSmokeTest {
     @BeforeAll
     static void createDatabase() throws IOException, SQLException {
         TestDatabase.reset(SCRIPTS);
+        // the calls act as a user of a household that owns the demo meal plan
+        int household = TestHousehold.createAndActAs("Smoke Haushalt", null);
+        TestHousehold.adoptOrphanPlans(household);
     }
 
     @AfterAll

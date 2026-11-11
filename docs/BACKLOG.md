@@ -656,6 +656,20 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   offers source and region, logos, inventory batches, receipt upload …) are listed at the end of
   `docs/api-audit-ui.md`; answer them one at a time (spec rule), the matching items above wait on them.
 
+## Households (separating data per household)
+
+Decided with Nate: the household of a request is the acting user's (`Caller`), foreign ids answer 404; the catalogue (items,
+recipes, stores, prices, barcodes, user-added tags) stays shared; per-household data gets a nullable `household_id`, a backfill
+migration and NOT NULL at the end; only Nate creates a second household (operator command), others join by invitation.
+
+- [x] PR 1: `Caller` + migration 0022 + meal plans scoped (`X-Acting-User` now required on the meal plan endpoints; the
+  freeze job runs per household). Migration 0022 needs a snapshot and Nate's go-ahead before it runs live.
+- [ ] PR 2: shopping lists scoped.
+- [ ] PR 3: purchases, stock, intake, batches; new `household_stock` table (stock now lives on `inventory_item`), the biggest step.
+- [ ] PR 4: receipts, pantry suggestions, the remaining endpoints, per-household recipe preferred servings, NOT NULL migration.
+- [ ] PR 5: operator tool for a second household; invitations ("Konto erstellen": `household_invite`, admin creates/lists/revokes,
+  code shown once, 7 days, single use, hashed, throttled; accepting creates a MEMBER in the inviter's household); frontend pages.
+
 ## Platform
 
 - **Live deployment state (checked 2026-11-06)** — `done` except the schema_migrations idea. **Second rebuild, same

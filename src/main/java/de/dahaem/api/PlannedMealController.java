@@ -2,6 +2,7 @@ package de.dahaem.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import de.dahaem.auth.AccountService;
+import de.dahaem.auth.Household;
 import de.dahaem.mealplanner.MealChange;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.PlannedMeal;
@@ -28,9 +29,9 @@ import java.time.format.DateTimeParseException;
  * remove it, and set a recipe's preferred servings. Every meal is addressed by its own {@code entryId}. A plan is
  * one Monday-to-Sunday week; the first meal added to a week creates its plan, so a page never has to create one.
  *
- * <p>The household is named with an optional {@code householdId} so the servings can follow its head count; the
- * PHP decides which household an account may use (see the backlog item "Auth and session review"). Without it,
- * a meal that has no number of its own and no recipe preference is cooked for 2.
+ * <p>Everything here is the household of the logged-in user ({@code X-Acting-User}): its week, its meals, and its head
+ * count for the servings. A meal of another household is a 404. A meal that has no number of its own, no recipe
+ * preference and a household without a head count is cooked for 2.
  */
 @RestController
 @RequestMapping("/api")
@@ -54,25 +55,24 @@ public class PlannedMealController {
     @GetMapping("/meal-plans/week")
     public MealPlanWeekDto week(@RequestParam(name = "date", required = false)
                                 @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-                                @RequestParam(name = "householdId", required = false) Integer householdId) {
-        Integer people = householdPeople(householdId);
-        return MealPlanWeekDto.from(mealPlanService.week(date != null ? date : LocalDate.now()), people);
+                                Caller caller) {
+        Integer people = householdPeople(caller);
+        return MealPlanWeekDto.from(plans(caller).week(date != null ? date : mealPlanService.today()), people);
     }
 
     /** Plans a recipe on a day and returns the meal. The same recipe may be planned many times. */
     @PostMapping("/meal-plans/meals")
     @ResponseStatus(HttpStatus.CREATED)
-    public PlannedMealDto addMeal(@RequestBody AddMealRequest request,
-                                  @RequestParam(name = "householdId", required = false) Integer householdId) {
+    public PlannedMealDto addMeal(@RequestBody AddMealRequest request, Caller caller) {
         if (request.recipeId() == null) {
             throw new BadRequestException("'recipeId' is required");
         }
         if (request.date() == null) {
             throw new BadRequestException("'date' is required (YYYY-MM-DD)");
         }
-        Integer people = householdPeople(householdId);
+        Integer people = householdPeople(caller);
         RecipeController.findRecipe(recipeService, request.recipeId());
-        PlannedMeal meal = mealPlanService.addMeal(request.recipeId(), request.date(), request.label(),
+        PlannedMeal meal = plans(caller).addMeal(request.recipeId(), request.date(), request.label(),
                 request.servings(), request.note(), request.position());
         return PlannedMealDto.from(meal, people);
     }
@@ -83,14 +83,13 @@ public class PlannedMealController {
      * (or {@code label} / {@code note}: null) clears it, so the meal follows the default again.
      */
     @PatchMapping("/meal-plans/meals/{entryId}")
-    public PlannedMealDto editMeal(@PathVariable("entryId") int entryId, @RequestBody JsonNode body,
-                                   @RequestParam(name = "householdId", required = false) Integer householdId) {
-        Integer people = householdPeople(householdId);
+    public PlannedMealDto editMeal(@PathVariable("entryId") int entryId, @RequestBody JsonNode body, Caller caller) {
+        Integer people = householdPeople(caller);
         MealChange change = toChange(body);
         if (change.recipeId() != null) {
             RecipeController.findRecipe(recipeService, change.recipeId());
         }
-        PlannedMeal meal = mealPlanService.updateMeal(entryId, change)
+        PlannedMeal meal = plans(caller).updateMeal(entryId, change)
                 .orElseThrow(() -> new NotFoundException("No planned meal with id " + entryId));
         return PlannedMealDto.from(meal, people);
     }
@@ -98,8 +97,8 @@ public class PlannedMealController {
     /** Removes one planned meal by its own id. 404 when there is none. */
     @DeleteMapping("/meal-plans/meals/{entryId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void removeMeal(@PathVariable("entryId") int entryId) {
-        if (!mealPlanService.removeMeal(entryId)) {
+    public void removeMeal(@PathVariable("entryId") int entryId, Caller caller) {
+        if (!plans(caller).removeMeal(entryId)) {
             throw new NotFoundException("No planned meal with id " + entryId);
         }
     }
@@ -120,13 +119,13 @@ public class PlannedMealController {
         return new PreferredServingsDto(id, servings);
     }
 
-    private Integer householdPeople(Integer householdId) {
-        if (householdId == null) {
-            return null;
-        }
-        return accountService.findHousehold(householdId)
-                .orElseThrow(() -> new NotFoundException("No household with id " + householdId))
-                .getPeople();
+    private MealPlanService plans(Caller caller) {
+        return mealPlanService.forHousehold(caller.householdId());
+    }
+
+    /** The head count of the caller's own household (null = not set). */
+    private Integer householdPeople(Caller caller) {
+        return accountService.findHousehold(caller.householdId()).map(Household::getPeople).orElse(null);
     }
 
     private static MealChange toChange(JsonNode body) {

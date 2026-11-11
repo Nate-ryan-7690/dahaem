@@ -64,6 +64,12 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
     }
 
+    /** The acting user belongs to no household. */
+    @ExceptionHandler(NoHouseholdException.class)
+    public ResponseEntity<ErrorResponse> noHousehold(NoHouseholdException e) {
+        return error(HttpStatus.FORBIDDEN, "NO_HOUSEHOLD", e.getMessage());
+    }
+
     /** The email address belongs to another account. */
     @ExceptionHandler(EmailTakenException.class)
     public ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e) {

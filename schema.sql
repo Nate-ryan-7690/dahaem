@@ -19,7 +19,14 @@ CREATE TABLE inventory_item (
 
 CREATE TABLE meal_plan ( meal_plan_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
-	meal_plan_week_start_date DATE NOT NULL UNIQUE);
+	-- whose plan it is (migration 0022); NULL only on a plan made before it. The foreign key to household is added
+	-- below, after that table exists.
+	meal_plan_household_id INTEGER NULL,
+
+	meal_plan_week_start_date DATE NOT NULL,
+
+	-- one plan per household and week
+	UNIQUE INDEX meal_plan_household_week (meal_plan_household_id, meal_plan_week_start_date));
 
 CREATE TABLE tag ( tag_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
@@ -90,6 +97,9 @@ CREATE TABLE household ( household_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	created_date DATE NOT NULL,
 	CONSTRAINT household_people_at_least_one
 		CHECK (household_people IS NULL OR household_people >= 1));
+
+ALTER TABLE meal_plan
+	ADD CONSTRAINT meal_plan_household_fk FOREIGN KEY (meal_plan_household_id) REFERENCES household(household_id);
 
 CREATE TABLE app_user ( user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	user_email TEXT NOT NULL UNIQUE,

@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling.
 
-96 types in 68 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+100 types in 72 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -41,6 +41,12 @@ classDiagram
     }
     class api_BrandPageDto["BrandPageDto"] {
         <<record>>
+    }
+    class api_Caller["Caller"] {
+        <<record>>
+    }
+    class api_CallerArgumentResolver["CallerArgumentResolver"] {
+        <<spring>>
     }
     class api_ChangeEmailRequest["ChangeEmailRequest"] {
         <<record>>
@@ -127,6 +133,7 @@ classDiagram
     class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
         <<spring>>
     }
+    class api_NoHouseholdException["NoHouseholdException"]
     class api_NotFoundException["NotFoundException"]
     class api_PantryIngredientDto["PantryIngredientDto"] {
         <<record>>
@@ -281,6 +288,9 @@ classDiagram
     class api_VerifyRequest["VerifyRequest"] {
         <<record>>
     }
+    class api_WebConfig["WebConfig"] {
+        <<spring>>
+    }
     api_AccountController --> api_InternalTokenFilter
     api_AccountController ..> api_ChangePasswordRequest
     api_AccountController ..> api_ChangeEmailRequest
@@ -289,11 +299,13 @@ classDiagram
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> api_UnauthorizedException
+    api_ApiExceptionHandler ..> api_NoHouseholdException
     api_AuditFilter --> api_InternalTokenFilter
     api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
     api_AuthController ..> api_VerifyRequest
     api_BarcodeController ..> api_AssignBarcodeRequest
+    api_CallerArgumentResolver --> api_InternalTokenFilter
     api_CurrentUserDto *-- api_CurrentUserDto_HouseholdDto
     api_DietDto *-- api_DietDto_Hint
     api_DietDto *-- api_DietDto_Item
@@ -309,6 +321,7 @@ classDiagram
     api_InventoryController ..> api_UseStockRequest
     api_InventoryController ..> api_ItemPageDto
     api_ItemPageDto --> api_ItemDto
+    api_MealPlanController ..> api_Caller
     api_MealPlanController ..> api_MealPlanDto
     api_MealPlanController ..> api_CreateMealPlanRequest
     api_MealPlanController ..> api_AddPlannedRecipeRequest
@@ -327,6 +340,7 @@ classDiagram
     api_PersistedShoppingListDto *-- api_PersistedShoppingListDto_Summary
     api_PersistedShoppingListDto_Line --> api_PersistedShoppingListDto_RecipeRef
     api_PersistedShoppingListDto_Line --> api_ShoppingListDto
+    api_PlannedMealController ..> api_Caller
     api_PlannedMealController ..> api_MealPlanWeekDto
     api_PlannedMealController ..> api_AddMealRequest
     api_PlannedMealController ..> api_PlannedMealDto
@@ -370,6 +384,7 @@ classDiagram
     api_StoreCatalogController ..> api_BrandPageDto
     api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_PantrySuggestionPageDto
+    api_WebConfig --> api_CallerArgumentResolver
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -377,7 +392,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | Type | Kind | Role | What it is |
 |------|------|------|------------|
 | [`AccountController`](#accountcontroller) | class | REST controller | A logged-in user's own account. |
-| [`ActingUser`](#actinguser) | class |  | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in). |
+| [`ActingUser`](#actinguser) | class |  | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in); without |
 | [`AddMealRequest`](#addmealrequest) | record |  | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](#addplannedreciperequest) | record |  | Body of POST /api/meal-plans/{id}/recipes, e.g. |
 | [`AddTagRequest`](#addtagrequest) | record |  | Body of POST /api/recipes/{id}/tags. |
@@ -389,6 +404,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`BadRequestException`](#badrequestexception) | class |  | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](#barcodecontroller) | class | REST controller | Barcode numbers: what a number is, and remembering it. |
 | [`BrandPageDto`](#brandpagedto) | record |  | One page of GET /api/brands. |
+| [`Caller`](#caller) | record |  | Who is asking: the logged-in user the PHP front end names in X-Acting-User, and the household that user belongs to. |
+| [`CallerArgumentResolver`](#callerargumentresolver) | class | Spring component | Fills a controller parameter of type Caller: the acting user from X-Acting-User (believed only with the internal token, see ActingUser) and that user's household. |
 | [`ChangeEmailRequest`](#changeemailrequest) | record |  | Body of PUT /api/account/email: the user's password and the new address. |
 | [`ChangePasswordRequest`](#changepasswordrequest) | record |  | Body of PUT /api/account/password. |
 | [`CreateMealPlanRequest`](#createmealplanrequest) | record |  | Body of POST /api/meal-plans, e.g. |
@@ -412,12 +429,13 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`InventoryController`](#inventorycontroller) | class | REST controller |  |
 | [`ItemDto`](#itemdto) | record |  | One inventory item as returned by /api/inventory. |
 | [`ItemPageDto`](#itempagedto) | record |  | One page of GET /api/inventory/search. |
-| [`MealPlanController`](#mealplancontroller) | class | REST controller |  |
+| [`MealPlanController`](#mealplancontroller) | class | REST controller | Meal plans of the household of the logged-in user (X-Acting-User). |
 | [`MealPlanDto`](#mealplandto) | record |  | One weekly meal plan with the recipes slotted into it. |
 | [`MealPlanDto.PlannedRecipe`](#mealplandtoplannedrecipe) | record |  |  |
 | [`MealPlanWeekDto`](#mealplanweekdto) | record |  | One Monday-to-Sunday week: always seven days, each with its meals in order. |
 | [`MealPlanWeekDto.DayDto`](#mealplanweekdtodaydto) | record |  |  |
 | [`MealServingsScheduleConfig`](#mealservingsscheduleconfig) | class | configuration | Registers the nightly servings freeze. |
+| [`NoHouseholdException`](#nohouseholdexception) | class |  | The acting user belongs to no household, so there is no data to work on. |
 | [`NotFoundException`](#notfoundexception) | class |  | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`PantryIngredientDto`](#pantryingredientdto) | record |  | One ingredient of a suggested recipe. |
 | [`PantryOfferDto`](#pantryofferdto) | record |  | An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in packUnit, e.g. |
@@ -472,6 +490,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`UnauthorizedException`](#unauthorizedexception) | class |  | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
 | [`UseStockRequest`](#usestockrequest) | record |  | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 | [`VerifyRequest`](#verifyrequest) | record |  | Body of POST /api/auth/verify: the login the PHP front end received from the user. |
+| [`WebConfig`](#webconfig) | class | configuration | Registers the Caller parameter resolver. |
 
 ## AccountController
 
@@ -531,7 +550,8 @@ classDiagram
 *class*
 
 The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on
-a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in).
+a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in);
+without a configured token (never in production) it is taken as it comes.
 
 ```mermaid
 classDiagram
@@ -661,6 +681,7 @@ classDiagram
         +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +invalidBarcode(InvalidBarcodeException e) ResponseEntity~ErrorResponse~
+        +noHousehold(NoHouseholdException e) ResponseEntity~ErrorResponse~
         +emailTaken(EmailTakenException e) ResponseEntity~ErrorResponse~
         +invalidCredentials(InvalidCredentialsException e) ResponseEntity~ErrorResponse~
         +tooManyAttempts(TooManyAttemptsException e) ResponseEntity~ErrorResponse~
@@ -683,6 +704,7 @@ classDiagram
     class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
+    class api_NoHouseholdException["NoHouseholdException"]
     class auth_EmailTakenException["EmailTakenException"]
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
     class auth_TooManyAttemptsException["TooManyAttemptsException"]
@@ -697,6 +719,7 @@ classDiagram
     api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> barcode_InvalidBarcodeException
+    api_ApiExceptionHandler ..> api_NoHouseholdException
     api_ApiExceptionHandler ..> auth_EmailTakenException
     api_ApiExceptionHandler ..> auth_InvalidCredentialsException
     api_ApiExceptionHandler ..> auth_TooManyAttemptsException
@@ -718,6 +741,7 @@ classDiagram
 | `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e)` | public | A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). |
+| `ResponseEntity<ErrorResponse> noHousehold(NoHouseholdException e)` | public | The acting user belongs to no household. |
 | `ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e)` | public | The email address belongs to another account. |
 | `ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e)` | public | A wrong email or password (the same answer for both). |
 | `ResponseEntity<ErrorResponse> tooManyAttempts(TooManyAttemptsException e)` | public | Too many failed logins: the caller is slowed down; Retry-After says for how long. |
@@ -994,6 +1018,89 @@ classDiagram
 | `totalPages` | `int` |
 
 **Referenced by:** `StoreCatalogController`
+
+## Caller
+
+*record*
+
+Who is asking: the logged-in user the PHP front end names in X-Acting-User, and the household that user belongs
+to. A controller method that takes a Caller works on that household's data only; the household is never taken
+from the request itself.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_Caller["Caller"] {
+        <<record>>
+        +int userId
+        +int householdId
+        +HouseholdRole role
+    }
+    class auth_HouseholdRole["HouseholdRole"] {
+        <<enumeration>>
+    }
+    class api_MealPlanController["MealPlanController"] {
+        <<controller>>
+    }
+    class api_PlannedMealController["PlannedMealController"] {
+        <<controller>>
+    }
+    api_Caller --> auth_HouseholdRole
+    api_MealPlanController ..> api_Caller
+    api_PlannedMealController ..> api_Caller
+```
+
+| Component | Type |
+|---|---|
+| `userId` | `int` |
+| `householdId` | `int` |
+| `role` | `HouseholdRole` |
+
+**Referenced by:** `MealPlanController`, `PlannedMealController`
+
+## CallerArgumentResolver
+
+*class · Spring component · implements HandlerMethodArgumentResolver*
+
+Fills a controller parameter of type Caller: the acting user from X-Acting-User (believed only with the
+internal token, see ActingUser) and that user's household. 400 if the header is missing, 401 for a user that
+does not exist, 403 NO_HOUSEHOLD for a user in no household.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_CallerArgumentResolver["CallerArgumentResolver"] {
+        <<spring>>
+        -InternalTokenFilter internalToken
+        -AccountService accounts
+        +CallerArgumentResolver(InternalTokenFilter internalToken, AccountService accounts)
+        +supportsParameter(MethodParameter parameter) boolean
+        +resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory) Object
+    }
+    class api_InternalTokenFilter["InternalTokenFilter"] {
+        <<spring>>
+    }
+    class auth_AccountService["AccountService"]
+    class api_WebConfig["WebConfig"] {
+        <<spring>>
+    }
+    api_CallerArgumentResolver --> api_InternalTokenFilter
+    api_CallerArgumentResolver --> auth_AccountService
+    api_WebConfig --> api_CallerArgumentResolver
+```
+
+| Field | Type |
+|---|---|
+| `internalToken` | `InternalTokenFilter` |
+| `accounts` | `AccountService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `CallerArgumentResolver(InternalTokenFilter internalToken, AccountService accounts)` | public |  |
+| `boolean supportsParameter(MethodParameter parameter)` | public |  |
+| `Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory)` | public |  |
+
+**Referenced by:** `WebConfig`
 
 ## ChangeEmailRequest
 
@@ -1436,7 +1543,7 @@ classDiagram
 
 JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable
 machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, EMAIL_TAKEN, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
-CSRF_INVALID, BAD_CREDENTIALS, TOO_MANY_ATTEMPTS, INVALID_TOKEN) that a client can map to its own text.
+CSRF_INVALID, NO_HOUSEHOLD, BAD_CREDENTIALS, TOO_MANY_ATTEMPTS, INVALID_TOKEN) that a client can map to its own text.
 
 ```mermaid
 classDiagram
@@ -1703,6 +1810,7 @@ classDiagram
         -byte[] expected
         -ObjectMapper objectMapper
         +InternalTokenFilter(String token, ObjectMapper objectMapper)
+        +isConfigured() boolean
         +hasValidToken(HttpServletRequest request) boolean
         #shouldNotFilter(HttpServletRequest request) boolean
         #doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) void
@@ -1716,6 +1824,9 @@ classDiagram
     class api_AuthController["AuthController"] {
         <<controller>>
     }
+    class api_CallerArgumentResolver["CallerArgumentResolver"] {
+        <<spring>>
+    }
     class api_ActingUser["ActingUser"]
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
@@ -1724,6 +1835,7 @@ classDiagram
     api_ActingUser ..> api_InternalTokenFilter
     api_AuditFilter --> api_InternalTokenFilter
     api_AuthController --> api_InternalTokenFilter
+    api_CallerArgumentResolver --> api_InternalTokenFilter
     api_SecurityConfig ..> api_InternalTokenFilter
 ```
 
@@ -1736,11 +1848,12 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `InternalTokenFilter(String token, ObjectMapper objectMapper)` | public |  |
+| `boolean isConfigured()` | public | True if a token is configured (always, in production: see StartupGuard). |
 | `boolean hasValidToken(HttpServletRequest request)` | public | True if the request carries the configured token (never true when none is configured). |
 | `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
 | `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
 
-**Referenced by:** `AccountController`, `ActingUser`, `AuditFilter`, `AuthController`, `SecurityConfig`
+**Referenced by:** `AccountController`, `ActingUser`, `AuditFilter`, `AuthController`, `CallerArgumentResolver`, `SecurityConfig`
 
 ## InventoryController
 
@@ -1891,6 +2004,9 @@ classDiagram
 
 *class · REST controller*
 
+Meal plans of the household of the logged-in user (X-Acting-User). A plan, meal or list of another household is
+not found (404), and two households can each have a plan for the same week.
+
 ```mermaid
 classDiagram
     direction LR
@@ -1901,17 +2017,20 @@ classDiagram
         -ShoppingListService shoppingListService
         -AccountService accountService
         +MealPlanController(MealPlanService mealPlanService, RecipeService recipeService, ShoppingListService shoppingListService, AccountService accountService)
-        +all() List~MealPlanDto~
-        +create(CreateMealPlanRequest request) MealPlanDto
-        +addRecipe(int id, AddPlannedRecipeRequest request) MealPlanDto
-        +removeRecipe(int id, int recipeId) MealPlanDto
-        +generateShoppingList(int id, Integer people, Integer householdId, LocalDate shoppingDate, LocalDate from) GeneratedShoppingListDto
-        +shoppingLists(int id, boolean archived) List~PersistedShoppingListDto.Summary~
+        +all(Caller caller) List~MealPlanDto~
+        +create(CreateMealPlanRequest request, Caller caller) MealPlanDto
+        +addRecipe(int id, AddPlannedRecipeRequest request, Caller caller) MealPlanDto
+        +removeRecipe(int id, int recipeId, Caller caller) MealPlanDto
+        +generateShoppingList(int id, Integer people, LocalDate shoppingDate, LocalDate from, Caller caller) GeneratedShoppingListDto
+        +shoppingLists(int id, boolean archived, Caller caller) List~PersistedShoppingListDto.Summary~
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class mealplanner_RecipeService["RecipeService"]
     class shopping_ShoppingListService["ShoppingListService"]
     class auth_AccountService["AccountService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_MealPlanDto["MealPlanDto"] {
         <<record>>
     }
@@ -1931,6 +2050,7 @@ classDiagram
     api_MealPlanController --> mealplanner_RecipeService
     api_MealPlanController --> shopping_ShoppingListService
     api_MealPlanController --> auth_AccountService
+    api_MealPlanController ..> api_Caller
     api_MealPlanController ..> api_MealPlanDto
     api_MealPlanController ..> api_CreateMealPlanRequest
     api_MealPlanController ..> api_AddPlannedRecipeRequest
@@ -1948,12 +2068,12 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `MealPlanController(MealPlanService mealPlanService, RecipeService recipeService, ShoppingListService shoppingListService, AccountService accountService)` | public |  |
-| `List<MealPlanDto> all()` | public |  |
-| `MealPlanDto create(CreateMealPlanRequest request)` | public | Creates an empty plan for the week. |
-| `MealPlanDto addRecipe(int id, AddPlannedRecipeRequest request)` | public | Adds a recipe to a plan and returns the updated plan. |
-| `MealPlanDto removeRecipe(int id, int recipeId)` | public | Removes a recipe from a plan and returns the updated plan. |
-| `GeneratedShoppingListDto generateShoppingList(int id, Integer people, Integer householdId, LocalDate shoppingDate, LocalDate from)` | public | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
-| `List<PersistedShoppingListDto.Summary> shoppingLists(int id, boolean archived)` | public | The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). |
+| `List<MealPlanDto> all(Caller caller)` | public |  |
+| `MealPlanDto create(CreateMealPlanRequest request, Caller caller)` | public | Creates an empty plan for the week. |
+| `MealPlanDto addRecipe(int id, AddPlannedRecipeRequest request, Caller caller)` | public | Adds a recipe to a plan and returns the updated plan. |
+| `MealPlanDto removeRecipe(int id, int recipeId, Caller caller)` | public | Removes a recipe from a plan and returns the updated plan. |
+| `GeneratedShoppingListDto generateShoppingList(int id, Integer people, LocalDate shoppingDate, LocalDate from, Caller caller)` | public | Builds and persists a shopping list from a plan's meals: one line per item still missing after subtracting inventory, no store item pre-chosen. |
+| `List<PersistedShoppingListDto.Summary> shoppingLists(int id, boolean archived, Caller caller)` | public | The saved shopping lists of a plan, newest first (each generation is its own list; none is ever rewritten). |
 
 ## MealPlanDto
 
@@ -2130,6 +2250,28 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `ScheduledMealServings scheduledMealServings(MealPlanService mealPlanService, AccountService accountService)` | package |  |
+
+## NoHouseholdException
+
+*class · extends RuntimeException*
+
+The acting user belongs to no household, so there is no data to work on. A 403 with its own code, NO_HOUSEHOLD.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_NoHouseholdException["NoHouseholdException"] {
+        +NoHouseholdException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> api_NoHouseholdException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `NoHouseholdException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## NotFoundException
 
@@ -2617,9 +2759,9 @@ The meal planner by date: read a week, plan a recipe on a day (as often as wante
 remove it, and set a recipe's preferred servings. Every meal is addressed by its own entryId. A plan is
 one Monday-to-Sunday week; the first meal added to a week creates its plan, so a page never has to create one.
 
-The household is named with an optional householdId so the servings can follow its head count; the
-PHP decides which household an account may use (see the backlog item "Auth and session review"). Without it,
-a meal that has no number of its own and no recipe preference is cooked for 2.
+Everything here is the household of the logged-in user (X-Acting-User): its week, its meals, and its head
+count for the servings. A meal of another household is a 404. A meal that has no number of its own, no recipe
+preference and a household without a head count is cooked for 2.
 
 ```mermaid
 classDiagram
@@ -2630,15 +2772,18 @@ classDiagram
         -RecipeService recipeService
         -AccountService accountService
         +PlannedMealController(MealPlanService mealPlanService, RecipeService recipeService, AccountService accountService)
-        +week(LocalDate date, Integer householdId) MealPlanWeekDto
-        +addMeal(AddMealRequest request, Integer householdId) PlannedMealDto
-        +editMeal(int entryId, JsonNode body, Integer householdId) PlannedMealDto
-        +removeMeal(int entryId) void
+        +week(LocalDate date, Caller caller) MealPlanWeekDto
+        +addMeal(AddMealRequest request, Caller caller) PlannedMealDto
+        +editMeal(int entryId, JsonNode body, Caller caller) PlannedMealDto
+        +removeMeal(int entryId, Caller caller) void
         +setPreferredServings(int id, JsonNode body) PreferredServingsDto
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class mealplanner_RecipeService["RecipeService"]
     class auth_AccountService["AccountService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_MealPlanWeekDto["MealPlanWeekDto"] {
         <<record>>
     }
@@ -2654,6 +2799,7 @@ classDiagram
     api_PlannedMealController --> mealplanner_MealPlanService
     api_PlannedMealController --> mealplanner_RecipeService
     api_PlannedMealController --> auth_AccountService
+    api_PlannedMealController ..> api_Caller
     api_PlannedMealController ..> api_MealPlanWeekDto
     api_PlannedMealController ..> api_AddMealRequest
     api_PlannedMealController ..> api_PlannedMealDto
@@ -2669,10 +2815,10 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `PlannedMealController(MealPlanService mealPlanService, RecipeService recipeService, AccountService accountService)` | public |  |
-| `MealPlanWeekDto week(LocalDate date, Integer householdId)` | public | The week that contains date (today when omitted): seven days with their meals. |
-| `PlannedMealDto addMeal(AddMealRequest request, Integer householdId)` | public | Plans a recipe on a day and returns the meal. |
-| `PlannedMealDto editMeal(int entryId, JsonNode body, Integer householdId)` | public | Edits or moves a meal. |
-| `void removeMeal(int entryId)` | public | Removes one planned meal by its own id. |
+| `MealPlanWeekDto week(LocalDate date, Caller caller)` | public | The week that contains date (today when omitted): seven days with their meals. |
+| `PlannedMealDto addMeal(AddMealRequest request, Caller caller)` | public | Plans a recipe on a day and returns the meal. |
+| `PlannedMealDto editMeal(int entryId, JsonNode body, Caller caller)` | public | Edits or moves a meal. |
+| `void removeMeal(int entryId, Caller caller)` | public | Removes one planned meal by its own id. |
 | `PreferredServingsDto setPreferredServings(int id, JsonNode body)` | public | Sets how many people this recipe is always cooked for, e.g. |
 
 ## PlannedMealDto
@@ -3439,7 +3585,7 @@ classDiagram
 The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day
 that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when
 the household number or a recipe's preference does. It also catches up on any night the API was not running.
-The head count is the shared household's. The scheduled method never throws, so a failure cannot stop later runs.
+Each household is frozen with its own head count. The scheduled method never throws, so a failure cannot stop later runs.
 
 ```mermaid
 classDiagram
@@ -4543,3 +4689,33 @@ classDiagram
 | `String toString()` | public |  |
 
 **Referenced by:** `AuthController`
+
+## WebConfig
+
+*class · configuration · implements WebMvcConfigurer*
+
+Registers the Caller parameter resolver.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_WebConfig["WebConfig"] {
+        <<spring>>
+        -CallerArgumentResolver callerResolver
+        +WebConfig(CallerArgumentResolver callerResolver)
+        +addArgumentResolvers(List~HandlerMethodArgumentResolver~ resolvers) void
+    }
+    class api_CallerArgumentResolver["CallerArgumentResolver"] {
+        <<spring>>
+    }
+    api_WebConfig --> api_CallerArgumentResolver
+```
+
+| Field | Type |
+|---|---|
+| `callerResolver` | `CallerArgumentResolver` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `WebConfig(CallerArgumentResolver callerResolver)` | public |  |
+| `void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers)` | public |  |

@@ -2,6 +2,7 @@ package de.dahaem.mealplanner;
 
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,7 @@ class MealPlanServiceTest {
     @BeforeEach
     void setUp() throws IOException, SQLException {
         TestDatabase.reset();
-        service = new MealPlanService(new MealPlanRepository());
+        service = new MealPlanService(new MealPlanRepository()).forHousehold(TestHousehold.createHousehold("Zuhause", null));
     }
 
     @AfterEach

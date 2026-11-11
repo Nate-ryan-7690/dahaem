@@ -4,6 +4,7 @@ import de.dahaem.shared.Database;
 import de.dahaem.tags.TagFixtures;
 import de.dahaem.testsupport.TestClock;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,8 @@ class PlannedMealServiceTest {
     void setUp() throws SQLException {
         TestDatabase.reset();
         clock.setToday(LocalDate.of(2026, 11, 1));
-        service = new MealPlanService(new MealPlanRepository(), clock);
+        service = new MealPlanService(new MealPlanRepository(), clock)
+                .forHousehold(TestHousehold.createHousehold("Zuhause", null));
         recipes = new RecipeService(new RecipeRepository());
         soup = TagFixtures.recipe("Suppe", 10, 20, null, null);
         stew = TagFixtures.recipe("Eintopf", 10, 40, null, null);

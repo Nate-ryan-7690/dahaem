@@ -41,6 +41,11 @@ public class InternalTokenFilter extends OncePerRequestFilter {
         this.objectMapper = objectMapper;
     }
 
+    /** True if a token is configured (always, in production: see {@link StartupGuard}). */
+    public boolean isConfigured() {
+        return expected != null;
+    }
+
     /** True if the request carries the configured token (never true when none is configured). */
     public boolean hasValidToken(HttpServletRequest request) {
         String presented = request.getHeader(HEADER);
