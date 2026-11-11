@@ -173,6 +173,52 @@ class ApiSmokeTest {
     }
 
     @Test
+    void barcodesAreValidatedAssignedLookedUpAndLinkedToStoreItems() throws Exception {
+        String code = "4006381333931";
+
+        mvc.perform(get("/api/barcodes/{code}", "12345"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_BARCODE"));
+        mvc.perform(get("/api/barcodes/{code}", "4006381333932"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BARCODE_CHECKSUM"));
+        // unknown, and the outside lookup is off by default: nothing leaves the server
+        mvc.perform(get("/api/barcodes/{code}", code))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"))
+                .andExpect(jsonPath("$.code").value(code));
+
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": 999999, \"packSize\": 500, \"packUnit\": \"g\"}"))
+                .andExpect(status().isBadRequest());
+        // demo data: store item 1 is for catalogue item 40, store item 3 for item 825
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": 40, \"packSize\": 3, \"packUnit\": \"stück\", \"storeItemId\": 3}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": 40, \"brand\": \"Testmarke\", \"packSize\": 1000, "
+                                + "\"packUnit\": \"g\", \"name\": \"Speisezwiebeln\", \"storeItemId\": 1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("KNOWN"))
+                .andExpect(jsonPath("$.product.inventoryItemId").value(40))
+                .andExpect(jsonPath("$.product.brand").value("Testmarke"))
+                .andExpect(jsonPath("$.product.packSize").value(1000))
+                .andExpect(jsonPath("$.product.storeItems.length()").value(1))
+                .andExpect(jsonPath("$.product.storeItems[0].storeItemId").value(1));
+
+        mvc.perform(get("/api/barcodes/{code}", "4006 3813 33931"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("KNOWN"))
+                .andExpect(jsonPath("$.product.name").value("Speisezwiebeln"));
+    }
+
+    @Test
     void inventorySearchFiltersPagesAndValidatesPaging() throws Exception {
         mvc.perform(get("/api/inventory/search").param("pageSize", "2"))
                 .andExpect(status().isOk())

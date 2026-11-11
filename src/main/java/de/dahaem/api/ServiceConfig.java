@@ -5,6 +5,10 @@ import de.dahaem.auth.AccountService;
 import de.dahaem.diet.DietFilterRepository;
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietPresets;
+import de.dahaem.barcode.BarcodeService;
+import de.dahaem.barcode.OpenFoodFactsSource;
+import de.dahaem.barcode.ProductBarcodeRepository;
+import de.dahaem.barcode.ProductDataSource;
 import de.dahaem.finance.PurchaseRepository;
 import de.dahaem.finance.PurchaseService;
 import de.dahaem.finance.StockService;
@@ -103,6 +107,29 @@ public class ServiceConfig {
     public PurchaseService purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository,
                                            InventoryRepository inventoryRepository) {
         return new PurchaseService(purchaseRepository, storeRepository, inventoryRepository);
+    }
+
+    @Bean
+    public ProductBarcodeRepository productBarcodeRepository() {
+        return new ProductBarcodeRepository();
+    }
+
+    /**
+     * Where unknown barcodes are looked up: {@code dahaem.barcode.lookup=openfoodfacts} (env DAHAEM_BARCODE_LOOKUP) asks
+     * Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on.
+     */
+    @Bean
+    public ProductDataSource productDataSource(
+            @org.springframework.beans.factory.annotation.Value("${dahaem.barcode.lookup:off}") String mode,
+            @org.springframework.beans.factory.annotation.Value("${dahaem.barcode.openfoodfacts-url:https://world.openfoodfacts.org}") String url) {
+        return "openfoodfacts".equalsIgnoreCase(mode.trim()) ? new OpenFoodFactsSource(url) : ProductDataSource.disabled();
+    }
+
+    @Bean
+    public BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository,
+                                         InventoryRepository inventoryRepository, StoreRepository storeRepository,
+                                         ProductDataSource productDataSource) {
+        return new BarcodeService(productBarcodeRepository, inventoryRepository, storeRepository, productDataSource);
     }
 
     @Bean

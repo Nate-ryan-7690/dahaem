@@ -461,6 +461,19 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   text the size was read from). Open: correct the existing rows (live data: snapshot + Nate's approval first; re-running
   the promotion refreshes every row whose store_product is still in the feed, the rest need a reviewed one-off script),
   and decide the plausible-pack threshold.
+- **Barcodes, first step done (2026-11-11)** — numbers first (typed), scanning in the app later. Migration 0020:
+  `product_barcode` (the product a number identifies: catalogue item, brand, pack size + unit, name; stored as GTIN-13)
+  and `product_barcode_store_item` (link table: the same number is on the shelf in several stores, each with its own
+  store_item). `GET /api/barcodes/{code}` (status KNOWN / FOUND / NOT_FOUND / DISABLED / UNAVAILABLE; codes
+  INVALID_BARCODE and BARCODE_CHECKSUM for typing errors) and `PUT /api/barcodes/{code}` (the user assigns the
+  catalogue item; optional `storeItemId` links a store item of the same item). Unknown numbers may be described by Open
+  Food Facts (suggestion only, never saved by itself; only the number is sent; OFF) when `DAHAEM_BARCODE_LOOKUP=openfoodfacts`
+  is set, default off. Next: the intake step (barcode + store + packs + expiry date -> find or create the store_item ->
+  purchase -> stock) once the stock unit question is settled: `inventory_item_quantity` is counted in the item's own
+  unit (g, ml, Stück; the shopping list compares it with the line's unit), but a purchase adds PACKS and the batches
+  of the stock use are in packs, so intake and use must agree (proposal: amount = packs x pack size converted to the
+  item's unit, per batch). Also open: image decoding (ZXing) for a photo of a barcode, and the spreadsheet / CSV import
+  of Nate's hand-written list.
 - **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list
   summary, a stable `code` on every error (NOT_FOUND, BAD_REQUEST, MISSING_PARAMETER, INVALID_VALUE, INVALID_BODY,
   PAST_DAY, LIST_COMPLETED, CONFLICT, UNAUTHORIZED, LOGIN_REQUIRED, CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN, INTERNAL_ERROR),

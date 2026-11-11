@@ -502,3 +502,25 @@ CREATE TABLE household_member ( household_member_id INTEGER PRIMARY KEY AUTO_INC
 	UNIQUE(household_id,user_id),
 	FOREIGN KEY(household_id) REFERENCES household(household_id),
 	FOREIGN KEY(user_id) REFERENCES app_user(user_id));
+
+-- Barcodes (migration 0020): the product a barcode number identifies (independent of any store), and the store items
+-- that carry it (one row per barcode and store item, because the same number is on the shelf in several stores).
+-- The number is stored as GTIN-13 (a 12-digit UPC-A gets a leading 0; 8 and 14 digits stay).
+
+CREATE TABLE product_barcode (
+	product_barcode_code         VARCHAR(14)  NOT NULL PRIMARY KEY,
+	product_barcode_item_id      INTEGER      NOT NULL,
+	product_barcode_brand_id     INTEGER      NULL,
+	product_barcode_package_unit VARCHAR(20)  NOT NULL,
+	product_barcode_package_size INTEGER      NOT NULL,
+	product_barcode_name         TEXT         NULL,
+	product_barcode_created_date DATE         NOT NULL,
+	FOREIGN KEY (product_barcode_item_id) REFERENCES inventory_item(inventory_item_id),
+	FOREIGN KEY (product_barcode_brand_id) REFERENCES brand(brand_id));
+
+CREATE TABLE product_barcode_store_item (
+	product_barcode_store_item_code          VARCHAR(14) NOT NULL,
+	product_barcode_store_item_store_item_id INTEGER     NOT NULL,
+	PRIMARY KEY (product_barcode_store_item_code, product_barcode_store_item_store_item_id),
+	FOREIGN KEY (product_barcode_store_item_code) REFERENCES product_barcode(product_barcode_code),
+	FOREIGN KEY (product_barcode_store_item_store_item_id) REFERENCES store_item(store_item_id));
