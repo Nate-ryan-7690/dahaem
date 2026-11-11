@@ -3,6 +3,7 @@ package de.dahaem.api;
 import org.springframework.boot.SpringApplication;
 import de.dahaem.stores.RefreshConfig;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.context.annotation.Import;
 
 /**
@@ -13,7 +14,7 @@ import org.springframework.context.annotation.Import;
  * <p>The database is MariaDB, configured from the {@code DAHAEM_DB_URL}, {@code DAHAEM_DB_USER}
  * and {@code DAHAEM_DB_PASSWORD} environment variables (see {@code de.dahaem.shared.Database}).
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)   // no default user, no generated password
 @Import(RefreshConfig.class)   // opt-in scheduled store refresh (dahaem.refresh.enabled)
 public class DahaemApplication {
 

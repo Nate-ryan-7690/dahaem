@@ -60,7 +60,7 @@ class LoginServiceTest {
     }
 
     @Test
-    void fiveFailuresSlowTheAddressDownEvenForTheRightPasswordUntilTheDelayIsOver() {
+    void fiveAttemptsSlowTheAddressDownEvenForTheRightPasswordUntilTheDelayIsOver() {
         for (int i = 0; i < 5; i++) {
             assertThrows(InvalidCredentialsException.class, () -> login.verify(EMAIL, "wrong password " + 1, "1.1.1.1"));
         }

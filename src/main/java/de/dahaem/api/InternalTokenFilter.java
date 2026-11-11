@@ -20,13 +20,13 @@ import java.security.MessageDigest;
 
 /**
  * Shared-secret gate for the internal API. When {@code INTERNAL_API_TOKEN} is set (property
- * {@code dahaem.internal-token}), every {@code /api/**} request must carry it in the
+ * {@code dahaem.internal-token}), EVERY request, whatever its path, must carry it in the
  * {@code X-Internal-Token} header: a missing or wrong token is answered with 401 and goes no
  * further. A request with the right token counts as authenticated (it is the PHP front end, which
- * does its own user login) and is exempt from CSRF, which only protects browser sessions.
+ * owns the user login) and is exempt from CSRF, which only protects browser sessions.
  *
- * <p>When no token is configured the filter does nothing and the session login in
- * {@link SecurityConfig} applies as before (local development, tests).
+ * <p>When no token is configured the filter does nothing and nobody is authenticated (the API starts without a token
+ * only for local development and tests, see {@link StartupGuard}).
  */
 @Component
 public class InternalTokenFilter extends OncePerRequestFilter {
@@ -51,7 +51,9 @@ public class InternalTokenFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return expected == null || !request.getRequestURI().startsWith("/api/");
+        // Every path, not only /api/: the raw request path is NOT the path Spring routes on (a percent-encoded "/%61pi/"
+        // is "/api/" after decoding), so no decision here may depend on it.
+        return expected == null;
     }
 
     @Override

@@ -483,6 +483,21 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   image decoding (ZXing) for a photo of a barcode, the spreadsheet / CSV import of Nate's hand-written list (it can call
   `/api/intake` as it is), recording the price of a purchase from a receipt, and unit conversions for packs in pieces vs
   items in g (counted as 1 per pack).
+- **Security audit of both repositories by Fable 5.2 (2026-11-11), backend items** — report: "DAHÄM security review before go-live".
+  Done in the token-gate PR: **H1** the internal-token and audit filters decided on the raw, undecoded path
+  (`getRequestURI().startsWith("/api/")`), so `/%61pi/...` skipped the token check and fell through to the session login; the
+  earlier go-live review here wrongly recorded "the token check covers every `/api/**` path". The token is now required on
+  every path (no path test at all), with a regression test for `/%61pi/`. **L1** the API's own session login, logout,
+  `/api/auth/csrf`, `/api/auth/me`, the 14-day session cookie, the default Spring user and the old static app shell are
+  removed; everything outside `/api` is denied (403), `/error` stays open for error rendering. **M1** the login throttle
+  counts the attempt before the slow password check (40 parallel guesses were all evaluated before), has no per-email limit any
+  more (it let one wrong guess every 5 minutes keep the real user blocked; my "never locks them out" claim was wrong), and a
+  correct login only gives its own attempt back. Still open on the backend: **L2** image digests, healthcheck, Java 21 vs 17;
+  **L3** pin CI actions to commit SHAs; **L4** 1 MB body cap, length limits on free text, a size limit on the Open Food Facts
+  answer, paged endpoints; **M4** household scoping and roles (decided: single household for now). Frontend and deployment
+  items of the same report (not in this repository): C1 the PHP login, H2 phpMyAdmin out of the live compose file, H3 a production
+  `php.ini` and session cookie flags, M1 the PHP must send a trustworthy `X-Client-Ip`, M2 security headers, M3 a read-only
+  database account for `web`, M5 `src` mounted read-only, L5 to L8.
 - **Go-live review: Nate's decisions (2026-11-11) and what is built** — (1) the PHP front end owns the session: built
   `POST /api/auth/verify` (email + password, internal token required; 200 with the user, household and role, no session, no
   cookie; 401 `BAD_CREDENTIALS` for a wrong password and an unknown email alike; 429 `TOO_MANY_ATTEMPTS` + `Retry-After`) and

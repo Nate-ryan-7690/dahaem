@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Failed logins slow the caller down (a growing delay), they never lock anybody out for good. */
+/** Attempts from one address are slowed down (a growing delay), counted before the password is looked at. */
 class LoginThrottleTest {
 
     private static final long SECOND = 1_000_000_000L;
@@ -21,82 +21,98 @@ class LoginThrottleTest {
     }
 
     @Test
-    void fourFailuresFromOneAddressStillMayTryTheFifthBlocksForThirtySeconds() {
-        for (int i = 0; i < 4; i++) {
-            throttle.failure("1.1.1.1", "a@x.de");
+    void theFirstFiveAttemptsAreAllowedAndTheSixthIsRefusedForThirtySeconds() {
+        for (int i = 0; i < 5; i++) {
+            assertTrue(throttle.begin("1.1.1.1").isEmpty(), "attempt " + (i + 1));
         }
-        assertTrue(throttle.retryAfterSeconds("1.1.1.1", "a@x.de").isEmpty());
 
-        throttle.failure("1.1.1.1", "a@x.de");
-
-        assertEquals(OptionalLong.of(30), throttle.retryAfterSeconds("1.1.1.1", "a@x.de"));
+        assertEquals(OptionalLong.of(30), throttle.begin("1.1.1.1"));
         seconds(10);
-        assertEquals(OptionalLong.of(20), throttle.retryAfterSeconds("1.1.1.1", "a@x.de"), "it counts down");
+        assertEquals(OptionalLong.of(20), throttle.begin("1.1.1.1"), "it counts down, and a refused attempt does not count");
         seconds(21);
-        assertTrue(throttle.retryAfterSeconds("1.1.1.1", "a@x.de").isEmpty());
+        assertTrue(throttle.begin("1.1.1.1").isEmpty());
     }
 
     @Test
-    void theDelayDoublesWithEachFurtherFailureUpToFifteenMinutes() {
+    void manyAttemptsAtTheSameMomentCannotAllSlipThrough() {
+        int allowed = 0;
+        for (int i = 0; i < 40; i++) {   // none of them has finished its password check yet: the clock does not move
+            if (throttle.begin("1.1.1.1").isEmpty()) {
+                allowed++;
+            }
+        }
+        assertEquals(5, allowed);
+    }
+
+    @Test
+    void theDelayDoublesWithEachFurtherAttemptUpToFifteenMinutes() {
         for (int i = 0; i < 5; i++) {
-            throttle.failure("1.1.1.1", "x" + i + "@x.de");
+            throttle.begin("1.1.1.1");
         }
         seconds(31);
-        throttle.failure("1.1.1.1", "y@x.de");   // the sixth
-        assertEquals(OptionalLong.of(60), throttle.retryAfterSeconds("1.1.1.1", "z@x.de"));
+        throttle.begin("1.1.1.1");   // the sixth: allowed after the first delay, and the next delay is 60 s
+        assertEquals(OptionalLong.of(60), throttle.begin("1.1.1.1"));
 
         for (int i = 0; i < 30; i++) {
             seconds(1000);
-            throttle.failure("1.1.1.1", "w" + i + "@x.de");
+            throttle.begin("1.1.1.1");
         }
-        assertEquals(OptionalLong.of(900), throttle.retryAfterSeconds("1.1.1.1", "q@x.de"), "never more than 15 minutes");
+        assertEquals(OptionalLong.of(900), throttle.begin("1.1.1.1"), "never more than 15 minutes");
     }
 
     @Test
     void otherAddressesAreNotAffected() {
-        for (int i = 0; i < 5; i++) {
-            throttle.failure("1.1.1.1", "a" + i + "@x.de");
+        for (int i = 0; i < 6; i++) {
+            throttle.begin("1.1.1.1");
         }
-        assertTrue(throttle.retryAfterSeconds("2.2.2.2", "b@x.de").isEmpty());
+        assertTrue(throttle.begin("2.2.2.2").isEmpty());
     }
 
     @Test
-    void manyFailuresForOneEmailFromManyAddressesSlowThatEmailForAtMostFiveMinutes() {
-        for (int i = 0; i < 19; i++) {
-            throttle.failure("10.0.0." + i, "real@x.de");
-        }
-        assertTrue(throttle.retryAfterSeconds("10.0.1.1", "real@x.de").isEmpty());
-
-        throttle.failure("10.0.0.99", "real@x.de");   // the 20th
-
-        assertEquals(OptionalLong.of(30), throttle.retryAfterSeconds("10.0.1.1", "real@x.de"));
-        for (int i = 0; i < 30; i++) {
-            seconds(1000);
-            throttle.failure("10.0.2." + i, "real@x.de");
-        }
-        assertEquals(OptionalLong.of(300), throttle.retryAfterSeconds("10.0.3.3", "real@x.de"));
-    }
-
-    @Test
-    void aCorrectLoginClearsTheEmailButNotTheAddress() {
-        for (int i = 0; i < 5; i++) {
-            throttle.failure("1.1.1.1", "mine@x.de");
-        }
-        throttle.success("mine@x.de");   // logging in to one's own account must not reset the guessing against others
-
-        assertEquals(OptionalLong.of(30), throttle.retryAfterSeconds("1.1.1.1", "other@x.de"));
-        assertTrue(throttle.retryAfterSeconds("9.9.9.9", "mine@x.de").isEmpty());
-    }
-
-    @Test
-    void failuresAreForgottenAfterAnHour() {
+    void aCorrectPasswordGivesItsOwnAttemptBackAndRemovesTheBlockOnlyItCaused() {
         for (int i = 0; i < 4; i++) {
-            throttle.failure("1.1.1.1", "a@x.de");
+            throttle.begin("1.1.1.1");   // four wrong guesses
+        }
+        assertTrue(throttle.begin("1.1.1.1").isEmpty());   // the fifth attempt triggers the block ...
+        throttle.succeeded("1.1.1.1");                     // ... and was a correct login, so it is undone
+
+        assertTrue(throttle.begin("1.1.1.1").isEmpty(), "back at four attempts: one more is allowed");
+        assertEquals(OptionalLong.of(30), throttle.begin("1.1.1.1"), "that was the fifth guess: now it blocks");
+    }
+
+    @Test
+    void loggingInToOneOwnAccountDoesNotResetTheGuessingAgainstAnother() {
+        for (int i = 0; i < 4; i++) {
+            throttle.begin("1.1.1.1");   // four wrong guesses
+        }
+        for (int i = 0; i < 10; i++) {
+            if (throttle.begin("1.1.1.1").isEmpty()) {
+                throttle.succeeded("1.1.1.1");   // own successful logins in between
+            }
+        }
+        // the four guesses are still counted: the next guess is the fifth and the one after it is refused
+        assertTrue(throttle.begin("1.1.1.1").isEmpty());
+        assertTrue(throttle.begin("1.1.1.1").isPresent());
+    }
+
+    @Test
+    void attemptsAreForgottenAfterAnHour() {
+        for (int i = 0; i < 4; i++) {
+            throttle.begin("1.1.1.1");
         }
         seconds(3601);
 
-        throttle.failure("1.1.1.1", "a@x.de");
+        for (int i = 0; i < 5; i++) {
+            assertTrue(throttle.begin("1.1.1.1").isEmpty(), "counting starts again: attempt " + (i + 1));
+        }
+        assertTrue(throttle.begin("1.1.1.1").isPresent());
+    }
 
-        assertTrue(throttle.retryAfterSeconds("1.1.1.1", "a@x.de").isEmpty(), "counting starts again");
+    @Test
+    void anUnknownAddressIsOneSharedKeyNotAnError() {
+        for (int i = 0; i < 5; i++) {
+            throttle.begin(null);
+        }
+        assertTrue(throttle.begin(null).isPresent());
     }
 }

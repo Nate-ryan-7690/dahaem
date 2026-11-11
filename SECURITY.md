@@ -5,8 +5,10 @@ DAHÄM is a self-hosted, single/two-user household application. It is not a mult
 ## How it is deployed (and what protects what)
 
 - **The Java API (`dahaem-api`) is internal only.** It publishes no host port; only the PHP front end reaches it, over
-  the container network. Every `/api/**` request must carry the shared secret `INTERNAL_API_TOKEN` in the
-  `X-Internal-Token` header (constant-time comparison). The API **refuses to start** if that token or the database
+  the container network. **Every request, on every path,** must carry the shared secret `INTERNAL_API_TOKEN` in the
+  `X-Internal-Token` header (constant-time comparison; the check does not depend on the request path, so a percent-encoded
+  path such as `/%61pi/` gets no way around it). Outside `/api` the API serves nothing: there are no pages and the answer
+  is 403 even with the token. The API **refuses to start** if that token or the database
   settings (`DAHAEM_DB_URL`, `DAHAEM_DB_USER`, `DAHAEM_DB_PASSWORD`) are missing or blank (fail closed); the secrets come
   from the environment only and never from the repository.
 - **The PHP front end** is the only thing a browser talks to. When it is reachable from the internet (a Cloudflare Tunnel
@@ -27,12 +29,14 @@ DAHÄM is a self-hosted, single/two-user household application. It is not a mult
   checked against an owner. This is acceptable only while the installation holds one household.
 - **The PHP front end owns the user session.** It checks a login with `POST /api/auth/verify` (internal token required;
   answers the user, household and role; starts no session and sets no cookie) and sends the id of the logged-in user in
-  `X-Acting-User` on its later calls (for the audit log; believed only with the token). The API's own session login
-  (`/api/auth/login`) is still there and is going to be switched off.
-- Failed logins slow the caller down: after 5 failures from one client address (20 for one email) further attempts are
-  refused (429, `Retry-After`) for 30 seconds, doubling up to 15 minutes (5 for an email). It is a delay, not a lockout. In
-  memory; a restart clears it. The client address is the one the PHP passes in `X-Client-Ip`. Passwords are salted BCrypt
-  (cost 12, older hashes are upgraded at the next login), minimum length 10.
+  `X-Acting-User` on its later calls (for the audit log; believed only with the token). The API has no session login, no
+  login page and no CSRF endpoint.
+- Login attempts from one client address are slowed down: the attempt is counted before the password is checked, the first 5
+  are allowed, then further attempts are refused (429, `Retry-After`) for 30 seconds, doubling up to 15 minutes. It is a delay,
+  not a lockout, and there is deliberately no limit per email (that would let anybody who knows an email address keep the
+  real user out). In memory; a restart clears it. The client address is the one the PHP passes in `X-Client-Ip`, so the PHP
+  must send the real one; without it every login would share the PHP container's address. Passwords are salted BCrypt (cost
+  12, older hashes are upgraded at the next login), minimum length 10.
 - There are no self-service sign-up or password reset: accounts are created and reset by the operator.
 
 ## Supported versions
