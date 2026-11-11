@@ -376,6 +376,7 @@ classDiagram
     api_ShoppingListEdits *-- api_ShoppingListEdits_QuantityDto
     api_ShoppingListEdits *-- api_ShoppingListEdits_AddedLineDto
     api_ShoppingListEdits *-- api_ShoppingListEdits_StatusDto
+    api_ShoppingListItemController ..> api_Caller
     api_ShoppingListItemController ..> api_PersistedShoppingListDto
     api_ShoppingListItemController ..> api_GeneratedShoppingListDto
     api_ShoppingListItemController ..> api_SelectStoreItemRequest
@@ -1045,9 +1046,13 @@ classDiagram
     class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
+    class api_ShoppingListItemController["ShoppingListItemController"] {
+        <<controller>>
+    }
     api_Caller --> auth_HouseholdRole
     api_MealPlanController ..> api_Caller
     api_PlannedMealController ..> api_Caller
+    api_ShoppingListItemController ..> api_Caller
 ```
 
 | Component | Type |
@@ -1056,7 +1061,7 @@ classDiagram
 | `householdId` | `int` |
 | `role` | `HouseholdRole` |
 
-**Referenced by:** `MealPlanController`, `PlannedMealController`
+**Referenced by:** `MealPlanController`, `PlannedMealController`, `ShoppingListItemController`
 
 ## CallerArgumentResolver
 
@@ -4345,19 +4350,22 @@ classDiagram
         -ShoppingListService shoppingListService
         -MealPlanService mealPlanService
         +ShoppingListItemController(ShoppingListService shoppingListService, MealPlanService mealPlanService)
-        +all(boolean archived) List~PersistedShoppingListDto.Summary~
-        +create(LocalDate shoppingDate) GeneratedShoppingListDto
-        +get(int listId) PersistedShoppingListDto
-        +selectStoreItem(int listId, int itemId, SelectStoreItemRequest request) ShoppingListItemSelectionDto
-        +setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request) ShoppingListEdits.PurchasedDto
-        +setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request) ShoppingListEdits.QuantityDto
-        +removeItem(int listId, int itemId) void
-        +addItem(int listId, ShoppingListEdits.AddLineRequest request) ShoppingListEdits.AddedLineDto
-        +setArchived(int listId, ShoppingListEdits.ArchivedRequest request) ShoppingListEdits.ArchivedDto
-        +setStatus(int listId, ShoppingListEdits.StatusRequest request) ShoppingListEdits.StatusDto
+        +all(boolean archived, Caller caller) List~PersistedShoppingListDto.Summary~
+        +create(LocalDate shoppingDate, Caller caller) GeneratedShoppingListDto
+        +get(int listId, Caller caller) PersistedShoppingListDto
+        +selectStoreItem(int listId, int itemId, SelectStoreItemRequest request, Caller caller) ShoppingListItemSelectionDto
+        +setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request, Caller caller) ShoppingListEdits.PurchasedDto
+        +setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request, Caller caller) ShoppingListEdits.QuantityDto
+        +removeItem(int listId, int itemId, Caller caller) void
+        +addItem(int listId, ShoppingListEdits.AddLineRequest request, Caller caller) ShoppingListEdits.AddedLineDto
+        +setArchived(int listId, ShoppingListEdits.ArchivedRequest request, Caller caller) ShoppingListEdits.ArchivedDto
+        +setStatus(int listId, ShoppingListEdits.StatusRequest request, Caller caller) ShoppingListEdits.StatusDto
     }
     class shopping_ShoppingListService["ShoppingListService"]
     class mealplanner_MealPlanService["MealPlanService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_PersistedShoppingListDto["PersistedShoppingListDto"] {
         <<record>>
     }
@@ -4373,6 +4381,7 @@ classDiagram
     class api_ShoppingListEdits["ShoppingListEdits"]
     api_ShoppingListItemController --> shopping_ShoppingListService
     api_ShoppingListItemController --> mealplanner_MealPlanService
+    api_ShoppingListItemController ..> api_Caller
     api_ShoppingListItemController ..> api_PersistedShoppingListDto
     api_ShoppingListItemController ..> api_GeneratedShoppingListDto
     api_ShoppingListItemController ..> api_SelectStoreItemRequest
@@ -4388,16 +4397,16 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `ShoppingListItemController(ShoppingListService shoppingListService, MealPlanService mealPlanService)` | public |  |
-| `List<PersistedShoppingListDto.Summary> all(boolean archived)` | public | Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan. |
-| `GeneratedShoppingListDto create(LocalDate shoppingDate)` | public | Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand (POST /{listId/items}). |
-| `PersistedShoppingListDto get(int listId)` | public | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
-| `ShoppingListItemSelectionDto selectStoreItem(int listId, int itemId, SelectStoreItemRequest request)` | public | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
-| `ShoppingListEdits.PurchasedDto setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request)` | public | Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. |
-| `ShoppingListEdits.QuantityDto setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request)` | public | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
-| `void removeItem(int listId, int itemId)` | public | Removes a line from a list that is not completed. |
-| `ShoppingListEdits.AddedLineDto addItem(int listId, ShoppingListEdits.AddLineRequest request)` | public | Adds a line by hand: for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional) or as free text ({"name": "Backpapier", "quantity": 1}, unit optional). |
-| `ShoppingListEdits.ArchivedDto setArchived(int listId, ShoppingListEdits.ArchivedRequest request)` | public | Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back. |
-| `ShoppingListEdits.StatusDto setStatus(int listId, ShoppingListEdits.StatusRequest request)` | public | Completes a list ({"completed": true}: it becomes read-only) or reopens it. |
+| `List<PersistedShoppingListDto.Summary> all(boolean archived, Caller caller)` | public | Every saved list, newest first, with its lines and how many are ticked; mealPlanId is null for a list without a plan. |
+| `GeneratedShoppingListDto create(LocalDate shoppingDate, Caller caller)` | public | Makes an empty list that belongs to no meal plan, for a trip without planned meals; the lines are added by hand (POST /{listId/items}). |
+| `PersistedShoppingListDto get(int listId, Caller caller)` | public | Reloads a previously generated/persisted shopping list, with each item's names, options, and selection. |
+| `ShoppingListItemSelectionDto selectStoreItem(int listId, int itemId, SelectStoreItemRequest request, Caller caller)` | public | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
+| `ShoppingListEdits.PurchasedDto setPurchased(int listId, int itemId, ShoppingListEdits.PurchasedRequest request, Caller caller)` | public | Ticks a line as bought on the shopping trip ({"purchased": true}) or unticks it. |
+| `ShoppingListEdits.QuantityDto setQuantity(int listId, int itemId, ShoppingListEdits.QuantityRequest request, Caller caller)` | public | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
+| `void removeItem(int listId, int itemId, Caller caller)` | public | Removes a line from a list that is not completed. |
+| `ShoppingListEdits.AddedLineDto addItem(int listId, ShoppingListEdits.AddLineRequest request, Caller caller)` | public | Adds a line by hand: for a catalogue item ({"inventoryItemId": 5, "quantity": 2, "unit": "kg"}, unit optional) or as free text ({"name": "Backpapier", "quantity": 1}, unit optional). |
+| `ShoppingListEdits.ArchivedDto setArchived(int listId, ShoppingListEdits.ArchivedRequest request, Caller caller)` | public | Archives a list ({"archived": true}: hidden from the overview, nothing is deleted) or brings it back. |
+| `ShoppingListEdits.StatusDto setStatus(int listId, ShoppingListEdits.StatusRequest request, Caller caller)` | public | Completes a list ({"completed": true}: it becomes read-only) or reopens it. |
 
 ## ShoppingListItemSelectionDto
 

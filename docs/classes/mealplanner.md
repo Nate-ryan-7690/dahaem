@@ -306,6 +306,7 @@ classDiagram
         +addRecipe(int planId, int recipeId, String mealTime) void
         +removeRecipe(int planId, int recipeId) boolean
         +findAll(int householdId) List~MealPlan~
+        +findHouseholdIdOfPlan(int planId) Optional~Integer~
         +findPlan(int householdId, int planId) Optional~MealPlan~
         +findRecipesForPlan(int planId) List~MealPlanRecipe~
         -String MEAL_SELECT$
@@ -345,7 +346,8 @@ classDiagram
 | `void addRecipe(int planId, int recipeId, String mealTime)` | public |  |
 | `boolean removeRecipe(int planId, int recipeId)` | public | Removes a recipe from a plan. |
 | `List<MealPlan> findAll(int householdId)` | public |  |
-| `Optional<MealPlan> findPlan(int householdId, int planId)` | public | The plan with this id if it belongs to the household (empty for another household's plan). |
+| `Optional<Integer> findHouseholdIdOfPlan(int planId)` | public | The plan with this id if it belongs to the household (empty for another household's plan). |
+| `Optional<MealPlan> findPlan(int householdId, int planId)` | public |  |
 | `List<MealPlanRecipe> findRecipesForPlan(int planId)` | public |  |
 | `Optional<MealPlan> findPlanByWeekStart(int householdId, LocalDate weekStart)` | public | The plan of the household for the week that starts on this Monday, if there is one. |
 | `List<PlannedMeal> findMeals(int planId)` | public | Every meal of a plan, ordered by day, then position, then entry id. |
