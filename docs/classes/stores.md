@@ -4,7 +4,7 @@
 
 Store offers: clients, the raw and verified data model, matching, promotions, scheduled refresh.
 
-47 types in 38 source files (`src/main/java/de/dahaem/stores`). Back to the [class index](README.md).
+53 types in 44 source files (`src/main/java/de/dahaem/stores`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -15,6 +15,12 @@ classDiagram
     class stores_AggregatorSource["AggregatorSource"]
     class stores_AldiNordClient["AldiNordClient"]
     class stores_AldiNordSource["AldiNordSource"]
+    class stores_BrandPage["BrandPage"] {
+        <<record>>
+    }
+    class stores_BrandRef["BrandRef"] {
+        <<record>>
+    }
     class stores_CatalogChange["CatalogChange"] {
         <<record>>
     }
@@ -77,6 +83,7 @@ classDiagram
     class stores_ScheduledRefresh["ScheduledRefresh"] {
         <<spring>>
     }
+    class stores_StoreCatalogService["StoreCatalogService"]
     class stores_StoreConfig["StoreConfig"]
     class stores_StoreDiscountService["StoreDiscountService"]
     class stores_StoreDiscountService_BrandSplit["StoreDiscountService.BrandSplit"] {
@@ -104,7 +111,12 @@ classDiagram
     class stores_StorePromotionService_Pack["StorePromotionService.Pack"] {
         <<record>>
     }
+    class stores_StoreRef["StoreRef"] {
+        <<record>>
+    }
     class stores_StoreRepository["StoreRepository"]
+    class stores_UnknownBrandException["UnknownBrandException"]
+    class stores_UnknownStoreException["UnknownStoreException"]
     class stores_VariantParser["VariantParser"]
     stores_AggregatorClient --> stores_HttpFetcher
     stores_AggregatorClient ..> stores_OfferPull
@@ -120,6 +132,7 @@ classDiagram
     stores_AldiNordSource --> stores_AldiNordClient
     stores_AldiNordSource ..> stores_OfferPull
     stores_AldiNordSource ..> stores_OfferScope
+    stores_BrandPage --> stores_BrandRef
     stores_CatalogChange *-- stores_CatalogChange_Type
     stores_CrawlResult --> stores_StoreProduct
     stores_ImportSummary --> stores_CatalogChange
@@ -155,6 +168,9 @@ classDiagram
     stores_RefreshSummary --> stores_ImportSummary
     stores_ReviewReports ..> stores_OfferRow
     stores_ScheduledRefresh --> stores_RefreshService
+    stores_StoreCatalogService --> stores_StoreRepository
+    stores_StoreCatalogService ..> stores_StoreRef
+    stores_StoreCatalogService ..> stores_BrandPage
     stores_StoreDiscountService *-- stores_StoreDiscountService_BrandSplit
     stores_StoreDiscountService --> stores_StoreRepository
     stores_StoreDiscountService ..> stores_ImportSummary
@@ -183,6 +199,9 @@ classDiagram
     stores_StoreRepository ..> stores_MatchGate
     stores_StoreRepository ..> stores_StoreProductRef
     stores_StoreRepository ..> stores_PromotableProduct
+    stores_StoreRepository ..> stores_StoreRef
+    stores_StoreRepository ..> stores_BrandRef
+    stores_StoreRepository ..> stores_BrandPage
     stores_StoreRepository ..> stores_OfferRow
     stores_StoreRepository ..> stores_StoreOffer
     stores_VariantParser ..> stores_ProductVariant
@@ -196,6 +215,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`AggregatorSource`](#aggregatorsource) | class |  | One chain's offers from the aggregator (SECONDARY source). |
 | [`AldiNordClient`](#aldinordclient) | class |  | Reads ALDI Nord's public website. |
 | [`AldiNordSource`](#aldinordsource) | class |  | ALDI Nord's own weekly offers (national list, so the scope is ignored). |
+| [`BrandPage`](#brandpage) | record |  | One page of brands plus how many match in all pages. |
+| [`BrandRef`](#brandref) | record |  | A brand: its id and name. |
 | [`CatalogChange`](#catalogchange) | record |  | One difference found by the range comparator between the last pull and this one. |
 | [`CatalogChange.Type`](#catalogchangetype) | enum |  |  |
 | [`CatalogItem`](#catalogitem) | record |  | One inventory_item catalog row, with its normalized names cached for matching. |
@@ -224,6 +245,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`RefreshSummary`](#refreshsummary) | record |  | Outcome of one refresh flow ("weekly" / "monthly"): the summary of every step that returned one, plus a message for every step that threw. |
 | [`ReviewReports`](#reviewreports) | class |  | Row builders for the review reports (unmatched_offers.tsv, review_matches.tsv, review_prices.tsv). |
 | [`ScheduledRefresh`](#scheduledrefresh) | class | Spring component | Runs the weekly / monthly refresh on a cron schedule inside the long-running API process. |
+| [`StoreCatalogService`](#storecatalogservice) | class |  | The stores and brands DAHÄM has, for pickers. |
 | [`StoreConfig`](#storeconfig) | class |  | Settings for the store importers, read from config/stores.properties (relative to the working directory, like the database path). |
 | [`StoreDiscountService`](#storediscountservice) | class |  | Turns pulled flyer offers into the verified layer: each matched offer becomes (or refreshes) a store_item shell for its chain, plus a store_discount holding the flyer price and dates. |
 | [`StoreDiscountService.BrandSplit`](#storediscountservicebrandsplit) | record |  | Brand to file the offer under (null = no brand) and the text to match against the catalog. |
@@ -237,7 +259,10 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`StoreProductRef`](#storeproductref) | record |  | Minimal store_product row for matching: id, name, category. |
 | [`StorePromotionService`](#storepromotionservice) | class |  | Promotes RAW store_product rows into the VERIFIED store_item layer that the shopping list reads. |
 | [`StorePromotionService.Pack`](#storepromotionservicepack) | record |  | A pack size reduced to an integer count of a base unit. |
+| [`StoreRef`](#storeref) | record |  | A store: its id and name (as listed in the pickers). |
 | [`StoreRepository`](#storerepository) | class |  | All SQL for pulled store data: store_product (+ variants, price history), store_offer, store_catalog_change and store_import_run. |
+| [`UnknownBrandException`](#unknownbrandexception) | class |  | A brand name DAHÄM does not have, where creating a new brand was not asked for. |
+| [`UnknownStoreException`](#unknownstoreexception) | class |  | A store name DAHÄM does not have, where creating a new store was not asked for. |
 | [`VariantParser`](#variantparser) | class |  | Splits the "Sorten:" block of an ALDI product description into flavour/size variants. |
 
 ## AggregatorClient
@@ -501,6 +526,70 @@ classDiagram
 | `String storeName()` | public |  |
 | `String sourceTag()` | public |  |
 | `OfferPull fetchOffers(OfferScope scope)` | public |  |
+
+## BrandPage
+
+*record*
+
+One page of brands plus how many match in all pages.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_BrandPage["BrandPage"] {
+        <<record>>
+        +List~BrandRef~ items
+        +long total
+    }
+    class stores_BrandRef["BrandRef"] {
+        <<record>>
+    }
+    class stores_StoreCatalogService["StoreCatalogService"]
+    class stores_StoreRepository["StoreRepository"]
+    stores_BrandPage --> stores_BrandRef
+    stores_StoreCatalogService ..> stores_BrandPage
+    stores_StoreRepository ..> stores_BrandPage
+```
+
+| Component | Type |
+|---|---|
+| `items` | `List<BrandRef>` |
+| `total` | `long` |
+
+**Referenced by:** `StoreCatalogService`, `StoreRepository`
+
+## BrandRef
+
+*record*
+
+A brand: its id and name.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_BrandRef["BrandRef"] {
+        <<record>>
+        +int id
+        +String name
+    }
+    class api_BrandPageDto["BrandPageDto"] {
+        <<record>>
+    }
+    class stores_BrandPage["BrandPage"] {
+        <<record>>
+    }
+    class stores_StoreRepository["StoreRepository"]
+    api_BrandPageDto --> stores_BrandRef
+    stores_BrandPage --> stores_BrandRef
+    stores_StoreRepository ..> stores_BrandRef
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+
+**Referenced by:** `BrandPage`, `BrandPageDto`, `StoreRepository`
 
 ## CatalogChange
 
@@ -1690,6 +1779,53 @@ classDiagram
 | `void weekly()` | public |  |
 | `void monthly()` | public |  |
 
+## StoreCatalogService
+
+*class*
+
+The stores and brands DAHÄM has, for pickers. No SQL here, no UI here.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_StoreCatalogService["StoreCatalogService"] {
+        -StoreRepository repository
+        +StoreCatalogService(StoreRepository repository)
+        +stores() List~StoreRef~
+        +brands(String query, long offset, int limit) BrandPage
+    }
+    class stores_StoreRepository["StoreRepository"]
+    class api_StoreCatalogController["StoreCatalogController"] {
+        <<controller>>
+    }
+    class stores_StoreRef["StoreRef"] {
+        <<record>>
+    }
+    class stores_BrandPage["BrandPage"] {
+        <<record>>
+    }
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    stores_StoreCatalogService --> stores_StoreRepository
+    stores_StoreCatalogService ..> stores_StoreRef
+    stores_StoreCatalogService ..> stores_BrandPage
+    api_ServiceConfig ..> stores_StoreCatalogService
+    api_StoreCatalogController --> stores_StoreCatalogService
+```
+
+| Field | Type |
+|---|---|
+| `repository` | `StoreRepository` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `StoreCatalogService(StoreRepository repository)` | public |  |
+| `List<StoreRef> stores()` | public |  |
+| `BrandPage brands(String query, long offset, int limit)` | public | One page of brands whose name contains query (blank = all), by name. |
+
+**Referenced by:** `ServiceConfig`, `StoreCatalogController`
+
 ## StoreConfig
 
 *class*
@@ -2371,6 +2507,37 @@ classDiagram
 
 **Referenced by:** `StorePromotionService`
 
+## StoreRef
+
+*record*
+
+A store: its id and name (as listed in the pickers).
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_StoreRef["StoreRef"] {
+        <<record>>
+        +int id
+        +String name
+    }
+    class api_StoreCatalogController["StoreCatalogController"] {
+        <<controller>>
+    }
+    class stores_StoreCatalogService["StoreCatalogService"]
+    class stores_StoreRepository["StoreRepository"]
+    api_StoreCatalogController ..> stores_StoreRef
+    stores_StoreCatalogService ..> stores_StoreRef
+    stores_StoreRepository ..> stores_StoreRef
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
+
+**Referenced by:** `StoreCatalogController`, `StoreCatalogService`, `StoreRepository`
+
 ## StoreRepository
 
 *class*
@@ -2398,6 +2565,10 @@ classDiagram
         +loadPromotableProducts() List~PromotableProduct~
         +findOrCreateBrand(Connection con, String name) int
         +findOrCreateStoreItem(Connection con, int storeId, int brandId, int itemId, String unit, int size, Double normalPrice) int
+        +listStores() List~StoreRef~
+        +findStoreByName(String name) java.util.Optional~StoreRef~
+        +findBrandByName(String name) java.util.Optional~BrandRef~
+        +searchBrands(String query, long offset, int limit) BrandPage
         +findStoreItemPrice(String storeName, String brandName, int itemId, String unit, int size) java.util.Optional~Double~
         +deleteLegacyStoreItems(Connection con) int
         +upsertStoreItem(Connection con, int storeProductId, int storeId, int brandId, int itemId, String unit, int size, double price, boolean available, Double deposit) boolean
@@ -2412,6 +2583,7 @@ classDiagram
     class barcode_BarcodeService["BarcodeService"]
     class barcode_IntakeService["IntakeService"]
     class finance_PurchaseService["PurchaseService"]
+    class stores_StoreCatalogService["StoreCatalogService"]
     class stores_StoreDiscountService["StoreDiscountService"]
     class stores_StoreImportService["StoreImportService"]
     class stores_StoreMatchService["StoreMatchService"]
@@ -2435,10 +2607,7 @@ classDiagram
     class stores_PromotableProduct["PromotableProduct"] {
         <<record>>
     }
-    class stores_OfferRow["OfferRow"] {
-        <<record>>
-    }
-    class stores_StoreOffer["StoreOffer"] {
+    class stores_StoreRef["StoreRef"] {
         <<record>>
     }
     stores_StoreRepository ..> stores_KnownProduct
@@ -2448,16 +2617,16 @@ classDiagram
     stores_StoreRepository ..> stores_MatchGate
     stores_StoreRepository ..> stores_StoreProductRef
     stores_StoreRepository ..> stores_PromotableProduct
-    stores_StoreRepository ..> stores_OfferRow
-    stores_StoreRepository ..> stores_StoreOffer
+    stores_StoreRepository ..> stores_StoreRef
     barcode_BarcodeService --> stores_StoreRepository
     barcode_IntakeService --> stores_StoreRepository
     finance_PurchaseService --> stores_StoreRepository
+    stores_StoreCatalogService --> stores_StoreRepository
     stores_StoreDiscountService --> stores_StoreRepository
     stores_StoreImportService --> stores_StoreRepository
     stores_StoreMatchService --> stores_StoreRepository
     stores_StorePromotionService --> stores_StoreRepository
-    %% 1 more neighbours not drawn
+    %% 5 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -2474,6 +2643,10 @@ classDiagram
 | `List<PromotableProduct> loadPromotableProducts()` | public | Sets store_product_inventory_item_id for the matched products, in one transaction. |
 | `int findOrCreateBrand(Connection con, String name)` | public | brand_id for a brand name, inserting the brand if it's new (brand_name is UNIQUE). |
 | `int findOrCreateStoreItem(Connection con, int storeId, int brandId, int itemId, String unit, int size, Double normalPrice)` | public | Find-or-create a store_item for a manual/receipt purchase, keyed by (store, brand, inventory item, package unit, package size) — the natural key for a product with no store_product or offer external_id. |
+| `List<StoreRef> listStores()` | public | Every store, by name. |
+| `java.util.Optional<StoreRef> findStoreByName(String name)` | public | The store with this name (case does not matter), or empty. |
+| `java.util.Optional<BrandRef> findBrandByName(String name)` | public | The brand with this name (case does not matter), or empty. |
+| `BrandPage searchBrands(String query, long offset, int limit)` | public | One page of brands, by name. |
 | `java.util.Optional<Double> findStoreItemPrice(String storeName, String brandName, int itemId, String unit, int size)` | public | The normal price of the store item for (store, brand, item, unit, size), or empty if there is no such store item or it has no price. |
 | `int deleteLegacyStoreItems(Connection con)` | public | Removes promotion rows made before per-product keying existed (store_product_id IS NULL). |
 | `boolean upsertStoreItem(Connection con, int storeProductId, int storeId, int brandId, int itemId, String unit, int size, double price, boolean available, Double deposit)` | public | Insert or refresh one verified store_item, keyed by its source store_product, so each distinct product is its own store_item and nothing collapses. |
@@ -2485,7 +2658,53 @@ classDiagram
 | `void saveMatches(Map<Integer, Integer> matches)` | public |  |
 | `int saveOffers(int storeId, List<StoreOffer> offers, LocalDate pulledOn, String source)` | public | Inserts offers, or refreshes them if the same offer (store, product, start date, region) was pulled before, e.g. |
 
-**Referenced by:** `BarcodeService`, `IntakeService`, `PurchaseService`, `ServiceConfig`, `StoreDiscountService`, `StoreImportService`, `StoreMatchService`, `StorePromotionService`
+**Referenced by:** `BarcodeService`, `IntakeService`, `PurchaseService`, `ServiceConfig`, `StoreCatalogService`, `StoreDiscountService`, `StoreImportService`, `StoreMatchService`, `StorePromotionService`
+
+## UnknownBrandException
+
+*class · extends IllegalArgumentException*
+
+A brand name DAHÄM does not have, where creating a new brand was not asked for. Stops a typo from adding a bogus
+brand. A bad request (400) with its own code, UNKNOWN_BRAND.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_UnknownBrandException["UnknownBrandException"] {
+        +UnknownBrandException(String name)
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> stores_UnknownBrandException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `UnknownBrandException(String name)` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
+
+## UnknownStoreException
+
+*class · extends IllegalArgumentException*
+
+A store name DAHÄM does not have, where creating a new store was not asked for. Stops a typo from adding a bogus store
+(which would show on the Home store deck). A bad request (400) with its own code, UNKNOWN_STORE.
+
+```mermaid
+classDiagram
+    direction LR
+    class stores_UnknownStoreException["UnknownStoreException"] {
+        +UnknownStoreException(String name)
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> stores_UnknownStoreException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `UnknownStoreException(String name)` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## VariantParser
 

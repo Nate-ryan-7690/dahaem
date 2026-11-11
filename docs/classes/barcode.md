@@ -222,6 +222,7 @@ classDiagram
         +BarcodeService(ProductBarcodeRepository repository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource source)
         +lookup(String rawCode) BarcodeLookup
         +assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit, String name, Integer storeItemId, LocalDate today) BarcodeLookup
+        +assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit, String name, Integer storeItemId, boolean createBrand, LocalDate today) BarcodeLookup
         ~canonicalPack(int size, String unit, String itemUnit) Pack$
     }
     class barcode_BarcodeService_Pack["BarcodeService.Pack"] {
@@ -263,7 +264,8 @@ classDiagram
 |---|---|---|
 | `BarcodeService(ProductBarcodeRepository repository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource source)` | public |  |
 | `BarcodeLookup lookup(String rawCode)` | public | What the barcode is: from DAHÄM if known, else a suggestion from the open data source if it is switched on. |
-| `BarcodeLookup assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit, String name, Integer storeItemId, LocalDate today)` | public | Remembers what a barcode is (or replaces it): the catalogue item, the brand (blank = none), the pack and the name as printed. |
+| `BarcodeLookup assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit, String name, Integer storeItemId, LocalDate today)` | public | Remembers what a barcode is (or replaces it): the catalogue item, the brand (blank = none; a new brand is created), the pack and the name as printed. |
+| `BarcodeLookup assign(String rawCode, int inventoryItemId, String brand, int packSize, String packUnit, String name, Integer storeItemId, boolean createBrand, LocalDate today)` | public | Like .assign(String, int, String, int, String, String, Integer, LocalDate), but a brand that does not exist is only created when createBrand is true; otherwise an UnknownBrandException (400 UNKNOWN_BRAND) and nothing is saved, so a typo can |
 | `Pack canonicalPack(int size, String unit, String itemUnit)` | package static | The pack in the units the shopping list works in: mass in g, volume in ml, pieces in stück ("1 kg" is 1000 g, "1,5 l" is 1500 ml), so a barcode's pack is the same as the matching store item's and the stock of the item. |
 
 **Referenced by:** `BarcodeController`, `ServiceConfig`
@@ -335,7 +337,7 @@ classDiagram
         -PurchaseService purchases
         -StoreRepository stores
         +IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores)
-        +intake(String storeName, LocalDate purchaseDate, List~Line~ lines) List~LineResult~
+        +intake(String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) List~LineResult~
     }
     class barcode_IntakeService_Line["IntakeService.Line"] {
         <<record>>
@@ -383,7 +385,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores)` | public |  |
-| `List<LineResult> intake(String storeName, LocalDate purchaseDate, List<Line> lines)` | public |  |
+| `List<LineResult> intake(String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Puts the lines away at the store. |
 
 **Referenced by:** `IntakeController`, `IntakeController.IntakeRequest`, `IntakeController.IntakeResult`, `ServiceConfig`
 
