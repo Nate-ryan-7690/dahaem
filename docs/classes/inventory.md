@@ -45,14 +45,17 @@ The rest of the app never writes SQL against inventory; it calls these methods.
 classDiagram
     direction LR
     class inventory_InventoryRepository["InventoryRepository"] {
+        -String ITEM_COLUMNS$
+        -String STOCK_JOIN$
         +countAll() long
-        +findAll() List~Item~
-        +search(String query, String category, long offset, int limit) ItemPage
-        +findById(int id) Optional~Item~
+        +findAll(int householdId) List~Item~
+        +search(int householdId, String query, String category, long offset, int limit) ItemPage
+        +findById(int householdId, int id) Optional~Item~
+        +findCatalogueItem(int id) Optional~Item~
         +findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit) int
-        +updateQuantity(int id, int newQuantity) void
-        +findByIdForUpdate(Connection con, int id) Optional~Item~
-        +setStock(Connection con, int id, int quantity, LocalDate earliestExpDate) void
+        +updateQuantity(int householdId, int id, int newQuantity) void
+        +findByIdForUpdate(Connection con, int householdId, int id) Optional~Item~
+        +setStock(Connection con, int householdId, int id, int quantity, LocalDate earliestExpDate) void
     }
     class barcode_BarcodeService["BarcodeService"]
     class finance_PurchaseService["PurchaseService"]
@@ -76,16 +79,22 @@ classDiagram
     shopping_ShoppingListService --> inventory_InventoryRepository
 ```
 
+| Field | Type |
+|---|---|
+| `ITEM_COLUMNS` | `String` |
+| `STOCK_JOIN` | `String` |
+
 | Member | Visibility | What it does |
 |---|---|---|
 | `long countAll()` | public |  |
-| `List<Item> findAll()` | public |  |
-| `ItemPage search(String query, String category, long offset, int limit)` | public | One page of the catalogue, ordered by English name. |
-| `Optional<Item> findById(int id)` | public |  |
+| `List<Item> findAll(int householdId)` | public | Every catalogue item with the stock of this household. |
+| `ItemPage search(int householdId, String query, String category, long offset, int limit)` | public | One page of the catalogue, ordered by English name. |
+| `Optional<Item> findById(int householdId, int id)` | public | The catalogue item with the stock of this household, or empty if there is no such item. |
+| `Optional<Item> findCatalogueItem(int id)` | public | The catalogue item WITHOUT any household's stock: quantity 0 and no expiry date. |
 | `int findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit)` | public | Find-or-create a generic inventory_item by (name_english, category), on the caller's transaction (see PurchaseRepository.openTransaction()/StoreRepository.openTransaction()). |
-| `void updateQuantity(int id, int newQuantity)` | public |  |
-| `Optional<Item> findByIdForUpdate(Connection con, int id)` | public | The item, locked for the caller's transaction (see PurchaseRepository.openTransaction()). |
-| `void setStock(Connection con, int id, int quantity, LocalDate earliestExpDate)` | public | Sets the stock and the earliest expiry date together (null date = none known). |
+| `void updateQuantity(int householdId, int id, int newQuantity)` | public | Sets the quantity of this household's stock of an item (the expiry date stays as it is). |
+| `Optional<Item> findByIdForUpdate(Connection con, int householdId, int id)` | public | The item with this household's stock, locked for the caller's transaction (see PurchaseRepository.openTransaction()). |
+| `void setStock(Connection con, int householdId, int id, int quantity, LocalDate earliestExpDate)` | public | Sets this household's stock of an item and its earliest expiry date together (null date = none known). |
 
 **Referenced by:** `BarcodeService`, `InventoryService`, `PurchaseService`, `ServiceConfig`, `ShoppingListService`, `StockService`
 
@@ -104,10 +113,10 @@ classDiagram
         -InventoryRepository repository
         +InventoryService(InventoryRepository repository)
         +totalItemCount() long
-        +allItems() List~Item~
-        +search(String query, String category, long offset, int limit) ItemPage
-        +lowStock(int threshold) List~Item~
-        +expiringWithin(int days) List~Item~
+        +allItems(int householdId) List~Item~
+        +search(int householdId, String query, String category, long offset, int limit) ItemPage
+        +lowStock(int householdId, int threshold) List~Item~
+        +expiringWithin(int householdId, int days) List~Item~
     }
     class inventory_InventoryRepository["InventoryRepository"]
     class api_InventoryController["InventoryController"] {
@@ -135,10 +144,10 @@ classDiagram
 |---|---|---|
 | `InventoryService(InventoryRepository repository)` | public |  |
 | `long totalItemCount()` | public |  |
-| `List<Item> allItems()` | public |  |
-| `ItemPage search(String query, String category, long offset, int limit)` | public | One page of the catalogue filtered by name text and/or category (both optional); see InventoryRepository.search. |
-| `List<Item> lowStock(int threshold)` | public | Items at or below a stock threshold, e.g. |
-| `List<Item> expiringWithin(int days)` | public | Items with a known expiry date within the next N days. |
+| `List<Item> allItems(int householdId)` | public | The catalogue with the stock of this household. |
+| `ItemPage search(int householdId, String query, String category, long offset, int limit)` | public | One page of the catalogue filtered by name text and/or category (both optional); see InventoryRepository.search. |
+| `List<Item> lowStock(int householdId, int threshold)` | public | Items at or below a stock threshold, e.g. |
+| `List<Item> expiringWithin(int householdId, int days)` | public | Items with a known expiry date within the next N days. |
 
 **Referenced by:** `InventoryController`, `ServiceConfig`
 

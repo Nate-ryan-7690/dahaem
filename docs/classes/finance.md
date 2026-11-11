@@ -50,7 +50,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`PurchaseService`](#purchaseservice) | class |  | Business logic for purchases. |
 | [`StockAmounts`](#stockamounts) | class |  | Stock is counted in the catalogue item's own unit (g, ml, Stück), as the shopping list compares it with a line's unit. |
 | [`StockBatch`](#stockbatch) | record |  | One batch of an item's stock = one purchase: where and when it was bought, when it expires, how many packs of which size were bought, and how much of it is left in the item's own unit (unit). |
-| [`StockService`](#stockservice) | class |  | Takes food out of stock, in the item's own unit (g, ml, Stück). |
+| [`StockService`](#stockservice) | class |  | Takes food out of a household's stock, in the item's own unit (g, ml, Stück). |
 
 ## Purchase
 
@@ -136,18 +136,18 @@ classDiagram
         -String INSERT_SQL$
         -String SELECT_COLUMNS$
         +openTransaction() Connection
-        +insert(int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) int
-        +insert(Connection con, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) int
-        +findAll() List~Purchase~
-        +spendingTotal() double
-        +spendingBetween(LocalDate from, LocalDate to) double
+        +insert(int householdId, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) int
+        +insert(Connection con, int householdId, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) int
+        +findAll(int householdId) List~Purchase~
+        +spendingTotal(int householdId) double
+        +spendingBetween(int householdId, LocalDate from, LocalDate to) double
         +findInventoryItemIdForStoreItem(Connection con, int storeItemId) Integer
-        +findBatchesOfItem(int inventoryItemId) List~BatchRow~
+        +findBatchesOfItem(int householdId, int inventoryItemId) List~BatchRow~
         +findStoreItemStock(Connection con, int storeItemId) StoreItemStock
-        +applyPurchaseToInventory(Connection con, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate) void
-        +lockBatchesWithStock(Connection con, int inventoryItemId) List~Batch~
+        +applyPurchaseToInventory(Connection con, int householdId, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate) void
+        +lockBatchesWithStock(Connection con, int householdId, int inventoryItemId) List~Batch~
         +setRemaining(Connection con, int purchaseId, int remaining) void
-        +earliestExpiryWithStock(Connection con, int inventoryItemId) LocalDate
+        +earliestExpiryWithStock(Connection con, int householdId, int inventoryItemId) LocalDate
     }
     class finance_PurchaseRepository_BatchRow["PurchaseRepository.BatchRow"] {
         <<record>>
@@ -181,18 +181,18 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `Connection openTransaction()` | public | Opens a connection with auto-commit off, for a caller that needs to combine several writes atomically. |
-| `int insert(int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate)` | public |  |
-| `int insert(Connection con, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate)` | public | Same insert, on a connection the caller manages (does not commit). |
-| `List<Purchase> findAll()` | public |  |
-| `double spendingTotal()` | public | Sum of price paid across every recorded purchase. |
-| `double spendingBetween(LocalDate from, LocalDate to)` | public | Sum of price paid for purchases dated between from and to, inclusive. |
+| `int insert(int householdId, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate)` | public |  |
+| `int insert(Connection con, int householdId, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate)` | public | Same insert, on a connection the caller manages (does not commit). |
+| `List<Purchase> findAll(int householdId)` | public | The purchases of one household, newest first. |
+| `double spendingTotal(int householdId)` | public | Sum of price paid across every purchase of the household. |
+| `double spendingBetween(int householdId, LocalDate from, LocalDate to)` | public | Sum of price paid for the household's purchases dated between from and to, inclusive. |
 | `Integer findInventoryItemIdForStoreItem(Connection con, int storeItemId)` | public | The inventory_item this store_item is linked to (store_item.store_item_item_id), or null if the store_item is unknown. |
-| `List<BatchRow> findBatchesOfItem(int inventoryItemId)` | public | Every purchase of an inventory item, earliest expiry first (older purchase first on a tie). |
+| `List<BatchRow> findBatchesOfItem(int householdId, int inventoryItemId)` | public | Every purchase of an inventory item by this household, earliest expiry first (older purchase first on a tie). |
 | `StoreItemStock findStoreItemStock(Connection con, int storeItemId)` | public | The stock facts of a store item, or null if there is no such store item. |
-| `void applyPurchaseToInventory(Connection con, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate)` | public | Increases inventory_item_quantity by quantityDelta and pulls inventory_item_earliest_exp_date down to purchaseExpirationDate if that is earlier than what is already stored (or nothing is stored yet). |
-| `List<Batch> lockBatchesWithStock(Connection con, int inventoryItemId)` | public | The purchases of an inventory item that still have something left, earliest expiry first (older purchase first on a tie), locked for the caller's transaction. |
+| `void applyPurchaseToInventory(Connection con, int householdId, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate)` | public | Adds quantityDelta to the household's stock of the item and pulls its earliest expiry date down to purchaseExpirationDate if that is earlier than what is already stored (or nothing is stored yet). |
+| `List<Batch> lockBatchesWithStock(Connection con, int householdId, int inventoryItemId)` | public | The purchases of an inventory item that still have something left, earliest expiry first (older purchase first on a tie), locked for the caller's transaction. |
 | `void setRemaining(Connection con, int purchaseId, int remaining)` | public |  |
-| `LocalDate earliestExpiryWithStock(Connection con, int inventoryItemId)` | public | The earliest expiry among the purchases of an inventory item that still have something left, or null if none. |
+| `LocalDate earliestExpiryWithStock(Connection con, int householdId, int inventoryItemId)` | public | The earliest expiry among the household's purchases of an inventory item that still have something left, or null if none. |
 
 **Referenced by:** `PurchaseService`, `ServiceConfig`, `StockService`
 
@@ -303,7 +303,7 @@ classDiagram
 *class*
 
 Business logic for purchases. No SQL here, no UI here.
-Recording a purchase touches both purchase_history and the linked inventory_item,
+Recording a purchase touches both purchase_history and the household's stock of the linked inventory_item,
 so it runs both writes in one transaction: either both land or neither does.
 
 ```mermaid
@@ -315,11 +315,11 @@ classDiagram
         -InventoryRepository inventoryRepository
         +PurchaseService(PurchaseRepository repository)
         +PurchaseService(PurchaseRepository repository, StoreRepository storeRepository, InventoryRepository inventoryRepository)
-        +allPurchases() List~Purchase~
-        +spendingTotal() double
-        +spendingBetween(LocalDate from, LocalDate to) double
-        +recordPurchase(int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) int
-        +recordNewProductPurchase(String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice, int quantityPurchased, double pricePaid, LocalDate purchaseDate, LocalDate expirationDate) int
+        +allPurchases(int householdId) List~Purchase~
+        +spendingTotal(int householdId) double
+        +spendingBetween(int householdId, LocalDate from, LocalDate to) double
+        +recordPurchase(int householdId, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) int
+        +recordNewProductPurchase(int householdId, String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice, int quantityPurchased, double pricePaid, LocalDate purchaseDate, LocalDate expirationDate) int
         +findOrCreateStoreItem(String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice) int
     }
     class finance_PurchaseRepository["PurchaseRepository"]
@@ -352,11 +352,11 @@ classDiagram
 |---|---|---|
 | `PurchaseService(PurchaseRepository repository)` | public |  |
 | `PurchaseService(PurchaseRepository repository, StoreRepository storeRepository, InventoryRepository inventoryRepository)` | public |  |
-| `List<Purchase> allPurchases()` | public |  |
-| `double spendingTotal()` | public |  |
-| `double spendingBetween(LocalDate from, LocalDate to)` | public |  |
-| `int recordPurchase(int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate)` | public | Records a purchase and applies it to inventory in one transaction: inserts the purchase_history row, then (via store_item.store_item_item_id) increases the linked inventory_item's quantity by quantityPurchased and pulls its earliest expirat |
-| `int recordNewProductPurchase(String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice, int quantityPurchased, double pricePaid, LocalDate purchaseDate, LocalDate expirationDate)` | public | Records a purchase of a product that isn't in the catalog yet — an off-list buy, e.g. |
+| `List<Purchase> allPurchases(int householdId)` | public |  |
+| `double spendingTotal(int householdId)` | public |  |
+| `double spendingBetween(int householdId, LocalDate from, LocalDate to)` | public |  |
+| `int recordPurchase(int householdId, int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate)` | public | Records a purchase and applies it to inventory in one transaction: inserts the purchase_history row, then (via store_item.store_item_item_id) increases the household's stock of the linked inventory_item by quantityPurchased and pulls its ea |
+| `int recordNewProductPurchase(int householdId, String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice, int quantityPurchased, double pricePaid, LocalDate purchaseDate, LocalDate expirationDate)` | public | Records a purchase of a product that isn't in the catalog yet — an off-list buy, e.g. |
 | `int findOrCreateStoreItem(String storeName, String brandName, Integer existingInventoryItemId, String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory, String packageUnit, int packageSize, Double normalPrice)` | public | Finds or creates the store, the brand, the catalogue item (an existing one, or a new generic one) and the store_item for (store, brand, item, unit, size), in one transaction, and returns the store_item's id. |
 
 **Referenced by:** `IntakeService`, `PurchaseController`, `ServiceConfig`
@@ -432,7 +432,7 @@ classDiagram
 
 *class*
 
-Takes food out of stock, in the item's own unit (g, ml, Stück). Using it and throwing it away are the same action: the
+Takes food out of a household's stock, in the item's own unit (g, ml, Stück). Using it and throwing it away are the same action: the
 amount leaves the batch that expires first, the item's quantity goes down, and its earliest expiry date is worked out again from the batches that are left.
 No SQL here. Everything runs in one transaction on the item's locked row.
 
@@ -443,8 +443,8 @@ classDiagram
         -PurchaseRepository purchaseRepository
         -InventoryRepository inventoryRepository
         +StockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)
-        +batches(int inventoryItemId, boolean includeUsedUp) Optional~List~StockBatch~~
-        +use(int inventoryItemId, int quantity) Optional~Item~
+        +batches(int householdId, int inventoryItemId, boolean includeUsedUp) Optional~List~StockBatch~~
+        +use(int householdId, int inventoryItemId, int quantity) Optional~Item~
     }
     class finance_PurchaseRepository["PurchaseRepository"]
     class inventory_InventoryRepository["InventoryRepository"]
@@ -474,7 +474,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `StockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)` | public |  |
-| `Optional<List<StockBatch>> batches(int inventoryItemId, boolean includeUsedUp)` | public | The batches (purchases) of an item, in the order they are used (earliest expiry first), with what is left of each in the item's own unit. |
-| `Optional<Item> use(int inventoryItemId, int quantity)` | public | Removes quantity of an inventory item from stock and returns the item as it is now, or empty if there is no such item. |
+| `Optional<List<StockBatch>> batches(int householdId, int inventoryItemId, boolean includeUsedUp)` | public | The batches (purchases) of an item, in the order they are used (earliest expiry first), with what is left of each in the item's own unit. |
+| `Optional<Item> use(int householdId, int inventoryItemId, int quantity)` | public | Removes quantity of an inventory item from stock and returns the item as it is now, or empty if there is no such item. |
 
 **Referenced by:** `InventoryController`, `ServiceConfig`

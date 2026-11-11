@@ -365,7 +365,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`StepAmounts.Replacement`](mealplanner.md#stepamountsreplacement) | mealplanner | record | What replaces before[replaceFrom..] + bracket. |
 | [`StockAmounts`](finance.md#stockamounts) | finance | class | Stock is counted in the catalogue item's own unit (g, ml, Stück), as the shopping list compares it with a line's unit. |
 | [`StockBatch`](finance.md#stockbatch) | finance | record | One batch of an item's stock = one purchase: where and when it was bought, when it expires, how many packs of which size were bought, and how much of it is left in the item's own unit (unit). |
-| [`StockService`](finance.md#stockservice) | finance | class | Takes food out of stock, in the item's own unit (g, ml, Stück). |
+| [`StockService`](finance.md#stockservice) | finance | class | Takes food out of a household's stock, in the item's own unit (g, ml, Stück). |
 | [`StoreCatalogController`](api.md#storecatalogcontroller) | api | class | The stores and brands DAHÄM has, for pickers (so nobody types a store or brand name that does not exist). |
 | [`StoreCatalogService`](stores.md#storecatalogservice) | stores | class | The stores and brands DAHÄM has, for pickers. |
 | [`StoreConfig`](stores.md#storeconfig) | stores | class | Settings for the store importers, read from config/stores.properties (relative to the working directory, like the database path). |
