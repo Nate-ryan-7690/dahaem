@@ -227,6 +227,88 @@ class HouseholdSeparationApiTest {
                 id("SELECT shopping_list_household_id FROM shopping_list WHERE shopping_list_id = " + list));
     }
 
+    private String inviteCode(int user, String note) throws Exception {
+        String body = mvc.perform(as(post("/api/household/invitations"), user)
+                        .content(note == null ? "{}" : "{\"note\": \"" + note + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(body).get("code").asText();
+    }
+
+    private static String acceptBody(String code, String email) {
+        return "{\"code\": \"" + code + "\", \"email\": \"" + email
+                + "\", \"displayName\": \"Anna\", \"password\": \"a long enough password\"}";
+    }
+
+    @Test
+    void anInvitationMakesAMemberOfTheInvitingHouseholdOnly() throws Exception {
+        String code = inviteCode(userA, "Anna");
+
+        // nobody is logged in yet: the PHP sends only the token
+        String body = mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptBody(code, "anna@example.test")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("anna@example.test"))
+                .andExpect(jsonPath("$.household.id").value(householdA))
+                .andExpect(jsonPath("$.household.role").value("MEMBER"))
+                .andReturn().getResponse().getContentAsString();
+        int anna = com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(body).get("id").asInt();
+
+        // she is in household A: sees its plan, not B's
+        addMeal(userA);
+        addMeal(userB);
+        mvc.perform(as(get("/api/meal-plans/week").param("date", DAY), anna))
+                .andExpect(jsonPath("$.days[2].meals", hasSize(1)));
+        // the code works once
+        mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptBody(code, "again@example.test")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INVITATION"));
+        // and without the token nothing is accepted at all
+        mvc.perform(post("/api/invitations/accept").contentType(MediaType.APPLICATION_JSON)
+                        .content(acceptBody(inviteCode(userA, null), "no-token@example.test")))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void onlyAnAdminMakesListsAndRevokesInvitationsAndOnlyOfItsOwnHousehold() throws Exception {
+        int member = TestHousehold.createUser(householdA, "member@example.test", "MEMBER");
+        mvc.perform(as(post("/api/household/invitations"), member).content("{}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_ADMIN"));
+        mvc.perform(as(get("/api/household/invitations"), member)).andExpect(status().isForbidden());
+
+        inviteCode(userA, "Anna");
+        int inviteOfA = id("SELECT MAX(household_invite_id) FROM household_invite");
+        mvc.perform(as(get("/api/household/invitations"), userA))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].status").value("OPEN"))
+                .andExpect(jsonPath("$[0].note").value("Anna"))
+                .andExpect(jsonPath("$[0].code").doesNotExist());
+        // the admin of the other household sees none and cannot revoke it
+        mvc.perform(as(get("/api/household/invitations"), userB)).andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(as(delete("/api/household/invitations/{id}", inviteOfA), userB)).andExpect(status().isNotFound());
+        mvc.perform(as(delete("/api/household/invitations/{id}", inviteOfA), userA)).andExpect(status().isNoContent());
+        mvc.perform(as(get("/api/household/invitations"), userA)).andExpect(jsonPath("$[0].status").value("REVOKED"));
+        mvc.perform(as(delete("/api/household/invitations/{id}", inviteOfA), userA)).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void badSignUpDataIsRefusedAndKeepsTheCodeUsable() throws Exception {
+        String code = inviteCode(userA, null);
+
+        mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\": \"" + code + "\", \"email\": \"x@example.test\", "
+                                + "\"displayName\": \"X\", \"password\": \"short\"}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptBody(code, "newbie@example.test")))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"code\": \"" + code + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
     /** A milk (catalogue item 5001, counted in ml) that Aldi sells in packs of 1000 ml (store item 7001). */
     private static void milk() throws SQLException {
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_quantity, "

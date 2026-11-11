@@ -8,8 +8,8 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (100)"]
-    auth["auth (16)"]
+    api["api (105)"]
+    auth["auth (23)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
     finance["finance (9)"]
@@ -21,7 +21,7 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|29| auth
+    api -->|35| auth
     api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
@@ -53,8 +53,8 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 100 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
-| [`auth`](auth.md) | 16 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
+| [`api`](api.md) | 105 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
+| [`auth`](auth.md) | 23 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
@@ -75,6 +75,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`AccountRepository`](auth.md#accountrepository) | auth | class | All SQL for the household, app_user and household_member tables lives here. |
 | [`AccountSelfService`](auth.md#accountselfservice) | auth | class | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](auth.md#accountservice) | auth | class | Business logic for user accounts and households. |
+| [`AccountService.NewUser`](auth.md#accountservicenewuser) | auth | record | A validated new account, not saved yet: the email as it is stored, the name, and the BCrypt hash of the password. |
 | [`ActingUser`](api.md#actinguser) | api | class | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in); without |
 | [`AddMealRequest`](api.md#addmealrequest) | api | record | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](api.md#addplannedreciperequest) | api | record | Body of POST /api/meal-plans/{id}/recipes, e.g. |
@@ -169,9 +170,19 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`InternalTokenFilter`](api.md#internaltokenfilter) | api | class | Shared-secret gate for the internal API. |
 | [`InvalidBarcodeException`](barcode.md#invalidbarcodeexception) | barcode | class | A barcode number that cannot be right: not digits, a length no barcode has (INVALID_BARCODE), or a check digit that does not fit the other digits, which is what a typing error looks like (BARCODE_CHECKSUM). |
 | [`InvalidCredentialsException`](auth.md#invalidcredentialsexception) | auth | class | The email or the password is wrong. |
+| [`InvalidInvitationException`](auth.md#invalidinvitationexception) | auth | class | The invitation code is not usable: wrong, used, revoked or expired. |
 | [`InventoryController`](api.md#inventorycontroller) | api | class |  |
 | [`InventoryRepository`](inventory.md#inventoryrepository) | inventory | class | All SQL for the inventory_item table lives here and nowhere else. |
 | [`InventoryService`](inventory.md#inventoryservice) | inventory | class | Business logic for inventory. |
+| [`InvitationController`](api.md#invitationcontroller) | api | class | Invitations into a household ("Konto erstellen"). |
+| [`InvitationController.AcceptRequest`](api.md#invitationcontrolleracceptrequest) | api | record | Body of POST /api/invitations/accept. |
+| [`InvitationController.CreatedInvitationDto`](api.md#invitationcontrollercreatedinvitationdto) | api | record | What the admin gets back when making an invitation. |
+| [`InvitationController.InvitationDto`](api.md#invitationcontrollerinvitationdto) | api | record | One invitation in the list: never the code, only its last four characters (hint). |
+| [`InvitationRepository`](auth.md#invitationrepository) | auth | class | All SQL for the household_invite table lives here and nowhere else. |
+| [`InvitationRepository.Invite`](auth.md#invitationrepositoryinvite) | auth | record | One invitation. |
+| [`InvitationService`](auth.md#invitationservice) | auth | class | Invitations into a household: an admin makes one, the code is shown ONCE, and whoever enters it (with an email, a name and a password) becomes a HouseholdRole.MEMBER of that household. |
+| [`InvitationService.Created`](auth.md#invitationservicecreated) | auth | record | A new invitation, with the one chance to see its code. |
+| [`InvitationService.Listed`](auth.md#invitationservicelisted) | auth | record | What an admin sees in the list: never the code. |
 | [`Item`](inventory.md#item) | inventory | class | Plain data holder for one row of the inventory_item table. |
 | [`ItemAnimalRepository`](tags.md#itemanimalrepository) | tags | class | All SQL for inventory_item_animal and the alcohol flag, and the read-only catalogue queries the animal tool needs. |
 | [`ItemAnimalRunner`](tags.md#itemanimalrunner) | tags | class | Command-line tool for the item → animal table (inventory_item_animal). |
@@ -209,6 +220,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`MealServingsScheduleConfig`](api.md#mealservingsscheduleconfig) | api | class | Registers the nightly servings freeze. |
 | [`NoHouseholdException`](api.md#nohouseholdexception) | api | class | The acting user belongs to no household, so there is no data to work on. |
 | [`Normalizer`](stores.md#normalizer) | stores | class | Turns a German product or ingredient name into a comparable key: lowercase, umlauts to ae/oe/ue/ss, allergen markers and leading ALL-CAPS brand words removed, punctuation to spaces. |
+| [`NotAdminException`](api.md#notadminexception) | api | class | The acting user is not an admin of their household, so they may not manage invitations. |
 | [`NotFoundException`](api.md#notfoundexception) | api | class | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`OfferPull`](stores.md#offerpull) | stores | record | Offers pulled from one chain, plus the requests that failed (so a run can be marked PARTIAL). |
 | [`OfferRow`](stores.md#offerrow) | stores | record | One store_offer row loaded for discount promotion, with its store id. |

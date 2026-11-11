@@ -2,6 +2,7 @@ package de.dahaem.api;
 
 import de.dahaem.auth.EmailTakenException;
 import de.dahaem.auth.InvalidCredentialsException;
+import de.dahaem.auth.InvalidInvitationException;
 import de.dahaem.auth.TooManyAttemptsException;
 import de.dahaem.barcode.IntakeConflictException;
 import de.dahaem.barcode.InvalidBarcodeException;
@@ -68,6 +69,18 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NoHouseholdException.class)
     public ResponseEntity<ErrorResponse> noHousehold(NoHouseholdException e) {
         return error(HttpStatus.FORBIDDEN, "NO_HOUSEHOLD", e.getMessage());
+    }
+
+    /** The acting user is not an admin of their household. */
+    @ExceptionHandler(NotAdminException.class)
+    public ResponseEntity<ErrorResponse> notAdmin(NotAdminException e) {
+        return error(HttpStatus.FORBIDDEN, "NOT_ADMIN", e.getMessage());
+    }
+
+    /** An invitation code that is wrong, used, revoked or expired (one answer for all of them). */
+    @ExceptionHandler(InvalidInvitationException.class)
+    public ResponseEntity<ErrorResponse> invalidInvitation(InvalidInvitationException e) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_INVITATION", e.getMessage());
     }
 
     /** The email address belongs to another account. */

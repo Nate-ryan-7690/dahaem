@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling.
 
-100 types in 72 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+105 types in 74 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -109,6 +109,18 @@ classDiagram
     class api_InventoryController["InventoryController"] {
         <<controller>>
     }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
+    class api_InvitationController_CreatedInvitationDto["InvitationController.CreatedInvitationDto"] {
+        <<record>>
+    }
+    class api_InvitationController_InvitationDto["InvitationController.InvitationDto"] {
+        <<record>>
+    }
+    class api_InvitationController_AcceptRequest["InvitationController.AcceptRequest"] {
+        <<record>>
+    }
     class api_ItemDto["ItemDto"] {
         <<record>>
     }
@@ -134,6 +146,7 @@ classDiagram
         <<spring>>
     }
     class api_NoHouseholdException["NoHouseholdException"]
+    class api_NotAdminException["NotAdminException"]
     class api_NotFoundException["NotFoundException"]
     class api_PantryIngredientDto["PantryIngredientDto"] {
         <<record>>
@@ -300,6 +313,7 @@ classDiagram
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> api_NoHouseholdException
+    api_ApiExceptionHandler ..> api_NotAdminException
     api_AuditFilter --> api_InternalTokenFilter
     api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
@@ -322,6 +336,12 @@ classDiagram
     api_InventoryController ..> api_ItemDto
     api_InventoryController ..> api_UseStockRequest
     api_InventoryController ..> api_ItemPageDto
+    api_InvitationController *-- api_InvitationController_CreatedInvitationDto
+    api_InvitationController *-- api_InvitationController_InvitationDto
+    api_InvitationController *-- api_InvitationController_AcceptRequest
+    api_InvitationController --> api_InternalTokenFilter
+    api_InvitationController ..> api_Caller
+    api_InvitationController ..> api_CurrentUserDto
     api_ItemPageDto --> api_ItemDto
     api_MealPlanController ..> api_Caller
     api_MealPlanController ..> api_MealPlanDto
@@ -432,6 +452,10 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`IntakeController.IntakeResult`](#intakecontrollerintakeresult) | record |  | results has one entry per line, in order; recorded / failed count them. |
 | [`InternalTokenFilter`](#internaltokenfilter) | class | Spring component | Shared-secret gate for the internal API. |
 | [`InventoryController`](#inventorycontroller) | class | REST controller |  |
+| [`InvitationController`](#invitationcontroller) | class | REST controller | Invitations into a household ("Konto erstellen"). |
+| [`InvitationController.CreatedInvitationDto`](#invitationcontrollercreatedinvitationdto) | record |  | What the admin gets back when making an invitation. |
+| [`InvitationController.InvitationDto`](#invitationcontrollerinvitationdto) | record |  | One invitation in the list: never the code, only its last four characters (hint). |
+| [`InvitationController.AcceptRequest`](#invitationcontrolleracceptrequest) | record |  | Body of POST /api/invitations/accept. |
 | [`ItemDto`](#itemdto) | record |  | One inventory item as returned by /api/inventory. |
 | [`ItemPageDto`](#itempagedto) | record |  | One page of GET /api/inventory/search. |
 | [`MealPlanController`](#mealplancontroller) | class | REST controller | Meal plans of the household of the logged-in user (X-Acting-User). |
@@ -441,6 +465,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`MealPlanWeekDto.DayDto`](#mealplanweekdtodaydto) | record |  |  |
 | [`MealServingsScheduleConfig`](#mealservingsscheduleconfig) | class | configuration | Registers the nightly servings freeze. |
 | [`NoHouseholdException`](#nohouseholdexception) | class |  | The acting user belongs to no household, so there is no data to work on. |
+| [`NotAdminException`](#notadminexception) | class |  | The acting user is not an admin of their household, so they may not manage invitations. |
 | [`NotFoundException`](#notfoundexception) | class |  | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`PantryIngredientDto`](#pantryingredientdto) | record |  | One ingredient of a suggested recipe. |
 | [`PantryOfferDto`](#pantryofferdto) | record |  | An offer that is on sale today for an ingredient: the store, the pack it is for (packSize in packUnit, e.g. |
@@ -687,6 +712,8 @@ classDiagram
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +invalidBarcode(InvalidBarcodeException e) ResponseEntity~ErrorResponse~
         +noHousehold(NoHouseholdException e) ResponseEntity~ErrorResponse~
+        +notAdmin(NotAdminException e) ResponseEntity~ErrorResponse~
+        +invalidInvitation(InvalidInvitationException e) ResponseEntity~ErrorResponse~
         +emailTaken(EmailTakenException e) ResponseEntity~ErrorResponse~
         +invalidCredentials(InvalidCredentialsException e) ResponseEntity~ErrorResponse~
         +tooManyAttempts(TooManyAttemptsException e) ResponseEntity~ErrorResponse~
@@ -710,6 +737,8 @@ classDiagram
     class api_UnauthorizedException["UnauthorizedException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
     class api_NoHouseholdException["NoHouseholdException"]
+    class api_NotAdminException["NotAdminException"]
+    class auth_InvalidInvitationException["InvalidInvitationException"]
     class auth_EmailTakenException["EmailTakenException"]
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
     class auth_TooManyAttemptsException["TooManyAttemptsException"]
@@ -717,7 +746,6 @@ classDiagram
     class stores_UnknownStoreException["UnknownStoreException"]
     class stores_UnknownBrandException["UnknownBrandException"]
     class barcode_PackUnitException["PackUnitException"]
-    class shopping_PastShoppingDayException["PastShoppingDayException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> mealplanner_PastDayException
@@ -725,6 +753,8 @@ classDiagram
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> barcode_InvalidBarcodeException
     api_ApiExceptionHandler ..> api_NoHouseholdException
+    api_ApiExceptionHandler ..> api_NotAdminException
+    api_ApiExceptionHandler ..> auth_InvalidInvitationException
     api_ApiExceptionHandler ..> auth_EmailTakenException
     api_ApiExceptionHandler ..> auth_InvalidCredentialsException
     api_ApiExceptionHandler ..> auth_TooManyAttemptsException
@@ -732,7 +762,7 @@ classDiagram
     api_ApiExceptionHandler ..> stores_UnknownStoreException
     api_ApiExceptionHandler ..> stores_UnknownBrandException
     api_ApiExceptionHandler ..> barcode_PackUnitException
-    api_ApiExceptionHandler ..> shopping_PastShoppingDayException
+    %% 1 more neighbours not drawn
 ```
 
 | Field | Type |
@@ -747,6 +777,8 @@ classDiagram
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e)` | public | A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). |
 | `ResponseEntity<ErrorResponse> noHousehold(NoHouseholdException e)` | public | The acting user belongs to no household. |
+| `ResponseEntity<ErrorResponse> notAdmin(NotAdminException e)` | public | The acting user is not an admin of their household. |
+| `ResponseEntity<ErrorResponse> invalidInvitation(InvalidInvitationException e)` | public | An invitation code that is wrong, used, revoked or expired (one answer for all of them). |
 | `ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e)` | public | The email address belongs to another account. |
 | `ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e)` | public | A wrong email or password (the same answer for both). |
 | `ResponseEntity<ErrorResponse> tooManyAttempts(TooManyAttemptsException e)` | public | Too many failed logins: the caller is slowed down; Retry-After says for how long. |
@@ -1050,6 +1082,9 @@ classDiagram
     class api_InventoryController["InventoryController"] {
         <<controller>>
     }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
     class api_MealPlanController["MealPlanController"] {
         <<controller>>
     }
@@ -1068,6 +1103,7 @@ classDiagram
     api_Caller --> auth_HouseholdRole
     api_IntakeController ..> api_Caller
     api_InventoryController ..> api_Caller
+    api_InvitationController ..> api_Caller
     api_MealPlanController ..> api_Caller
     api_PlannedMealController ..> api_Caller
     api_PurchaseController ..> api_Caller
@@ -1081,7 +1117,7 @@ classDiagram
 | `householdId` | `int` |
 | `role` | `HouseholdRole` |
 
-**Referenced by:** `IntakeController`, `InventoryController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
+**Referenced by:** `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
 
 ## CallerArgumentResolver
 
@@ -1284,11 +1320,15 @@ classDiagram
     class api_AuthController["AuthController"] {
         <<controller>>
     }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
     api_CurrentUserDto *-- api_CurrentUserDto_HouseholdDto
     api_CurrentUserDto ..> auth_AppUser
     api_CurrentUserDto ..> auth_HouseholdMembership
     api_AccountController ..> api_CurrentUserDto
     api_AuthController ..> api_CurrentUserDto
+    api_InvitationController ..> api_CurrentUserDto
 ```
 
 | Component | Type |
@@ -1302,7 +1342,7 @@ classDiagram
 |---|---|---|
 | `CurrentUserDto from(AppUser user, HouseholdMembership membership)` | package static |  |
 
-**Referenced by:** `AccountController`, `AuthController`
+**Referenced by:** `AccountController`, `AuthController`, `InvitationController`
 
 ## CurrentUserDto.HouseholdDto
 
@@ -1856,6 +1896,9 @@ classDiagram
     class api_CallerArgumentResolver["CallerArgumentResolver"] {
         <<spring>>
     }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
     class api_ActingUser["ActingUser"]
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
@@ -1865,6 +1908,7 @@ classDiagram
     api_AuditFilter --> api_InternalTokenFilter
     api_AuthController --> api_InternalTokenFilter
     api_CallerArgumentResolver --> api_InternalTokenFilter
+    api_InvitationController --> api_InternalTokenFilter
     api_SecurityConfig ..> api_InternalTokenFilter
 ```
 
@@ -1882,7 +1926,7 @@ classDiagram
 | `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
 | `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
 
-**Referenced by:** `AccountController`, `ActingUser`, `AuditFilter`, `AuthController`, `CallerArgumentResolver`, `SecurityConfig`
+**Referenced by:** `AccountController`, `ActingUser`, `AuditFilter`, `AuthController`, `CallerArgumentResolver`, `InvitationController`, `SecurityConfig`
 
 ## InventoryController
 
@@ -1943,6 +1987,167 @@ classDiagram
 | `ItemPageDto search(String q, String category, Integer page, Integer pageSize, Caller caller)` | public | Search the catalogue, one page of items plus the total. |
 | `List<ItemDto> expiring(int days, Caller caller)` | public | Items expiring within the next days days (default 7). |
 | `List<ItemDto> lowStock(int threshold, Caller caller)` | public | Items at or below threshold units in stock (default 1). |
+
+## InvitationController
+
+*class · REST controller*
+
+Invitations into a household ("Konto erstellen"). An admin of the household makes an invitation and gets its code ONCE;
+whoever enters the code on the sign-up page gets an account as a MEMBER of that household. There is no open sign-up.
+The PHP front end shows the pages; every call needs the internal token. The admin calls also need X-Acting-User.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+        -InvitationService invitations
+        -InternalTokenFilter internalToken
+        +InvitationController(InvitationService invitations, InternalTokenFilter internalToken)
+        +create(JsonNode body, Caller caller) CreatedInvitationDto
+        +list(Caller caller) List~InvitationDto~
+        +revoke(int id, Caller caller) void
+        +accept(AcceptRequest request, HttpServletRequest http) CurrentUserDto
+    }
+    class api_InvitationController_CreatedInvitationDto["InvitationController.CreatedInvitationDto"] {
+        <<record>>
+    }
+    class api_InvitationController_InvitationDto["InvitationController.InvitationDto"] {
+        <<record>>
+    }
+    class api_InvitationController_AcceptRequest["InvitationController.AcceptRequest"] {
+        <<record>>
+    }
+    class auth_InvitationService["InvitationService"]
+    class api_InternalTokenFilter["InternalTokenFilter"] {
+        <<spring>>
+    }
+    class api_Caller["Caller"] {
+        <<record>>
+    }
+    class api_CurrentUserDto["CurrentUserDto"] {
+        <<record>>
+    }
+    api_InvitationController *-- api_InvitationController_CreatedInvitationDto
+    api_InvitationController *-- api_InvitationController_InvitationDto
+    api_InvitationController *-- api_InvitationController_AcceptRequest
+    api_InvitationController --> auth_InvitationService
+    api_InvitationController --> api_InternalTokenFilter
+    api_InvitationController ..> api_Caller
+    api_InvitationController ..> api_CurrentUserDto
+```
+
+| Field | Type |
+|---|---|
+| `invitations` | `InvitationService` |
+| `internalToken` | `InternalTokenFilter` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `InvitationController(InvitationService invitations, InternalTokenFilter internalToken)` | public |  |
+| `CreatedInvitationDto create(JsonNode body, Caller caller)` | public | Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). |
+| `List<InvitationDto> list(Caller caller)` | public | The newest invitations of the caller's household (admins only), newest first, at most 50. |
+| `void revoke(int id, Caller caller)` | public | Revokes an invitation that can still be used (admins only). |
+| `CurrentUserDto accept(AcceptRequest request, HttpServletRequest http)` | public | Uses a code to make an account ("Konto erstellen"): body code (typed as shown, dashes and case do not matter), email, displayName, password (at least 10 characters). |
+
+## InvitationController.CreatedInvitationDto
+
+*record*
+
+What the admin gets back when making an invitation. code is shown only here, never again.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_InvitationController_CreatedInvitationDto["InvitationController.CreatedInvitationDto"] {
+        <<record>>
+        +int id
+        +String code
+        +String note
+        +Instant expiresAt
+    }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
+    api_InvitationController *-- api_InvitationController_CreatedInvitationDto
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `code` | `String` |
+| `note` | `String` |
+| `expiresAt` | `Instant` |
+
+**Referenced by:** `InvitationController`
+
+## InvitationController.InvitationDto
+
+*record*
+
+One invitation in the list: never the code, only its last four characters (hint). status: OPEN, USED, REVOKED, EXPIRED.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_InvitationController_InvitationDto["InvitationController.InvitationDto"] {
+        <<record>>
+        +int id
+        +String hint
+        +String note
+        +String status
+        +Instant createdAt
+        +Instant expiresAt
+        +String usedByEmail
+    }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
+    api_InvitationController *-- api_InvitationController_InvitationDto
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `hint` | `String` |
+| `note` | `String` |
+| `status` | `String` |
+| `createdAt` | `Instant` |
+| `expiresAt` | `Instant` |
+| `usedByEmail` | `String` |
+
+**Referenced by:** `InvitationController`
+
+## InvitationController.AcceptRequest
+
+*record*
+
+Body of POST /api/invitations/accept.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_InvitationController_AcceptRequest["InvitationController.AcceptRequest"] {
+        <<record>>
+        +String code
+        +String email
+        +String displayName
+        +String password
+    }
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
+    api_InvitationController *-- api_InvitationController_AcceptRequest
+```
+
+| Component | Type |
+|---|---|
+| `code` | `String` |
+| `email` | `String` |
+| `displayName` | `String` |
+| `password` | `String` |
+
+**Referenced by:** `InvitationController`
 
 ## ItemDto
 
@@ -2303,6 +2508,28 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `NoHouseholdException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
+
+## NotAdminException
+
+*class · extends RuntimeException*
+
+The acting user is not an admin of their household, so they may not manage invitations. A 403 with its own code, NOT_ADMIN.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_NotAdminException["NotAdminException"] {
+        +NotAdminException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> api_NotAdminException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `NotAdminException()` | public |  |
 
 **Referenced by:** `ApiExceptionHandler`
 
@@ -3754,6 +3981,8 @@ classDiagram
         +loginThrottle() LoginThrottle
         +loginService(AccountService accountService, LoginThrottle loginThrottle) LoginService
         +accountSelfService(AccountService accountService, LoginThrottle loginThrottle) AccountSelfService
+        +invitationRepository() InvitationRepository
+        +invitationService(InvitationRepository invitationRepository, AccountRepository accountRepository, AccountService accountService, LoginThrottle loginThrottle) InvitationService
         +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
         +intakeRequestRepository() IntakeRequestRepository
         +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository) IntakeService
@@ -3802,7 +4031,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 16 more neighbours not drawn
+    %% 18 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -3826,6 +4055,8 @@ classDiagram
 | `LoginThrottle loginThrottle()` | public |  |
 | `LoginService loginService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
 | `AccountSelfService accountSelfService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
+| `InvitationRepository invitationRepository()` | public |  |
+| `InvitationService invitationService(InvitationRepository invitationRepository, AccountRepository accountRepository, AccountService accountService, LoginThrottle loginThrottle)` | public |  |
 | `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
 | `IntakeRequestRepository intakeRequestRepository()` | public |  |
 | `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository)` | public |  |

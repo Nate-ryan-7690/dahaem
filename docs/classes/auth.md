@@ -4,7 +4,7 @@
 
 Logins, households and memberships; the `UserAdminRunner` command-line tool.
 
-16 types in 14 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
+23 types in 17 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -14,6 +14,9 @@ classDiagram
     class auth_AccountRepository["AccountRepository"]
     class auth_AccountSelfService["AccountSelfService"]
     class auth_AccountService["AccountService"]
+    class auth_AccountService_NewUser["AccountService.NewUser"] {
+        <<record>>
+    }
     class auth_AppUser["AppUser"]
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
@@ -27,6 +30,18 @@ classDiagram
         <<enumeration>>
     }
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
+    class auth_InvalidInvitationException["InvalidInvitationException"]
+    class auth_InvitationRepository["InvitationRepository"]
+    class auth_InvitationRepository_Invite["InvitationRepository.Invite"] {
+        <<record>>
+    }
+    class auth_InvitationService["InvitationService"]
+    class auth_InvitationService_Created["InvitationService.Created"] {
+        <<record>>
+    }
+    class auth_InvitationService_Listed["InvitationService.Listed"] {
+        <<record>>
+    }
     class auth_LoginService["LoginService"]
     class auth_LoginService_Verified["LoginService.Verified"] {
         <<record>>
@@ -42,6 +57,7 @@ classDiagram
     auth_AccountSelfService --> auth_AccountService
     auth_AccountSelfService --> auth_LoginThrottle
     auth_AccountSelfService ..> auth_AppUser
+    auth_AccountService *-- auth_AccountService_NewUser
     auth_AccountService --> auth_AccountRepository
     auth_AccountService ..> auth_CreatedAccount
     auth_AccountService ..> auth_AppUser
@@ -51,6 +67,14 @@ classDiagram
     auth_CreatedAccount --> auth_HouseholdMembership
     auth_HouseholdMembership --> auth_Household
     auth_HouseholdMembership --> auth_HouseholdRole
+    auth_InvitationRepository *-- auth_InvitationRepository_Invite
+    auth_InvitationService *-- auth_InvitationService_Created
+    auth_InvitationService *-- auth_InvitationService_Listed
+    auth_InvitationService --> auth_InvitationRepository
+    auth_InvitationService --> auth_AccountRepository
+    auth_InvitationService --> auth_AccountService
+    auth_InvitationService --> auth_LoginThrottle
+    auth_InvitationService ..> auth_CreatedAccount
     auth_LoginService *-- auth_LoginService_Verified
     auth_LoginService --> auth_AccountService
     auth_LoginService --> auth_LoginThrottle
@@ -66,6 +90,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`AccountRepository`](#accountrepository) | class |  | All SQL for the household, app_user and household_member tables lives here. |
 | [`AccountSelfService`](#accountselfservice) | class |  | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](#accountservice) | class |  | Business logic for user accounts and households. |
+| [`AccountService.NewUser`](#accountservicenewuser) | record |  | A validated new account, not saved yet: the email as it is stored, the name, and the BCrypt hash of the password. |
 | [`AppUser`](#appuser) | class |  | Plain data holder for one row of the app_user table. |
 | [`CreatedAccount`](#createdaccount) | record |  | Result of AccountService.createUser: the new user, the household they were added to, and whether that household was created for them (true for the very first user). |
 | [`EmailTakenException`](#emailtakenexception) | class |  | The email address already belongs to another account. |
@@ -73,6 +98,12 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`HouseholdMembership`](#householdmembership) | record |  | A household together with the role one user has in it (one household_member row, joined to its household). |
 | [`HouseholdRole`](#householdrole) | enum |  | What a user may do in their household. |
 | [`InvalidCredentialsException`](#invalidcredentialsexception) | class |  | The email or the password is wrong. |
+| [`InvalidInvitationException`](#invalidinvitationexception) | class |  | The invitation code is not usable: wrong, used, revoked or expired. |
+| [`InvitationRepository`](#invitationrepository) | class |  | All SQL for the household_invite table lives here and nowhere else. |
+| [`InvitationRepository.Invite`](#invitationrepositoryinvite) | record |  | One invitation. |
+| [`InvitationService`](#invitationservice) | class |  | Invitations into a household: an admin makes one, the code is shown ONCE, and whoever enters it (with an email, a name and a password) becomes a HouseholdRole.MEMBER of that household. |
+| [`InvitationService.Created`](#invitationservicecreated) | record |  | A new invitation, with the one chance to see its code. |
+| [`InvitationService.Listed`](#invitationservicelisted) | record |  | What an admin sees in the list: never the code. |
 | [`LoginService`](#loginservice) | class |  | Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the answer says who the user is. |
 | [`LoginService.Verified`](#loginserviceverified) | record |  | The user and their household membership (null if in no household). |
 | [`LoginThrottle`](#loginthrottle) | class |  | A delay that grows with login attempts from one client address, not a lockout. |
@@ -109,6 +140,7 @@ classDiagram
         +findMembershipForUser(int userId) Optional~HouseholdMembership~
     }
     class auth_AccountService["AccountService"]
+    class auth_InvitationService["InvitationService"]
     class auth_Household["Household"]
     class auth_AppUser["AppUser"]
     class auth_HouseholdRole["HouseholdRole"] {
@@ -126,6 +158,7 @@ classDiagram
     auth_AccountRepository ..> auth_HouseholdMembership
     api_ServiceConfig ..> auth_AccountRepository
     auth_AccountService --> auth_AccountRepository
+    auth_InvitationService --> auth_AccountRepository
 ```
 
 | Member | Visibility | What it does |
@@ -144,7 +177,7 @@ classDiagram
 | `boolean updateHouseholdPeople(int householdId, int people)` | public | Sets the household's head count. |
 | `Optional<HouseholdMembership> findMembershipForUser(int userId)` | public | The household a user belongs to, with their role in it. |
 
-**Referenced by:** `AccountService`, `ServiceConfig`
+**Referenced by:** `AccountService`, `InvitationService`, `ServiceConfig`
 
 ## AccountSelfService
 
@@ -214,6 +247,7 @@ classDiagram
         +String DEFAULT_HOUSEHOLD_NAME$
         +int MIN_PASSWORD_LENGTH$
         ~int MAX_EMAIL_LENGTH$
+        ~int MAX_DISPLAY_NAME$
         +int DEFAULT_BCRYPT_STRENGTH$
         +int MAX_PASSWORD_BYTES$
         -Pattern EMAIL$
@@ -222,6 +256,7 @@ classDiagram
         +AccountService(AccountRepository repository, PasswordEncoder passwordEncoder)
         +normalizeEmail(String email) String$
         +createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today) CreatedAccount
+        +prepareNewUser(String email, String displayName, String rawPassword) NewUser
         +setPassword(String email, String rawPassword) void
         -String dummyHash
         +verifyPassword(String email, String rawPassword) Optional~AppUser~
@@ -234,6 +269,9 @@ classDiagram
         +allHouseholds() java.util.List~Household~
         +findHousehold(int householdId) Optional~Household~
         +setHouseholdPeople(int householdId, int people) Household
+    }
+    class auth_AccountService_NewUser["AccountService.NewUser"] {
+        <<record>>
     }
     class auth_AccountRepository["AccountRepository"]
     class api_AccountController["AccountController"] {
@@ -253,6 +291,7 @@ classDiagram
     }
     class api_ScheduledMealServings["ScheduledMealServings"]
     class auth_AccountSelfService["AccountSelfService"]
+    class auth_InvitationService["InvitationService"]
     class auth_LoginService["LoginService"]
     class auth_CreatedAccount["CreatedAccount"] {
         <<record>>
@@ -265,9 +304,7 @@ classDiagram
     class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
         <<spring>>
     }
-    class api_ServiceConfig["ServiceConfig"] {
-        <<spring>>
-    }
+    auth_AccountService *-- auth_AccountService_NewUser
     auth_AccountService --> auth_AccountRepository
     auth_AccountService ..> auth_CreatedAccount
     auth_AccountService ..> auth_AppUser
@@ -280,9 +317,10 @@ classDiagram
     api_MealServingsScheduleConfig ..> auth_AccountService
     api_PlannedMealController --> auth_AccountService
     api_ScheduledMealServings --> auth_AccountService
-    api_ServiceConfig ..> auth_AccountService
     auth_AccountSelfService --> auth_AccountService
+    auth_InvitationService --> auth_AccountService
     auth_LoginService --> auth_AccountService
+    %% 1 more neighbours not drawn
 ```
 
 | Field | Type |
@@ -290,6 +328,7 @@ classDiagram
 | `DEFAULT_HOUSEHOLD_NAME` | `String` |
 | `MIN_PASSWORD_LENGTH` | `int` |
 | `MAX_EMAIL_LENGTH` | `int` |
+| `MAX_DISPLAY_NAME` | `int` |
 | `DEFAULT_BCRYPT_STRENGTH` | `int` |
 | `MAX_PASSWORD_BYTES` | `int` |
 | `EMAIL` | `Pattern` |
@@ -302,6 +341,7 @@ classDiagram
 | `AccountService(AccountRepository repository, PasswordEncoder passwordEncoder)` | public |  |
 | `String normalizeEmail(String email)` | public static | Trims and lower-cases an email so lookups and the UNIQUE constraint ignore case. |
 | `CreatedAccount createUser(String email, String displayName, String rawPassword, String householdName, LocalDate today)` | public | Creates a login. |
+| `NewUser prepareNewUser(String email, String displayName, String rawPassword)` | public | Checks the data of a new account and hashes the password, without saving anything (the caller saves it in its own transaction, e.g. |
 | `void setPassword(String email, String rawPassword)` | public | Sets a new password for an existing user (the operator's stand-in for "forgot password"). |
 | `Optional<AppUser> verifyPassword(String email, String rawPassword)` | public | Checks a password. |
 | `Optional<AppUser> findById(int userId)` | public |  |
@@ -314,7 +354,34 @@ classDiagram
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AccountController`, `AccountSelfService`, `CallerArgumentResolver`, `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
+**Referenced by:** `AccountController`, `AccountSelfService`, `CallerArgumentResolver`, `HouseholdController`, `InvitationService`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
+
+## AccountService.NewUser
+
+*record*
+
+A validated new account, not saved yet: the email as it is stored, the name, and the BCrypt hash of the password.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_AccountService_NewUser["AccountService.NewUser"] {
+        <<record>>
+        +String email
+        +String displayName
+        +String passwordHash
+    }
+    class auth_AccountService["AccountService"]
+    auth_AccountService *-- auth_AccountService_NewUser
+```
+
+| Component | Type |
+|---|---|
+| `email` | `String` |
+| `displayName` | `String` |
+| `passwordHash` | `String` |
+
+**Referenced by:** `AccountService`
 
 ## AppUser
 
@@ -402,9 +469,11 @@ classDiagram
         <<record>>
     }
     class auth_AccountService["AccountService"]
+    class auth_InvitationService["InvitationService"]
     auth_CreatedAccount --> auth_AppUser
     auth_CreatedAccount --> auth_HouseholdMembership
     auth_AccountService ..> auth_CreatedAccount
+    auth_InvitationService ..> auth_CreatedAccount
 ```
 
 | Component | Type |
@@ -413,7 +482,7 @@ classDiagram
 | `membership` | `HouseholdMembership` |
 | `newHousehold` | `boolean` |
 
-**Referenced by:** `AccountService`
+**Referenced by:** `AccountService`, `InvitationService`
 
 ## EmailTakenException
 
@@ -595,6 +664,281 @@ classDiagram
 
 **Referenced by:** `ApiExceptionHandler`
 
+## InvalidInvitationException
+
+*class · extends RuntimeException*
+
+The invitation code is not usable: wrong, used, revoked or expired. One answer for all of them (a 400 with its own code,
+INVALID_INVITATION), so nobody can find out what a guessed code once was.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvalidInvitationException["InvalidInvitationException"] {
+        +InvalidInvitationException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> auth_InvalidInvitationException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `InvalidInvitationException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
+
+## InvitationRepository
+
+*class*
+
+All SQL for the household_invite table lives here and nowhere else. The code of an invitation is never stored, only its
+hash. Times are UTC.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvitationRepository["InvitationRepository"] {
+        -String SELECT$
+        +insert(int householdId, int createdBy, String codeHash, String hint, String note, LocalDateTime createdAt, LocalDateTime expiresAt) int
+        +countOpen(int householdId, LocalDateTime now) int
+        +findByHash(String codeHash) Optional~Invite~
+        +lockByHash(Connection con, String codeHash) Optional~Invite~
+        +list(int householdId, int limit) List~Invite~
+        +revoke(int householdId, int invitationId, LocalDateTime now) boolean
+        +markUsed(Connection con, int invitationId, int userId, LocalDateTime now) void
+    }
+    class auth_InvitationRepository_Invite["InvitationRepository.Invite"] {
+        <<record>>
+    }
+    class auth_InvitationService["InvitationService"]
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    auth_InvitationRepository *-- auth_InvitationRepository_Invite
+    api_ServiceConfig ..> auth_InvitationRepository
+    auth_InvitationService --> auth_InvitationRepository
+```
+
+| Field | Type |
+|---|---|
+| `SELECT` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `int insert(int householdId, int createdBy, String codeHash, String hint, String note, LocalDateTime createdAt, LocalDateTime expiresAt)` | public |  |
+| `int countOpen(int householdId, LocalDateTime now)` | public | How many invitations of the household can still be used at now. |
+| `Optional<Invite> findByHash(String codeHash)` | public |  |
+| `Optional<Invite> lockByHash(Connection con, String codeHash)` | public | The invitation with this code hash, locked for the caller's transaction. |
+| `List<Invite> list(int householdId, int limit)` | public | The newest invitations of a household first, at most limit. |
+| `boolean revoke(int householdId, int invitationId, LocalDateTime now)` | public | Revokes an invitation of this household that can still be used. |
+| `void markUsed(Connection con, int invitationId, int userId, LocalDateTime now)` | public | Marks the invitation as used by this user, on the caller's transaction. |
+
+**Referenced by:** `InvitationService`, `ServiceConfig`
+
+## InvitationRepository.Invite
+
+*record*
+
+One invitation. usedByEmail is null while it is unused.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvitationRepository_Invite["InvitationRepository.Invite"] {
+        <<record>>
+        +int id
+        +int householdId
+        +String hint
+        +String note
+        +int createdBy
+        +LocalDateTime createdAt
+        +LocalDateTime expiresAt
+        +LocalDateTime usedAt
+        +String usedByEmail
+        +LocalDateTime revokedAt
+        +isOpen(LocalDateTime now) boolean
+    }
+    class auth_InvitationRepository["InvitationRepository"]
+    auth_InvitationRepository *-- auth_InvitationRepository_Invite
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `householdId` | `int` |
+| `hint` | `String` |
+| `note` | `String` |
+| `createdBy` | `int` |
+| `createdAt` | `LocalDateTime` |
+| `expiresAt` | `LocalDateTime` |
+| `usedAt` | `LocalDateTime` |
+| `usedByEmail` | `String` |
+| `revokedAt` | `LocalDateTime` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `boolean isOpen(LocalDateTime now)` | public | Neither used nor revoked nor expired at now. |
+
+**Referenced by:** `InvitationRepository`
+
+## InvitationService
+
+*class*
+
+Invitations into a household: an admin makes one, the code is shown ONCE, and whoever enters it (with an email, a name and
+a password) becomes a HouseholdRole.MEMBER of that household. There is no open sign-up: without a valid code nobody
+can make an account.
+
+The code is 16 characters from an alphabet of 32 without look-alikes (80 bits), shown as XXXX-XXXX-XXXX-XXXX. Only its
+SHA-256 is stored. An invitation works once, for #VALID_DAYS days, and an admin can revoke it. Entering a code
+counts as an attempt of the client address (LoginThrottle, the same slow-down as a login); a right code gives
+the attempt back. No SQL here, no UI here.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvitationService["InvitationService"] {
+        +int VALID_DAYS$
+        +int MAX_OPEN$
+        +int MAX_NOTE$
+        +int LIST_LIMIT$
+        -String ALPHABET$
+        -int CODE_LENGTH$
+        -InvitationRepository invitations
+        -AccountRepository accountRepository
+        -AccountService accounts
+        -LoginThrottle throttle
+        -Clock clock
+        -SecureRandom random
+        +InvitationService(InvitationRepository invitations, AccountRepository accountRepository, AccountService accounts, LoginThrottle throttle, Clock clock)
+        +create(int householdId, int createdBy, String note) Created
+        +list(int householdId) List~Listed~
+        +revoke(int householdId, int invitationId) void
+        +accept(String rawCode, String email, String displayName, String rawPassword, String ip) CreatedAccount
+        ~format(String raw) String$
+        ~normalize(String typed) String$
+    }
+    class auth_InvitationService_Created["InvitationService.Created"] {
+        <<record>>
+    }
+    class auth_InvitationService_Listed["InvitationService.Listed"] {
+        <<record>>
+    }
+    class auth_InvitationRepository["InvitationRepository"]
+    class auth_AccountRepository["AccountRepository"]
+    class auth_AccountService["AccountService"]
+    class auth_LoginThrottle["LoginThrottle"]
+    class api_InvitationController["InvitationController"] {
+        <<controller>>
+    }
+    class auth_CreatedAccount["CreatedAccount"] {
+        <<record>>
+    }
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    auth_InvitationService *-- auth_InvitationService_Created
+    auth_InvitationService *-- auth_InvitationService_Listed
+    auth_InvitationService --> auth_InvitationRepository
+    auth_InvitationService --> auth_AccountRepository
+    auth_InvitationService --> auth_AccountService
+    auth_InvitationService --> auth_LoginThrottle
+    auth_InvitationService ..> auth_CreatedAccount
+    api_InvitationController --> auth_InvitationService
+    api_ServiceConfig ..> auth_InvitationService
+```
+
+| Field | Type |
+|---|---|
+| `VALID_DAYS` | `int` |
+| `MAX_OPEN` | `int` |
+| `MAX_NOTE` | `int` |
+| `LIST_LIMIT` | `int` |
+| `ALPHABET` | `String` |
+| `CODE_LENGTH` | `int` |
+| `invitations` | `InvitationRepository` |
+| `accountRepository` | `AccountRepository` |
+| `accounts` | `AccountService` |
+| `throttle` | `LoginThrottle` |
+| `clock` | `Clock` |
+| `random` | `SecureRandom` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `InvitationService(InvitationRepository invitations, AccountRepository accountRepository, AccountService accounts, LoginThrottle throttle, Clock clock)` | public |  |
+| `Created create(int householdId, int createdBy, String note)` | public | Makes an invitation into the household and returns its code, which is not stored and cannot be shown again. |
+| `List<Listed> list(int householdId)` | public | The newest invitations of the household (at most #LIST_LIMIT), with their status. |
+| `void revoke(int householdId, int invitationId)` | public |  |
+| `CreatedAccount accept(String rawCode, String email, String displayName, String rawPassword, String ip)` | public | Uses a code: makes the account and puts it into the household of the invitation as a MEMBER, in one transaction (the invitation is used up in the same step, so two people cannot both use it). |
+| `String format(String raw)` | package static | XXXX-XXXX-XXXX-XXXX |
+| `String normalize(String typed)` | package static | The 16 characters of a typed code (spaces and dashes ignored, any case), or null if it cannot be a code. |
+
+**Referenced by:** `InvitationController`, `ServiceConfig`
+
+## InvitationService.Created
+
+*record*
+
+A new invitation, with the one chance to see its code.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvitationService_Created["InvitationService.Created"] {
+        <<record>>
+        +int id
+        +String code
+        +String note
+        +LocalDateTime expiresAt
+    }
+    class auth_InvitationService["InvitationService"]
+    auth_InvitationService *-- auth_InvitationService_Created
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `code` | `String` |
+| `note` | `String` |
+| `expiresAt` | `LocalDateTime` |
+
+**Referenced by:** `InvitationService`
+
+## InvitationService.Listed
+
+*record*
+
+What an admin sees in the list: never the code.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_InvitationService_Listed["InvitationService.Listed"] {
+        <<record>>
+        +int id
+        +String hint
+        +String note
+        +String status
+        +LocalDateTime createdAt
+        +LocalDateTime expiresAt
+        +String usedByEmail
+    }
+    class auth_InvitationService["InvitationService"]
+    auth_InvitationService *-- auth_InvitationService_Listed
+```
+
+| Component | Type |
+|---|---|
+| `id` | `int` |
+| `hint` | `String` |
+| `note` | `String` |
+| `status` | `String` |
+| `createdAt` | `LocalDateTime` |
+| `expiresAt` | `LocalDateTime` |
+| `usedByEmail` | `String` |
+
+**Referenced by:** `InvitationService`
+
 ## LoginService
 
 *class*
@@ -704,6 +1048,7 @@ classDiagram
     }
     class auth_LoginThrottle_Entry["LoginThrottle.Entry"]
     class auth_AccountSelfService["AccountSelfService"]
+    class auth_InvitationService["InvitationService"]
     class auth_LoginService["LoginService"]
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
@@ -711,6 +1056,7 @@ classDiagram
     auth_LoginThrottle *-- auth_LoginThrottle_Entry
     api_ServiceConfig ..> auth_LoginThrottle
     auth_AccountSelfService --> auth_LoginThrottle
+    auth_InvitationService --> auth_LoginThrottle
     auth_LoginService --> auth_LoginThrottle
 ```
 
@@ -731,7 +1077,7 @@ classDiagram
 | `OptionalLong begin(String ip)` | public | Asks to make an attempt. |
 | `void succeeded(String ip)` | public | The password was right: the attempt does not count (and does not leave a block behind that only it caused). |
 
-**Referenced by:** `AccountSelfService`, `LoginService`, `ServiceConfig`
+**Referenced by:** `AccountSelfService`, `InvitationService`, `LoginService`, `ServiceConfig`
 
 ## LoginThrottle.Entry
 
