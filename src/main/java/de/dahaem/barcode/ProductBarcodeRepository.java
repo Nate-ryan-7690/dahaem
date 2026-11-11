@@ -56,8 +56,9 @@ public class ProductBarcodeRepository {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         double price = rs.getDouble(3);
+                        boolean unknown = rs.wasNull();   // right after reading the column: NULL = no price known
                         links.add(new BarcodeProduct.LinkedStoreItem(rs.getInt(1), rs.getString(2),
-                                rs.wasNull() ? null : price));
+                                unknown ? null : price));
                     }
                 }
             }
