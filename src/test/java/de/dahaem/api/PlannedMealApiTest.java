@@ -277,7 +277,8 @@ class PlannedMealApiTest {
     @Test
     void mealsOfPastDaysAreRefusedWith409() throws Exception {
         // a week long gone (2020-01-06 was a Monday) with one meal on its Wednesday, written straight into the table
-        exec("INSERT INTO meal_plan (meal_plan_id, meal_plan_week_start_date) VALUES (900, '2020-01-06')");
+        exec("INSERT INTO meal_plan (meal_plan_id, meal_plan_household_id, meal_plan_week_start_date) VALUES (900, "
+                + "(SELECT household_id FROM household_member WHERE user_id = " + TestHousehold.actingUserId() + "), '2020-01-06')");
         exec("INSERT INTO meal_plan_recipe (meal_plan_recipe_id, meal_plan_recipe_plan_id, meal_plan_recipe_date, "
                 + "meal_plan_recipe_meal_time) VALUES (" + soup + ", 900, '2020-01-08', 'Abendessen')");
         int pastEntry = id("SELECT MAX(meal_plan_recipe_entry_id) FROM meal_plan_recipe");

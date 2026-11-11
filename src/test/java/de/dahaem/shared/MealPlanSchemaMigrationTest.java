@@ -122,7 +122,8 @@ class MealPlanSchemaMigrationTest {
         TestDatabase.reset(List.of(Path.of("schema.sql")));
         List<String> fresh = columnsAndChecks();
 
-        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION));
+        // schema.sql also has the later 0022 column, so that migration is applied on top here
+        TestDatabase.reset(List.of(OLD_TABLES, MIGRATION, Path.of("migrations", "0022_meal_plan_household.sql")));
         List<String> migrated = columnsAndChecks();
 
         assertEquals(fresh, migrated);
