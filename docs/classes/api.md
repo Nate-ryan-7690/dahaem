@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling.
 
-105 types in 74 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+107 types in 75 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -92,6 +92,12 @@ classDiagram
         <<controller>>
     }
     class api_HouseholdDto["HouseholdDto"] {
+        <<record>>
+    }
+    class api_HouseholdMemberController["HouseholdMemberController"] {
+        <<controller>>
+    }
+    class api_HouseholdMemberController_MemberDto["HouseholdMemberController.MemberDto"] {
         <<record>>
     }
     class api_IntakeController["IntakeController"] {
@@ -330,6 +336,8 @@ classDiagram
     api_HouseholdController ..> api_Caller
     api_HouseholdController ..> api_HouseholdDto
     api_HouseholdController ..> api_SetHouseholdPeopleRequest
+    api_HouseholdMemberController *-- api_HouseholdMemberController_MemberDto
+    api_HouseholdMemberController ..> api_Caller
     api_IntakeController *-- api_IntakeController_IntakeRequest
     api_IntakeController *-- api_IntakeController_IntakeResult
     api_IntakeController ..> api_Caller
@@ -448,6 +456,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
+| [`HouseholdMemberController`](#householdmembercontroller) | class | REST controller | Who belongs to the caller's household, for the household page. |
+| [`HouseholdMemberController.MemberDto`](#householdmembercontrollermemberdto) | record |  | One member. |
 | [`IntakeController`](#intakecontroller) | class | REST controller | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
 | [`IntakeController.IntakeRequest`](#intakecontrollerintakerequest) | record |  | Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines. |
 | [`IntakeController.IntakeResult`](#intakecontrollerintakeresult) | record |  | results has one entry per line, in order; recorded / failed count them. |
@@ -715,6 +725,7 @@ classDiagram
         +noHousehold(NoHouseholdException e) ResponseEntity~ErrorResponse~
         +notAdmin(NotAdminException e) ResponseEntity~ErrorResponse~
         +invalidInvitation(InvalidInvitationException e) ResponseEntity~ErrorResponse~
+        +invitationLimit(InvitationLimitException e) ResponseEntity~ErrorResponse~
         +emailTaken(EmailTakenException e) ResponseEntity~ErrorResponse~
         +invalidCredentials(InvalidCredentialsException e) ResponseEntity~ErrorResponse~
         +tooManyAttempts(TooManyAttemptsException e) ResponseEntity~ErrorResponse~
@@ -740,13 +751,13 @@ classDiagram
     class api_NoHouseholdException["NoHouseholdException"]
     class api_NotAdminException["NotAdminException"]
     class auth_InvalidInvitationException["InvalidInvitationException"]
+    class auth_InvitationLimitException["InvitationLimitException"]
     class auth_EmailTakenException["EmailTakenException"]
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
     class auth_TooManyAttemptsException["TooManyAttemptsException"]
     class barcode_IntakeConflictException["IntakeConflictException"]
     class stores_UnknownStoreException["UnknownStoreException"]
     class stores_UnknownBrandException["UnknownBrandException"]
-    class barcode_PackUnitException["PackUnitException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> mealplanner_PastDayException
@@ -756,14 +767,14 @@ classDiagram
     api_ApiExceptionHandler ..> api_NoHouseholdException
     api_ApiExceptionHandler ..> api_NotAdminException
     api_ApiExceptionHandler ..> auth_InvalidInvitationException
+    api_ApiExceptionHandler ..> auth_InvitationLimitException
     api_ApiExceptionHandler ..> auth_EmailTakenException
     api_ApiExceptionHandler ..> auth_InvalidCredentialsException
     api_ApiExceptionHandler ..> auth_TooManyAttemptsException
     api_ApiExceptionHandler ..> barcode_IntakeConflictException
     api_ApiExceptionHandler ..> stores_UnknownStoreException
     api_ApiExceptionHandler ..> stores_UnknownBrandException
-    api_ApiExceptionHandler ..> barcode_PackUnitException
-    %% 1 more neighbours not drawn
+    %% 2 more neighbours not drawn
 ```
 
 | Field | Type |
@@ -780,6 +791,7 @@ classDiagram
 | `ResponseEntity<ErrorResponse> noHousehold(NoHouseholdException e)` | public | The acting user belongs to no household. |
 | `ResponseEntity<ErrorResponse> notAdmin(NotAdminException e)` | public | The acting user is not an admin of their household. |
 | `ResponseEntity<ErrorResponse> invalidInvitation(InvalidInvitationException e)` | public | An invitation code that is wrong, used, revoked or expired (one answer for all of them). |
+| `ResponseEntity<ErrorResponse> invitationLimit(InvitationLimitException e)` | public | The household has too many open invitations: a conflict with its own code, INVITATION_LIMIT. |
 | `ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e)` | public | The email address belongs to another account. |
 | `ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e)` | public | A wrong email or password (the same answer for both). |
 | `ResponseEntity<ErrorResponse> tooManyAttempts(TooManyAttemptsException e)` | public | Too many failed logins: the caller is slowed down; Retry-After says for how long. |
@@ -1080,6 +1092,9 @@ classDiagram
     class api_HouseholdController["HouseholdController"] {
         <<controller>>
     }
+    class api_HouseholdMemberController["HouseholdMemberController"] {
+        <<controller>>
+    }
     class api_IntakeController["IntakeController"] {
         <<controller>>
     }
@@ -1106,6 +1121,7 @@ classDiagram
     }
     api_Caller --> auth_HouseholdRole
     api_HouseholdController ..> api_Caller
+    api_HouseholdMemberController ..> api_Caller
     api_IntakeController ..> api_Caller
     api_InventoryController ..> api_Caller
     api_InvitationController ..> api_Caller
@@ -1122,7 +1138,7 @@ classDiagram
 | `householdId` | `int` |
 | `role` | `HouseholdRole` |
 
-**Referenced by:** `HouseholdController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
+**Referenced by:** `HouseholdController`, `HouseholdMemberController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
 
 ## CallerArgumentResolver
 
@@ -1747,6 +1763,75 @@ classDiagram
 | `HouseholdDto from(Household household)` | public static |  |
 
 **Referenced by:** `HouseholdController`
+
+## HouseholdMemberController
+
+*class · REST controller*
+
+Who belongs to the caller's household, for the household page.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_HouseholdMemberController["HouseholdMemberController"] {
+        <<controller>>
+        -AccountService accounts
+        +HouseholdMemberController(AccountService accounts)
+        +members(Caller caller) List~MemberDto~
+    }
+    class api_HouseholdMemberController_MemberDto["HouseholdMemberController.MemberDto"] {
+        <<record>>
+    }
+    class auth_AccountService["AccountService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
+    api_HouseholdMemberController *-- api_HouseholdMemberController_MemberDto
+    api_HouseholdMemberController --> auth_AccountService
+    api_HouseholdMemberController ..> api_Caller
+```
+
+| Field | Type |
+|---|---|
+| `accounts` | `AccountService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `HouseholdMemberController(AccountService accounts)` | public |  |
+| `List<MemberDto> members(Caller caller)` | public | The members of the caller's household, the oldest first: id, display name and role (ADMIN or MEMBER). |
+
+## HouseholdMemberController.MemberDto
+
+*record*
+
+One member. email is given to admins and for the caller's own row; it is null for everyone else.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_HouseholdMemberController_MemberDto["HouseholdMemberController.MemberDto"] {
+        <<record>>
+        +int userId
+        +String displayName
+        +String email
+        +String role
+        +boolean you
+    }
+    class api_HouseholdMemberController["HouseholdMemberController"] {
+        <<controller>>
+    }
+    api_HouseholdMemberController *-- api_HouseholdMemberController_MemberDto
+```
+
+| Component | Type |
+|---|---|
+| `userId` | `int` |
+| `displayName` | `String` |
+| `email` | `String` |
+| `role` | `String` |
+| `you` | `boolean` |
+
+**Referenced by:** `HouseholdMemberController`
 
 ## IntakeController
 

@@ -56,6 +56,7 @@ Every error has the same shape:
 | GET | [`/api/household/invitations`](#get-apihouseholdinvitations) | The newest invitations of the caller's household (admins only), newest first, at most 50. |
 | POST | [`/api/household/invitations`](#post-apihouseholdinvitations) | Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). |
 | DELETE | [`/api/household/invitations/{id}`](#delete-apihouseholdinvitationsid) | Revokes an invitation that can still be used (admins only). |
+| GET | [`/api/household/members`](#get-apihouseholdmembers) | The members of the caller's household, the oldest first: id, display name and role (ADMIN or MEMBER). |
 | GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
 | PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
 | POST | [`/api/intake`](#post-apiintake) | Puts the lines away. |
@@ -471,7 +472,7 @@ The newest invitations of the caller's household (admins only), newest first, at
 
 Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). Optional body
 {"note": "Anna"} (at most 100 characters) to tell invitations apart. 201 with the code, shown only now; it is
-valid for 7 days and works once. At most 20 invitations can be open at a time (400).
+valid for 7 days and works once. At most 20 invitations can be open at a time (409 INVITATION_LIMIT: revoke one first).
 
 **Request body** `JsonNode`
 
@@ -537,6 +538,31 @@ client address (X-Client-Ip), like a login.
     "role": "…"
   }
 }
+```
+
+### HouseholdMemberController
+
+Who belongs to the caller's household, for the household page.
+
+
+#### GET /api/household/members
+
+The members of the caller's household, the oldest first: id, display name and role (ADMIN or MEMBER). The email is
+only shown to an admin and for the caller's own row (a member does not get the others' addresses). you marks
+the caller's row.
+
+**Answer** 200 `List<MemberDto>`
+
+```json
+[
+  {
+    "userId": 0,
+    "displayName": "…",
+    "email": "…",
+    "role": "…",
+    "you": false
+  }
+]
 ```
 
 ### HouseholdController
@@ -2294,6 +2320,22 @@ A household as the API shows it. people is the head count and null until someone
 | `name` | `String` |
 | `people` | `Integer` |
 | `createdDate` | `LocalDate` |
+
+```json
+{ … }
+```
+
+### HouseholdMemberController.MemberDto
+
+One member. email is given to admins and for the caller's own row; it is null for everyone else.
+
+| Property | Type |
+|---|---|
+| `userId` | `int` |
+| `displayName` | `String` |
+| `email` | `String` |
+| `role` | `String` |
+| `you` | `boolean` |
 
 ```json
 { … }

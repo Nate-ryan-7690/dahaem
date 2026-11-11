@@ -8,8 +8,8 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (105)"]
-    auth["auth (23)"]
+    api["api (107)"]
+    auth["auth (25)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
     finance["finance (9)"]
@@ -21,7 +21,7 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|35| auth
+    api -->|38| auth
     api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
@@ -53,8 +53,8 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 105 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
-| [`auth`](auth.md) | 23 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
+| [`api`](api.md) | 107 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
+| [`auth`](auth.md) | 25 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
@@ -73,6 +73,7 @@ Arrows point from the importing package to the imported one; the number is how m
 |---|---|---|---|
 | [`AccountController`](api.md#accountcontroller) | api | class | A logged-in user's own account. |
 | [`AccountRepository`](auth.md#accountrepository) | auth | class | All SQL for the household, app_user and household_member tables lives here. |
+| [`AccountRepository.Member`](auth.md#accountrepositorymember) | auth | record | One member of a household with the account's name and email. |
 | [`AccountSelfService`](auth.md#accountselfservice) | auth | class | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](auth.md#accountservice) | auth | class | Business logic for user accounts and households. |
 | [`AccountService.NewUser`](auth.md#accountservicenewuser) | auth | record | A validated new account, not saved yet: the email as it is stored, the name, and the BCrypt hash of the password. |
@@ -152,6 +153,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
 | [`HouseholdController`](api.md#householdcontroller) | api | class | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](api.md#householddto) | api | record | A household as the API shows it. |
+| [`HouseholdMemberController`](api.md#householdmembercontroller) | api | class | Who belongs to the caller's household, for the household page. |
+| [`HouseholdMemberController.MemberDto`](api.md#householdmembercontrollermemberdto) | api | record | One member. |
 | [`HouseholdMembership`](auth.md#householdmembership) | auth | record | A household together with the role one user has in it (one household_member row, joined to its household). |
 | [`HouseholdRole`](auth.md#householdrole) | auth | enum | What a user may do in their household. |
 | [`HttpFetcher`](stores.md#httpfetcher) | stores | class | Fetches public web pages / JSON politely: a normal browser User-Agent, timeouts, a few retries with growing backoff, and a pause after every successful request. |
@@ -178,6 +181,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`InvitationController.AcceptRequest`](api.md#invitationcontrolleracceptrequest) | api | record | Body of POST /api/invitations/accept. |
 | [`InvitationController.CreatedInvitationDto`](api.md#invitationcontrollercreatedinvitationdto) | api | record | What the admin gets back when making an invitation. |
 | [`InvitationController.InvitationDto`](api.md#invitationcontrollerinvitationdto) | api | record | One invitation in the list: never the code, only its last four characters (hint). |
+| [`InvitationLimitException`](auth.md#invitationlimitexception) | auth | class | The household already has the most open invitations it may have. |
 | [`InvitationRepository`](auth.md#invitationrepository) | auth | class | All SQL for the household_invite table lives here and nowhere else. |
 | [`InvitationRepository.Invite`](auth.md#invitationrepositoryinvite) | auth | record | One invitation. |
 | [`InvitationService`](auth.md#invitationservice) | auth | class | Invitations into a household: an admin makes one, the code is shown ONCE, and whoever enters it (with an email, a name and a password) becomes a HouseholdRole.MEMBER of that household. |
