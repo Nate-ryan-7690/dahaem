@@ -129,7 +129,7 @@ public class PantrySuggestionService {
         for (PantryCoverage c : fitting) {
             coverageById.put(c.recipeId(), c);
         }
-        return new Result(entries(pageIds, coverageById, verdicts, expiryLimit, today), orderedIds.size(),
+        return new Result(entries(householdId, pageIds, coverageById, verdicts, expiryLimit, today), orderedIds.size(),
                 totalMatching, page);
     }
 
@@ -167,7 +167,7 @@ public class PantrySuggestionService {
         return ids.subList(from, Math.min(ids.size(), from + page.pageSize()));
     }
 
-    private List<Entry> entries(List<Integer> pageIds, Map<Integer, PantryCoverage> coverageById,
+    private List<Entry> entries(int householdId, List<Integer> pageIds, Map<Integer, PantryCoverage> coverageById,
                                 Map<Integer, DietVerdict> verdicts, LocalDate expiryLimit, LocalDate today) {
         if (pageIds.isEmpty()) {
             return List.of();
