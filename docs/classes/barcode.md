@@ -4,7 +4,7 @@
 
 
 
-20 types in 13 source files (`src/main/java/de/dahaem/barcode`). Back to the [class index](README.md).
+21 types in 14 source files (`src/main/java/de/dahaem/barcode`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -51,6 +51,7 @@ classDiagram
     class barcode_ProductSuggestion["ProductSuggestion"] {
         <<record>>
     }
+    class barcode_RateLimitedSource["RateLimitedSource"]
     barcode_BarcodeLookup --> barcode_BarcodeProduct
     barcode_BarcodeLookup --> barcode_ProductSuggestion
     barcode_BarcodeProduct *-- barcode_BarcodeProduct_LinkedStoreItem
@@ -70,6 +71,8 @@ classDiagram
     barcode_OpenFoodFactsSource ..> barcode_ProductSuggestion
     barcode_ProductBarcodeRepository ..> barcode_BarcodeProduct
     barcode_ProductDataSource ..> barcode_ProductSuggestion
+    barcode_ProductDataSource <|.. barcode_RateLimitedSource
+    barcode_RateLimitedSource ..> barcode_ProductSuggestion
 ```
 
 Arrows: `-->` has a field or record component of that type, `..>` takes it in its constructor or mentions it in a method signature, `<|--` extends, `<|..` implements, `*--` nested type. Only relationships inside this package are drawn here; each class below also shows its neighbours in other packages.
@@ -96,6 +99,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`ProductBarcodeRepository`](#productbarcoderepository) | class |  | All SQL for product_barcode and product_barcode_store_item lives here and nowhere else. |
 | [`ProductDataSource`](#productdatasource) | interface |  | Where a barcode DAHÄM does not know can be looked up (an open data source). |
 | [`ProductSuggestion`](#productsuggestion) | record |  | What an open data source says about a barcode DAHÄM does not know yet. |
+| [`RateLimitedSource`](#ratelimitedsource) | class |  | Puts a ceiling on the outside lookups so the barcode endpoint cannot be used to hammer a third-party source: at most maxPerMinute calls in any 60 seconds, for the whole API. |
 
 ## BarcodeLookup
 
@@ -799,6 +803,7 @@ classDiagram
         +disabled() ProductDataSource$
     }
     class barcode_OpenFoodFactsSource["OpenFoodFactsSource"]
+    class barcode_RateLimitedSource["RateLimitedSource"]
     class barcode_BarcodeService["BarcodeService"]
     class barcode_ProductSuggestion["ProductSuggestion"] {
         <<record>>
@@ -810,6 +815,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductDataSource
     barcode_BarcodeService --> barcode_ProductDataSource
     barcode_ProductDataSource <|.. barcode_OpenFoodFactsSource
+    barcode_ProductDataSource <|.. barcode_RateLimitedSource
 ```
 
 | Member | Visibility | What it does |
@@ -818,7 +824,7 @@ classDiagram
 | `Optional<ProductSuggestion> find(String code)` | public | The product for a normalised barcode, empty if the source does not know it; an IOException if it cannot be reached. |
 | `ProductDataSource disabled()` | public static | The switched-off source: nothing leaves the server. |
 
-**Referenced by:** `BarcodeService`, `OpenFoodFactsSource`, `ServiceConfig`
+**Referenced by:** `BarcodeService`, `OpenFoodFactsSource`, `RateLimitedSource`, `ServiceConfig`
 
 ## ProductSuggestion
 
@@ -846,9 +852,11 @@ classDiagram
     class barcode_ProductDataSource["ProductDataSource"] {
         <<interface>>
     }
+    class barcode_RateLimitedSource["RateLimitedSource"]
     barcode_BarcodeLookup --> barcode_ProductSuggestion
     barcode_OpenFoodFactsSource ..> barcode_ProductSuggestion
     barcode_ProductDataSource ..> barcode_ProductSuggestion
+    barcode_RateLimitedSource ..> barcode_ProductSuggestion
 ```
 
 | Component | Type |
@@ -860,4 +868,49 @@ classDiagram
 | `quantityText` | `String` |
 | `source` | `String` |
 
-**Referenced by:** `BarcodeLookup`, `OpenFoodFactsSource`, `ProductDataSource`
+**Referenced by:** `BarcodeLookup`, `OpenFoodFactsSource`, `ProductDataSource`, `RateLimitedSource`
+
+## RateLimitedSource
+
+*class · implements ProductDataSource*
+
+Puts a ceiling on the outside lookups so the barcode endpoint cannot be used to hammer a third-party source: at most
+maxPerMinute calls in any 60 seconds, for the whole API. Over the ceiling the lookup fails like an unreachable
+source (the answer says UNAVAILABLE) and nothing is sent.
+
+```mermaid
+classDiagram
+    direction LR
+    class barcode_RateLimitedSource["RateLimitedSource"] {
+        -long WINDOW_NANOS$
+        -ProductDataSource delegate
+        -int maxPerMinute
+        -LongSupplier nanoClock
+        -Deque~Long~ calls
+        +RateLimitedSource(ProductDataSource delegate, int maxPerMinute, LongSupplier nanoClock)
+        +enabled() boolean
+        +find(String code) Optional~ProductSuggestion~
+    }
+    class barcode_ProductDataSource["ProductDataSource"] {
+        <<interface>>
+    }
+    class barcode_ProductSuggestion["ProductSuggestion"] {
+        <<record>>
+    }
+    barcode_ProductDataSource <|.. barcode_RateLimitedSource
+    barcode_RateLimitedSource ..> barcode_ProductSuggestion
+```
+
+| Field | Type |
+|---|---|
+| `WINDOW_NANOS` | `long` |
+| `delegate` | `ProductDataSource` |
+| `maxPerMinute` | `int` |
+| `nanoClock` | `LongSupplier` |
+| `calls` | `Deque<Long>` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `RateLimitedSource(ProductDataSource delegate, int maxPerMinute, LongSupplier nanoClock)` | public |  |
+| `boolean enabled()` | public |  |
+| `Optional<ProductSuggestion> find(String code)` | public |  |

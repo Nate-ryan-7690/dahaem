@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-89 types in 61 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+92 types in 64 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -24,6 +24,10 @@ classDiagram
     class api_AssignBarcodeRequest["AssignBarcodeRequest"] {
         <<record>>
     }
+    class api_AuditFilter["AuditFilter"] {
+        <<spring>>
+    }
+    class api_AuditLog["AuditLog"]
     class api_AuthController["AuthController"] {
         <<controller>>
     }
@@ -251,6 +255,9 @@ classDiagram
     class api_SpendingDto["SpendingDto"] {
         <<record>>
     }
+    class api_StartupGuard["StartupGuard"] {
+        <<spring>>
+    }
     class api_StoreCatalogController["StoreCatalogController"] {
         <<controller>>
     }
@@ -267,6 +274,7 @@ classDiagram
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> api_UnauthorizedException
+    api_AuditFilter --> api_InternalTokenFilter
     api_AuthController ..> api_CsrfTokenDto
     api_AuthController ..> api_CurrentUserDto
     api_BarcodeController ..> api_AssignBarcodeRequest
@@ -357,6 +365,8 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`AddTagRequest`](#addtagrequest) | record |  | Body of POST /api/recipes/{id}/tags. |
 | [`ApiExceptionHandler`](#apiexceptionhandler) | class | error handler | Turns exceptions into JSON error responses with sensible status codes. |
 | [`AssignBarcodeRequest`](#assignbarcoderequest) | record |  | Body of PUT /api/barcodes/{code}: what the barcode is. |
+| [`AuditFilter`](#auditfilter) | class | Spring component | Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403. |
+| [`AuditLog`](#auditlog) | class |  | The audit trail: one line per login, failed login, write and refused request, in the logger "audit", with the client IP the PHP front end passes on. |
 | [`AuthController`](#authcontroller) | class | REST controller | The parts of the login flow that are plain endpoints. |
 | [`BadRequestException`](#badrequestexception) | class |  | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](#barcodecontroller) | class | REST controller | Barcode numbers: what a number is, and remembering it. |
@@ -436,6 +446,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`ShoppingListItemController`](#shoppinglistitemcontroller) | class | REST controller |  |
 | [`ShoppingListItemSelectionDto`](#shoppinglistitemselectiondto) | record |  | Response of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item: the line's new selection. |
 | [`SpendingDto`](#spendingdto) | record |  | Total spent; from/to are null when the total covers all purchases. |
+| [`StartupGuard`](#startupguard) | class | Spring component | Fail closed: the API does not start without its secrets. |
 | [`StoreCatalogController`](#storecatalogcontroller) | class | REST controller | The stores and brands DAHÄM has, for pickers (so nobody types a store or brand name that does not exist). |
 | [`SuggestionController`](#suggestioncontroller) | class | REST controller | Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf, it only ranks and presents (see SuggestionService). |
 | [`TagDto`](#tagdto) | record |  |  |
@@ -653,6 +664,80 @@ classDiagram
 | `createBrand` | `Boolean` |
 
 **Referenced by:** `BarcodeController`
+
+## AuditFilter
+
+*class · Spring component · extends OncePerRequestFilter*
+
+Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403.
+It runs before Spring Security, so refused requests (a wrong token, a missing login) are seen too. Logins are logged
+by the login handlers with the typed email, so that path is skipped here.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_AuditFilter["AuditFilter"] {
+        <<spring>>
+        -Set~String~ READS$
+        -InternalTokenFilter token
+        +AuditFilter(InternalTokenFilter token)
+        #shouldNotFilter(HttpServletRequest request) boolean
+        #doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) void
+        ~ipOf(HttpServletRequest request, boolean tokenValid) String$
+    }
+    class api_InternalTokenFilter["InternalTokenFilter"] {
+        <<spring>>
+    }
+    api_AuditFilter --> api_InternalTokenFilter
+```
+
+| Field | Type |
+|---|---|
+| `READS` | `Set<String>` |
+| `token` | `InternalTokenFilter` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `AuditFilter(InternalTokenFilter token)` | public |  |
+| `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
+| `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
+| `String ipOf(HttpServletRequest request, boolean tokenValid)` | package static | The client address for a request (see AuditLog.clientIp). |
+
+## AuditLog
+
+*class*
+
+The audit trail: one line per login, failed login, write and refused request, in the logger "audit", with the client
+IP the PHP front end passes on. Never a request body, a query string, a password or a token.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_AuditLog["AuditLog"] {
+        -Logger LOG$
+        -Pattern IP_LITERAL$
+        -Pattern EMAIL_SHAPE$
+        +String CLIENT_IP_HEADER$
+        ~clientIp(String headerValue, String remoteAddr, boolean tokenValid) String$
+        ~clean(String value, int max) String$
+        +request(String method, String path, int status, String caller, String ip) void$
+        +login(boolean success, String typedEmail, String ip) void$
+    }
+```
+
+| Field | Type |
+|---|---|
+| `LOG` | `Logger` |
+| `IP_LITERAL` | `Pattern` |
+| `EMAIL_SHAPE` | `Pattern` |
+| `CLIENT_IP_HEADER` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `String clientIp(String headerValue, String remoteAddr, boolean tokenValid)` | package static | The client address to log. |
+| `String clean(String value, int max)` | package static | Takes anything that could break a log line out of a value and shortens it. |
+| `void request(String method, String path, int status, String caller, String ip)` | public static | A request worth keeping: a write, or any request that was refused (401 / 403). |
+| `void login(boolean success, String typedEmail, String ip)` | public static | A login attempt. |
 
 ## AuthController
 
@@ -1465,9 +1550,13 @@ classDiagram
         #shouldNotFilter(HttpServletRequest request) boolean
         #doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) void
     }
+    class api_AuditFilter["AuditFilter"] {
+        <<spring>>
+    }
     class api_SecurityConfig["SecurityConfig"] {
         <<spring>>
     }
+    api_AuditFilter --> api_InternalTokenFilter
     api_SecurityConfig ..> api_InternalTokenFilter
 ```
 
@@ -1484,7 +1573,7 @@ classDiagram
 | `boolean shouldNotFilter(HttpServletRequest request)` | protected |  |
 | `void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)` | protected |  |
 
-**Referenced by:** `SecurityConfig`
+**Referenced by:** `AuditFilter`, `SecurityConfig`
 
 ## InventoryController
 
@@ -3323,7 +3412,7 @@ classDiagram
         +purchaseRepository() PurchaseRepository
         +purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository, InventoryRepository inventoryRepository) PurchaseService
         +productBarcodeRepository() ProductBarcodeRepository
-        +productDataSource(String mode, String url) ProductDataSource
+        +productDataSource(String mode, String url, int perMinute) ProductDataSource
         +barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource) BarcodeService
         +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
         +intakeRequestRepository() IntakeRequestRepository
@@ -3392,7 +3481,7 @@ classDiagram
 | `PurchaseRepository purchaseRepository()` | public |  |
 | `PurchaseService purchaseService(PurchaseRepository purchaseRepository, StoreRepository storeRepository, InventoryRepository inventoryRepository)` | public |  |
 | `ProductBarcodeRepository productBarcodeRepository()` | public |  |
-| `ProductDataSource productDataSource(String mode, String url)` | public | Where unknown barcodes are looked up: dahaem.barcode.lookup=openfoodfacts (env DAHAEM_BARCODE_LOOKUP) asks Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on. |
+| `ProductDataSource productDataSource(String mode, String url, int perMinute)` | public | Where unknown barcodes are looked up: dahaem.barcode.lookup=openfoodfacts (env DAHAEM_BARCODE_LOOKUP) asks Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on. |
 | `BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource)` | public |  |
 | `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
 | `IntakeRequestRepository intakeRequestRepository()` | public |  |
@@ -3442,6 +3531,7 @@ classDiagram
     direction LR
     class api_ShoppingListController["ShoppingListController"] {
         <<controller>>
+        ~int MAX_RECIPES$
         -ShoppingListService shoppingListService
         -RecipeService recipeService
         +ShoppingListController(ShoppingListService shoppingListService, RecipeService recipeService)
@@ -3459,6 +3549,7 @@ classDiagram
 
 | Field | Type |
 |---|---|
+| `MAX_RECIPES` | `int` |
 | `shoppingListService` | `ShoppingListService` |
 | `recipeService` | `RecipeService` |
 
@@ -4057,6 +4148,41 @@ classDiagram
 | `total` | `double` |
 
 **Referenced by:** `PurchaseController`
+
+## StartupGuard
+
+*class · Spring component*
+
+Fail closed: the API does not start without its secrets. A missing or blank INTERNAL_API_TOKEN would leave
+only the session login in front of the data, and missing database settings would only show up as errors on the first
+request, so both stop the start-up with a message that names the variables (never their values).
+
+For local development only, -Ddahaem.require-secrets=false switches the check off (the tests do this
+through src/test/resources/config/application.properties). It is never off by default.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_StartupGuard["StartupGuard"] {
+        <<spring>>
+        -Logger log$
+        ~String TOKEN_ENV$
+        ~int RECOMMENDED_TOKEN_LENGTH$
+        +StartupGuard(boolean required, String token)
+        ~check(boolean required, String token, UnaryOperator~String~ env) void$
+    }
+```
+
+| Field | Type |
+|---|---|
+| `log` | `Logger` |
+| `TOKEN_ENV` | `String` |
+| `RECOMMENDED_TOKEN_LENGTH` | `int` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `StartupGuard(boolean required, String token)` | public |  |
+| `void check(boolean required, String token, UnaryOperator<String> env)` | package static | Throws if a required secret is missing or blank. |
 
 ## StoreCatalogController
 

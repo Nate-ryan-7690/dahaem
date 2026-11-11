@@ -8,9 +8,9 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (89)"]
+    api["api (92)"]
     auth["auth (8)"]
-    barcode["barcode (20)"]
+    barcode["barcode (21)"]
     diet["diet (14)"]
     finance["finance (9)"]
     inventory["inventory (4)"]
@@ -22,7 +22,7 @@ flowchart TD
     suggestions["suggestions (12)"]
     tags["tags (29)"]
     api -->|14| auth
-    api -->|12| barcode
+    api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
     api -->|5| inventory
@@ -53,9 +53,9 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 89 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 92 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
-| [`barcode`](barcode.md) | 20 |  |
+| [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 4 | The item catalogue and the pantry. |
@@ -92,6 +92,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ApiExceptionHandler`](api.md#apiexceptionhandler) | api | class | Turns exceptions into JSON error responses with sensible status codes. |
 | [`AppUser`](auth.md#appuser) | auth | class | Plain data holder for one row of the app_user table. |
 | [`AssignBarcodeRequest`](api.md#assignbarcoderequest) | api | record | Body of PUT /api/barcodes/{code}: what the barcode is. |
+| [`AuditFilter`](api.md#auditfilter) | api | class | Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403. |
+| [`AuditLog`](api.md#auditlog) | api | class | The audit trail: one line per login, failed login, write and refused request, in the logger "audit", with the client IP the PHP front end passes on. |
 | [`AuthController`](api.md#authcontroller) | api | class | The parts of the login flow that are plain endpoints. |
 | [`BadRequestException`](api.md#badrequestexception) | api | class | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](api.md#barcodecontroller) | api | class | Barcode numbers: what a number is, and remembering it. |
@@ -248,6 +250,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`PurchaseRepository.BatchRow`](finance.md#purchaserepositorybatchrow) | finance | record | One purchase of an item with the facts a batch listing needs; remaining is null = nothing used yet. |
 | [`PurchaseRepository.StoreItemStock`](finance.md#purchaserepositorystoreitemstock) | finance | record | What a purchase of a store item adds to stock: the catalogue item, the pack (size + unit) and the item's own unit. |
 | [`PurchaseService`](finance.md#purchaseservice) | finance | class | Business logic for purchases. |
+| [`RateLimitedSource`](barcode.md#ratelimitedsource) | barcode | class | Puts a ceiling on the outside lookups so the barcode endpoint cannot be used to hammer a third-party source: at most maxPerMinute calls in any 60 seconds, for the whole API. |
 | [`ReceiptAdjustment`](receipts.md#receiptadjustment) | receipts | record | A discount or deposit movement, kept apart from products (paid price != listed price != offer; deposit != discount). |
 | [`ReceiptBuilder`](receipts.md#receiptbuilder) | receipts | class | Mutable accumulator shared by the store handlers. |
 | [`ReceiptImportReport`](receipts.md#receiptimportreport) | receipts | record | What one receipt import did (or, in a dry run, would do): receipts new / duplicate / skipped, how the lines of the new receipts matched, the most frequent unmatched names, and per receipt the balance check (stored line paid totals + other a |
@@ -342,6 +345,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ShoppingListSummary`](shopping.md#shoppinglistsummary) | shopping | record | One saved list in short: when it was made, for which shopping day, from which meal day, how many lines and how many of them are ticked as bought ("3 von 8 gekauft"). |
 | [`SourceRecipe`](shopping.md#sourcerecipe) | shopping | record | A recipe that needs a shopping list line ("für Kartoffelsuppe, Lachs"). |
 | [`SpendingDto`](api.md#spendingdto) | api | record | Total spent; from/to are null when the total covers all purchases. |
+| [`StartupGuard`](api.md#startupguard) | api | class | Fail closed: the API does not start without its secrets. |
 | [`StepAmounts`](mealplanner.md#stepamounts) | mealplanner | class | Renders a cooking step's amounts for a number of people. |
 | [`StepAmounts.Amount`](mealplanner.md#stepamountsamount) | mealplanner | record | A parsed amount: one value or a range, and its unit (null when none). |
 | [`StepAmounts.Context`](mealplanner.md#stepamountscontext) | mealplanner | record |  |

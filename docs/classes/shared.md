@@ -119,9 +119,9 @@ returns it to the pool.
 classDiagram
     direction LR
     class shared_Database["Database"] {
-        ~String URL_ENV$
-        ~String USER_ENV$
-        ~String PASSWORD_ENV$
+        +String URL_ENV$
+        +String USER_ENV$
+        +String PASSWORD_ENV$
         -HikariDataSource dataSource$
         -AtomicLong GENERATION$
         +getConnection() Connection$
