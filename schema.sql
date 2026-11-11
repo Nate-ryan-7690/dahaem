@@ -101,9 +101,6 @@ CREATE TABLE household ( household_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 ALTER TABLE meal_plan
 	ADD CONSTRAINT meal_plan_household_fk FOREIGN KEY (meal_plan_household_id) REFERENCES household(household_id);
 
-ALTER TABLE shopping_list
-	ADD CONSTRAINT shopping_list_household_fk FOREIGN KEY (shopping_list_household_id) REFERENCES household(household_id);
-
 CREATE TABLE app_user ( user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	user_email TEXT NOT NULL UNIQUE,
 	user_display_name TEXT NOT NULL,
@@ -384,6 +381,9 @@ CREATE TABLE shopping_list ( shopping_list_id INTEGER PRIMARY KEY AUTO_INCREMENT
 	shopping_list_archived BOOLEAN NOT NULL DEFAULT FALSE,
 
 	FOREIGN KEY(shopping_list_meal_plan_id) REFERENCES meal_plan(meal_plan_id));
+
+ALTER TABLE shopping_list
+	ADD CONSTRAINT shopping_list_household_fk FOREIGN KEY (shopping_list_household_id) REFERENCES household(household_id);
 
 CREATE TABLE shopping_list_item(shopping_list_item_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
