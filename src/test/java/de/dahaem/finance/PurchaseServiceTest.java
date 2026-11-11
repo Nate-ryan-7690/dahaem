@@ -2,6 +2,7 @@ package de.dahaem.finance;
 
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +34,14 @@ class PurchaseServiceTest {
 
     private PurchaseRepository repository;
     private PurchaseService service;
+    private int household;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
         TestDatabase.reset();
         repository = new PurchaseRepository();
         service = new PurchaseService(repository);
+        household = TestHousehold.defaultHousehold();
     }
 
     @AfterEach
@@ -51,10 +54,10 @@ class PurchaseServiceTest {
         seedInventoryItem(1, 5, "2026-10-01");
         seedStoreItem(1, 1);
 
-        int purchaseId = service.recordPurchase(1, null, false, LocalDate.of(2026, 9, 25),
+        int purchaseId = service.recordPurchase(household, 1, null, false, LocalDate.of(2026, 9, 25),
                 3, 4.50, LocalDate.of(2026, 9, 20));
 
-        List<Purchase> purchases = repository.findAll();
+        List<Purchase> purchases = repository.findAll(household);
         assertEquals(1, purchases.size());
         Purchase purchase = purchases.get(0);
         assertEquals(purchaseId, purchase.getId());
@@ -76,7 +79,7 @@ class PurchaseServiceTest {
         seedInventoryItem(2, 10, "2026-09-20");
         seedStoreItem(2, 2);
 
-        service.recordPurchase(2, null, false, LocalDate.of(2026, 9, 25),
+        service.recordPurchase(household, 2, null, false, LocalDate.of(2026, 9, 25),
                 4, 6.00, LocalDate.of(2026, 11, 1));
 
         assertEquals(14, inventoryQuantity(2));
@@ -89,7 +92,7 @@ class PurchaseServiceTest {
         seedInventoryItem(3, 0, null);
         seedStoreItem(3, 3);
 
-        service.recordPurchase(3, null, false, LocalDate.of(2026, 9, 25),
+        service.recordPurchase(household, 3, null, false, LocalDate.of(2026, 9, 25),
                 2, 3.00, LocalDate.of(2026, 12, 15));
 
         assertEquals(2, inventoryQuantity(3));
@@ -102,11 +105,11 @@ class PurchaseServiceTest {
 
         // purchase_history.store_item_id is a real foreign key, so the insert itself is rejected.
         RuntimeException e = assertThrows(RuntimeException.class, () ->
-                service.recordPurchase(999, null, false, LocalDate.of(2026, 9, 25),
+                service.recordPurchase(household, 999, null, false, LocalDate.of(2026, 9, 25),
                         1, 1.00, LocalDate.of(2026, 10, 1)));
         assertTrue(e.getCause() instanceof java.sql.SQLIntegrityConstraintViolationException);
 
-        assertEquals(0, repository.findAll().size(), "the purchase row must not survive a failed transaction");
+        assertEquals(0, repository.findAll(household).size(), "the purchase row must not survive a failed transaction");
         assertEquals(5, inventoryQuantity(4), "inventory must be untouched when the transaction rolls back");
     }
 
@@ -115,20 +118,22 @@ class PurchaseServiceTest {
         seedInventoryItem(5, 0, null);
         seedStoreItem(5, 5);
 
-        service.recordPurchase(5, null, false, LocalDate.of(2026, 9, 1), 1, 2.00, LocalDate.of(2027, 1, 1));
-        service.recordPurchase(5, null, false, LocalDate.of(2026, 9, 15), 1, 3.50, LocalDate.of(2027, 1, 1));
-        service.recordPurchase(5, null, false, LocalDate.of(2026, 10, 5), 1, 10.00, LocalDate.of(2027, 1, 1));
+        service.recordPurchase(household, 5, null, false, LocalDate.of(2026, 9, 1), 1, 2.00, LocalDate.of(2027, 1, 1));
+        service.recordPurchase(household, 5, null, false, LocalDate.of(2026, 9, 15), 1, 3.50, LocalDate.of(2027, 1, 1));
+        service.recordPurchase(household, 5, null, false, LocalDate.of(2026, 10, 5), 1, 10.00, LocalDate.of(2027, 1, 1));
 
-        assertEquals(15.50, service.spendingTotal(), 0.001);
-        assertEquals(5.50, service.spendingBetween(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)), 0.001,
+        assertEquals(15.50, service.spendingTotal(household), 0.001);
+        assertEquals(5.50, service.spendingBetween(household, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)), 0.001,
                 "only the two September purchases should count");
     }
 
     private int inventoryQuantity(int inventoryItemId) throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
-                     "SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = ?")) {
+                     "SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock "
+                             + "WHERE household_stock_item_id = ? AND household_stock_household_id = ?")) {
             ps.setInt(1, inventoryItemId);
+            ps.setInt(2, household);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);
@@ -139,8 +144,10 @@ class PurchaseServiceTest {
     private String inventoryEarliestExpDate(int inventoryItemId) throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
-                     "SELECT inventory_item_earliest_exp_date FROM inventory_item WHERE inventory_item_id = ?")) {
+                     "SELECT MIN(household_stock_earliest_exp_date) FROM household_stock "
+                             + "WHERE household_stock_item_id = ? AND household_stock_household_id = ?")) {
             ps.setInt(1, inventoryItemId);
+            ps.setInt(2, household);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getString(1);
@@ -161,6 +168,9 @@ class PurchaseServiceTest {
             ps.setString(5, "Sonstiges");
             ps.setString(6, earliestExpDate);
             ps.executeUpdate();
+        }
+        if (quantity != 0 || earliestExpDate != null) {
+            TestHousehold.setStock(household, id, quantity, earliestExpDate);
         }
     }
 

@@ -227,6 +227,116 @@ class HouseholdSeparationApiTest {
                 id("SELECT shopping_list_household_id FROM shopping_list WHERE shopping_list_id = " + list));
     }
 
+    /** A milk (catalogue item 5001, counted in ml) that Aldi sells in packs of 1000 ml (store item 7001). */
+    private static void milk() throws SQLException {
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_quantity, "
+                + "inventory_item_unit, inventory_item_category) VALUES (5001, 'milk', 0, 'ml', 'dairy')");
+        exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
+        exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'Gut')");
+        exec("INSERT INTO store_item (store_item_id, store_item_brand_id, store_item_store_id, store_item_item_id, "
+                + "store_item_package_unit, store_item_package_size, store_item_price, store_item_is_available) "
+                + "VALUES (7001, 1, 1, 5001, 'ml', 1000, 1.19, 1)");
+    }
+
+    private void buyMilk(int user, int packs) throws Exception {
+        mvc.perform(as(post("/api/purchases"), user)
+                        .content("{\"storeItemId\": 7001, \"quantityPurchased\": " + packs
+                                + ", \"pricePaid\": 2.50, \"expirationDate\": \"2031-02-01\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void eachHouseholdHasItsOwnStockOfTheSameCatalogueItem() throws Exception {
+        milk();
+        buyMilk(userA, 2);
+
+        mvc.perform(as(get("/api/inventory"), userA))
+                .andExpect(jsonPath("$[?(@.id == 5001)].quantity").value(2000));
+        mvc.perform(as(get("/api/inventory"), userB))
+                .andExpect(jsonPath("$[?(@.id == 5001)].quantity").value(0));
+        mvc.perform(as(get("/api/inventory/search").param("q", "milk"), userB))
+                .andExpect(jsonPath("$.items[0].quantity").value(0));
+        mvc.perform(as(get("/api/inventory/expiring").param("days", "99999"), userA))
+                .andExpect(jsonPath("$[?(@.id == 5001)]", hasSize(1)));
+        mvc.perform(as(get("/api/inventory/expiring").param("days", "99999"), userB))
+                .andExpect(jsonPath("$[?(@.id == 5001)]", hasSize(0)));
+        mvc.perform(as(get("/api/inventory/low-stock").param("threshold", "0"), userB))
+                .andExpect(jsonPath("$[?(@.id == 5001)]", hasSize(1)));
+        mvc.perform(as(get("/api/inventory/low-stock").param("threshold", "0"), userA))
+                .andExpect(jsonPath("$[?(@.id == 5001)]", hasSize(0)));
+    }
+
+    @Test
+    void usingStockTakesOnlyFromTheCallersOwnStockAndBatches() throws Exception {
+        milk();
+        buyMilk(userA, 1);
+        buyMilk(userB, 3);
+
+        // B has 3000 ml, A 1000 ml: A cannot take more than its own
+        mvc.perform(as(post("/api/inventory/5001/use"), userA).content("{\"quantity\": 1500}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(post("/api/inventory/5001/use"), userA).content("{\"quantity\": 400}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quantity").value(600));
+        mvc.perform(as(get("/api/inventory"), userB))
+                .andExpect(jsonPath("$[?(@.id == 5001)].quantity").value(3000));
+        // each sees only its own batch, and what is left of it
+        mvc.perform(as(get("/api/inventory/5001/batches"), userA))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].remaining").value(600));
+        mvc.perform(as(get("/api/inventory/5001/batches"), userB))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].remaining").value(3000));
+        // a household that bought nothing has no batch and nothing to use
+        int lonely = TestHousehold.createHousehold("Haushalt D", null);
+        int userD = TestHousehold.createUser(lonely, "d@example.test", "MEMBER");
+        mvc.perform(as(get("/api/inventory/5001/batches"), userD)).andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(as(post("/api/inventory/5001/use"), userD).content("{\"quantity\": 1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void purchasesAndSpendingAreTheCallersOwn() throws Exception {
+        milk();
+        buyMilk(userA, 1);
+        buyMilk(userB, 1);
+        buyMilk(userB, 1);
+
+        mvc.perform(as(get("/api/purchases"), userA)).andExpect(jsonPath("$", hasSize(1)));
+        mvc.perform(as(get("/api/purchases"), userB)).andExpect(jsonPath("$", hasSize(2)));
+        mvc.perform(as(get("/api/analytics/spending"), userA)).andExpect(jsonPath("$.total").value(2.5));
+        mvc.perform(as(get("/api/analytics/spending"), userB)).andExpect(jsonPath("$.total").value(5.0));
+        mvc.perform(as(get("/api/analytics/spending").param("from", "2000-01-01").param("to", "2099-12-31"), userA))
+                .andExpect(jsonPath("$.total").value(2.5));
+    }
+
+    @Test
+    void theSameIntakeRequestIdOfTwoHouseholdsRecordsTwice() throws Exception {
+        milk();
+        exec("INSERT INTO product_barcode (product_barcode_code, product_barcode_item_id, product_barcode_package_unit, "
+                + "product_barcode_package_size, product_barcode_created_date) VALUES ('4006381333931', 5001, 'ml', 1000, "
+                + "'2026-11-01')");
+        String body = "{\"requestId\": \"req-abcdefgh\", \"storeName\": \"Aldi\", \"lines\": [{\"barcode\": "
+                + "\"4006381333931\", \"packs\": 1, \"expirationDate\": \"2031-02-01\", \"pricePaid\": 1.19}]}";
+
+        mvc.perform(as(post("/api/intake"), userA).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(false))
+                .andExpect(jsonPath("$.recorded").value(1));
+        mvc.perform(as(post("/api/intake"), userB).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.replayed").value(false))
+                .andExpect(jsonPath("$.recorded").value(1));
+        mvc.perform(as(post("/api/intake"), userA).content(body))
+                .andExpect(jsonPath("$.replayed").value(true));
+        mvc.perform(as(get("/api/inventory"), userB))
+                .andExpect(jsonPath("$[?(@.id == 5001)].quantity").value(1000));
+    }
+
+    private static void exec(String sql) throws SQLException {
+        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
+            st.execute(sql);
+        }
+    }
+
     private static int id(String sql) throws SQLException {
         try (Connection con = Database.getConnection(); Statement st = con.createStatement();
              ResultSet rs = st.executeQuery(sql)) {

@@ -91,6 +91,68 @@ public final class TestHousehold {
         }
     }
 
+    /** Gives purchases without a household (the demo data predates households) to this household. */
+    public static void adoptOrphanPurchases(int householdId) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "UPDATE purchase_history SET purchase_history_household_id = ? WHERE purchase_history_household_id IS NULL")) {
+            ps.setInt(1, householdId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The oldest household of the scratch database; one named "Test" is made when there is none yet. */
+    public static int defaultHousehold() {
+        try (Connection con = Database.getConnection(); Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery("SELECT MIN(household_id) FROM household")) {
+            rs.next();
+            int id = rs.getInt(1);
+            return rs.wasNull() ? createHousehold("Test", null) : id;
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Copies the stock that a test wrote straight into the legacy columns of inventory_item (quantity and earliest expiry
+     * date) to this household's stock, the way migration 0024 does. Call it after seeding, before the code under test.
+     */
+    public static void seedStockOf(int householdId) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "INSERT INTO household_stock (household_stock_household_id, household_stock_item_id, "
+                             + "household_stock_quantity, household_stock_earliest_exp_date) "
+                             + "SELECT ?, inventory_item_id, inventory_item_quantity, inventory_item_earliest_exp_date "
+                             + "FROM inventory_item WHERE inventory_item_quantity <> 0 OR inventory_item_earliest_exp_date IS NOT NULL "
+                             + "ON DUPLICATE KEY UPDATE household_stock_quantity = VALUES(household_stock_quantity), "
+                             + "household_stock_earliest_exp_date = VALUES(household_stock_earliest_exp_date)")) {
+            ps.setInt(1, householdId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** One household's stock of an item, written directly: {quantity, earliest expiry (text) or null}. */
+    public static void setStock(int householdId, int itemId, int quantity, String earliestExpDate) {
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "INSERT INTO household_stock (household_stock_household_id, household_stock_item_id, "
+                             + "household_stock_quantity, household_stock_earliest_exp_date) VALUES (?, ?, ?, ?) "
+                             + "ON DUPLICATE KEY UPDATE household_stock_quantity = VALUES(household_stock_quantity), "
+                             + "household_stock_earliest_exp_date = VALUES(household_stock_earliest_exp_date)")) {
+            ps.setInt(1, householdId);
+            ps.setInt(2, itemId);
+            ps.setInt(3, quantity);
+            ps.setString(4, earliestExpDate);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     public static void actAs(int userId) {
         actingUserId = userId;
     }

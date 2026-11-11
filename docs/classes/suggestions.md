@@ -362,7 +362,7 @@ classDiagram
         -DietFilterService diet
         -Clock clock
         +PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock)
-        +suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page) Result
+        +suggest(int householdId, String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page) Result
         ~slice(List~Integer~ ids, PageRequest page) List~Integer~$
     }
     class suggestions_PantrySuggestionService_Entry["PantrySuggestionService.Entry"] {
@@ -417,7 +417,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock)` | public |  |
-| `Result suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page)` | public | exactly as in the recipe search); null or no rules = no filtering Bad values are an IllegalArgumentException (the API answers 400). |
+| `Result suggest(int householdId, String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page)` | public | exactly as in the recipe search); null or no rules = no filtering Bad values are an IllegalArgumentException (the API answers 400). |
 | `List<Integer> slice(List<Integer> ids, PageRequest page)` | package static | The ids of the requested page; empty when the page is past the end. |
 
 **Referenced by:** `PantrySuggestionDto`, `ServiceConfig`, `SuggestionController`
@@ -580,10 +580,10 @@ store_item/store_discount for suggestions; it calls these methods.
 classDiagram
     direction LR
     class suggestions_SuggestionRepository["SuggestionRepository"] {
-        +findRankedByExpiring(LocalDate limit) List~RecipeSuggestion~
+        +findRankedByExpiring(int householdId, LocalDate limit) List~RecipeSuggestion~
         +findRankedByDiscount(LocalDate today) List~RecipeSuggestion~
-        +coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store) List~PantryCoverage~
-        +pantryLines(Collection~Integer~ recipeIds, LocalDate expiryLimit, LocalDate today) Map~Integer, List~PantryLine~~
+        +coverageByRecipe(int householdId, LocalDate expiryLimit, LocalDate today, String store) List~PantryCoverage~
+        +pantryLines(int householdId, Collection~Integer~ recipeIds, LocalDate expiryLimit, LocalDate today) Map~Integer, List~PantryLine~~
         +offersOnSale(Collection~Integer~ itemIds, LocalDate today) Map~Integer, List~PantryOffer~~
     }
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
@@ -612,10 +612,10 @@ classDiagram
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `List<RecipeSuggestion> findRankedByExpiring(LocalDate limit)` | public | Recipes ranked by how many ingredients are inventory items expiring on or before `limit`. |
+| `List<RecipeSuggestion> findRankedByExpiring(int householdId, LocalDate limit)` | public | Recipes ranked by how many ingredients are items of this household's stock expiring on or before `limit`. |
 | `List<RecipeSuggestion> findRankedByDiscount(LocalDate today)` | public | Recipes ranked by how many ingredients map to a store_item with a discount current on `today`. |
-| `List<PantryCoverage> coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store)` | public | For every recipe: how many ingredients it needs, how many are in stock, how many of those expire on or before expiryLimit, how many of the missing ones are on sale on today, and how many of them at the store named store (null = no store ask |
-| `Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit, LocalDate today)` | public | The ingredients of these recipes with the stock of each (recipe id -> lines, by name). |
+| `List<PantryCoverage> coverageByRecipe(int householdId, LocalDate expiryLimit, LocalDate today, String store)` | public | For every recipe: how many ingredients it needs, how many are in stock, how many of those expire on or before expiryLimit, how many of the missing ones are on sale on today, and how many of them at the store named store (null = no store ask |
+| `Map<Integer, List<PantryLine>> pantryLines(int householdId, Collection<Integer> recipeIds, LocalDate expiryLimit, LocalDate today)` | public | The ingredients of these recipes with the stock of each (recipe id -> lines, by name). |
 | `Map<Integer, List<PantryOffer>> offersOnSale(Collection<Integer> itemIds, LocalDate today)` | public | The offers that are on sale on today for these inventory items (item id -> offers), by store name, then pack size. |
 
 **Referenced by:** `PantrySuggestionService`, `ServiceConfig`, `SuggestionService`
@@ -634,7 +634,7 @@ classDiagram
     class suggestions_SuggestionService["SuggestionService"] {
         -SuggestionRepository repository
         +SuggestionService(SuggestionRepository repository)
-        +suggestByExpiring(int days) List~RecipeSuggestion~
+        +suggestByExpiring(int householdId, int days) List~RecipeSuggestion~
         +suggestByDiscount() List~RecipeSuggestion~
     }
     class suggestions_SuggestionRepository["SuggestionRepository"]
@@ -658,7 +658,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `SuggestionService(SuggestionRepository repository)` | public |  |
-| `List<RecipeSuggestion> suggestByExpiring(int days)` | public | Recipes ranked by how many ingredients are inventory items expiring within the next `days` days. |
+| `List<RecipeSuggestion> suggestByExpiring(int householdId, int days)` | public | Recipes ranked by how many ingredients are inventory items of the household's stock expiring within the next `days` days. |
 | `List<RecipeSuggestion> suggestByDiscount()` | public | Recipes ranked by how many ingredients are currently on sale. |
 
 **Referenced by:** `ServiceConfig`, `SuggestionController`

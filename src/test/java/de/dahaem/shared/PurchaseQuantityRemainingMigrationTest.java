@@ -65,7 +65,9 @@ class PurchaseQuantityRemainingMigrationTest {
              Statement st = con.createStatement();
              ResultSet rs = st.executeQuery("SELECT CONCAT(COLUMN_NAME, ' ', COLUMN_TYPE, ' null=', IS_NULLABLE, "
                      + "' default=', IFNULL(COLUMN_DEFAULT, 'NULL')) FROM information_schema.COLUMNS "
-                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'purchase_history' ORDER BY COLUMN_NAME")) {
+                     + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'purchase_history' "
+                     // purchase_history_household_id comes from migration 0024, which has its own test
+                     + "AND COLUMN_NAME <> 'purchase_history_household_id' ORDER BY COLUMN_NAME")) {
             while (rs.next()) {
                 out.add(rs.getString(1));
             }

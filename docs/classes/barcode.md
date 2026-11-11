@@ -450,8 +450,8 @@ classDiagram
         -StoreRepository stores
         -IntakeRequestRepository requests
         +IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores, IntakeRequestRepository requests)
-        +intakeOnce(String requestId, String fingerprint, String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) Outcome
-        +intake(String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) List~LineResult~
+        +intakeOnce(int householdId, String requestId, String fingerprint, String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) Outcome
+        +intake(int householdId, String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) List~LineResult~
     }
     class barcode_IntakeService_Outcome["IntakeService.Outcome"] {
         <<record>>
@@ -507,8 +507,8 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores, IntakeRequestRepository requests)` | public |  |
-| `Outcome intakeOnce(String requestId, String fingerprint, String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Like .intake but safe to send twice: a client that is not sure its request arrived repeats it with the same requestId and gets the stored answer back (replayed), and nothing is recorded a second time. |
-| `List<LineResult> intake(String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Puts the lines away at the store. |
+| `Outcome intakeOnce(int householdId, String requestId, String fingerprint, String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Like .intake but safe to send twice: a client that is not sure its request arrived repeats it with the same requestId and gets the stored answer back (replayed), and nothing is recorded a second time. |
+| `List<LineResult> intake(int householdId, String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Puts the lines away at the store. |
 
 **Referenced by:** `IntakeController`, `IntakeController.IntakeRequest`, `IntakeController.IntakeResult`, `ServiceConfig`
 

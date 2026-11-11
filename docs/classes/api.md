@@ -317,6 +317,8 @@ classDiagram
     api_HouseholdController ..> api_SetHouseholdPeopleRequest
     api_IntakeController *-- api_IntakeController_IntakeRequest
     api_IntakeController *-- api_IntakeController_IntakeResult
+    api_IntakeController ..> api_Caller
+    api_InventoryController ..> api_Caller
     api_InventoryController ..> api_ItemDto
     api_InventoryController ..> api_UseStockRequest
     api_InventoryController ..> api_ItemPageDto
@@ -345,6 +347,7 @@ classDiagram
     api_PlannedMealController ..> api_AddMealRequest
     api_PlannedMealController ..> api_PlannedMealDto
     api_PlannedMealController ..> api_PreferredServingsDto
+    api_PurchaseController ..> api_Caller
     api_PurchaseController ..> api_PurchaseDto
     api_PurchaseController ..> api_CreatePurchaseRequest
     api_PurchaseController ..> api_SpendingDto
@@ -384,6 +387,7 @@ classDiagram
     api_ShoppingListItemController ..> api_ShoppingListEdits
     api_StoreCatalogController ..> api_BrandPageDto
     api_SuggestionController ..> api_RecipeSuggestionDto
+    api_SuggestionController ..> api_Caller
     api_SuggestionController ..> api_PantrySuggestionPageDto
     api_WebConfig --> api_CallerArgumentResolver
 ```
@@ -1040,19 +1044,35 @@ classDiagram
     class auth_HouseholdRole["HouseholdRole"] {
         <<enumeration>>
     }
+    class api_IntakeController["IntakeController"] {
+        <<controller>>
+    }
+    class api_InventoryController["InventoryController"] {
+        <<controller>>
+    }
     class api_MealPlanController["MealPlanController"] {
         <<controller>>
     }
     class api_PlannedMealController["PlannedMealController"] {
         <<controller>>
     }
+    class api_PurchaseController["PurchaseController"] {
+        <<controller>>
+    }
     class api_ShoppingListItemController["ShoppingListItemController"] {
         <<controller>>
     }
+    class api_SuggestionController["SuggestionController"] {
+        <<controller>>
+    }
     api_Caller --> auth_HouseholdRole
+    api_IntakeController ..> api_Caller
+    api_InventoryController ..> api_Caller
     api_MealPlanController ..> api_Caller
     api_PlannedMealController ..> api_Caller
+    api_PurchaseController ..> api_Caller
     api_ShoppingListItemController ..> api_Caller
+    api_SuggestionController ..> api_Caller
 ```
 
 | Component | Type |
@@ -1061,7 +1081,7 @@ classDiagram
 | `householdId` | `int` |
 | `role` | `HouseholdRole` |
 
-**Referenced by:** `MealPlanController`, `PlannedMealController`, `ShoppingListItemController`
+**Referenced by:** `IntakeController`, `InventoryController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
 
 ## CallerArgumentResolver
 
@@ -1695,7 +1715,7 @@ classDiagram
         -IntakeService intakeService
         -MealPlanService mealPlanService
         +IntakeController(IntakeService intakeService, MealPlanService mealPlanService)
-        +intake(IntakeRequest request) IntakeResult
+        +intake(IntakeRequest request, Caller caller) IntakeResult
     }
     class api_IntakeController_IntakeRequest["IntakeController.IntakeRequest"] {
         <<record>>
@@ -1705,10 +1725,14 @@ classDiagram
     }
     class barcode_IntakeService["IntakeService"]
     class mealplanner_MealPlanService["MealPlanService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     api_IntakeController *-- api_IntakeController_IntakeRequest
     api_IntakeController *-- api_IntakeController_IntakeResult
     api_IntakeController --> barcode_IntakeService
     api_IntakeController --> mealplanner_MealPlanService
+    api_IntakeController ..> api_Caller
 ```
 
 | Field | Type |
@@ -1720,7 +1744,7 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `IntakeController(IntakeService intakeService, MealPlanService mealPlanService)` | public |  |
-| `IntakeResult intake(IntakeRequest request)` | public | Puts the lines away. |
+| `IntakeResult intake(IntakeRequest request, Caller caller)` | public | Puts the lines away. |
 
 ## IntakeController.IntakeRequest
 
@@ -1872,15 +1896,18 @@ classDiagram
         -InventoryService inventoryService
         -StockService stockService
         +InventoryController(InventoryService inventoryService, StockService stockService)
-        +use(int id, UseStockRequest request) ItemDto
-        +batches(int id, boolean all) List~StockBatch~
-        +all() List~ItemDto~
-        +search(String q, String category, Integer page, Integer pageSize) ItemPageDto
-        +expiring(int days) List~ItemDto~
-        +lowStock(int threshold) List~ItemDto~
+        +use(int id, UseStockRequest request, Caller caller) ItemDto
+        +batches(int id, boolean all, Caller caller) List~StockBatch~
+        +all(Caller caller) List~ItemDto~
+        +search(String q, String category, Integer page, Integer pageSize, Caller caller) ItemPageDto
+        +expiring(int days, Caller caller) List~ItemDto~
+        +lowStock(int threshold, Caller caller) List~ItemDto~
     }
     class inventory_InventoryService["InventoryService"]
     class finance_StockService["StockService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_ItemDto["ItemDto"] {
         <<record>>
     }
@@ -1895,6 +1922,7 @@ classDiagram
     }
     api_InventoryController --> inventory_InventoryService
     api_InventoryController --> finance_StockService
+    api_InventoryController ..> api_Caller
     api_InventoryController ..> api_ItemDto
     api_InventoryController ..> api_UseStockRequest
     api_InventoryController ..> finance_StockBatch
@@ -1909,12 +1937,12 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `InventoryController(InventoryService inventoryService, StockService stockService)` | public |  |
-| `ItemDto use(int id, UseStockRequest request)` | public | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
-| `List<StockBatch> batches(int id, boolean all)` | public | The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date, expiry date, packs and pack size bought, and what is left in the item's own unit (remaining, unit). |
-| `List<ItemDto> all()` | public |  |
-| `ItemPageDto search(String q, String category, Integer page, Integer pageSize)` | public | Search the catalogue, one page of items plus the total. |
-| `List<ItemDto> expiring(int days)` | public | Items expiring within the next days days (default 7). |
-| `List<ItemDto> lowStock(int threshold)` | public | Items at or below threshold units in stock (default 1). |
+| `ItemDto use(int id, UseStockRequest request, Caller caller)` | public | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
+| `List<StockBatch> batches(int id, boolean all, Caller caller)` | public | The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date, expiry date, packs and pack size bought, and what is left in the item's own unit (remaining, unit). |
+| `List<ItemDto> all(Caller caller)` | public |  |
+| `ItemPageDto search(String q, String category, Integer page, Integer pageSize, Caller caller)` | public | Search the catalogue, one page of items plus the total. |
+| `List<ItemDto> expiring(int days, Caller caller)` | public | Items expiring within the next days days (default 7). |
+| `List<ItemDto> lowStock(int threshold, Caller caller)` | public | Items at or below threshold units in stock (default 1). |
 
 ## ItemDto
 
@@ -2928,11 +2956,14 @@ classDiagram
         <<controller>>
         -PurchaseService purchaseService
         +PurchaseController(PurchaseService purchaseService)
-        +all() List~PurchaseDto~
-        +create(CreatePurchaseRequest request) PurchaseDto
-        +spending(LocalDate from, LocalDate to) SpendingDto
+        +all(Caller caller) List~PurchaseDto~
+        +create(CreatePurchaseRequest request, Caller caller) PurchaseDto
+        +spending(LocalDate from, LocalDate to, Caller caller) SpendingDto
     }
     class finance_PurchaseService["PurchaseService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_PurchaseDto["PurchaseDto"] {
         <<record>>
     }
@@ -2943,6 +2974,7 @@ classDiagram
         <<record>>
     }
     api_PurchaseController --> finance_PurchaseService
+    api_PurchaseController ..> api_Caller
     api_PurchaseController ..> api_PurchaseDto
     api_PurchaseController ..> api_CreatePurchaseRequest
     api_PurchaseController ..> api_SpendingDto
@@ -2955,9 +2987,9 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `PurchaseController(PurchaseService purchaseService)` | public |  |
-| `List<PurchaseDto> all()` | public |  |
-| `PurchaseDto create(CreatePurchaseRequest request)` | public | Records a purchase of a known store_item and applies it to inventory (one transaction, in the service). |
-| `SpendingDto spending(LocalDate from, LocalDate to)` | public | Total spending: over all purchases, or between from and to (inclusive) when both are given. |
+| `List<PurchaseDto> all(Caller caller)` | public |  |
+| `PurchaseDto create(CreatePurchaseRequest request, Caller caller)` | public | Records a purchase of a known store_item and applies it to inventory (one transaction, in the service). |
+| `SpendingDto spending(LocalDate from, LocalDate to, Caller caller)` | public | Total spending: over all purchases, or between from and to (inclusive) when both are given. |
 
 ## PurchaseDto
 
@@ -4554,13 +4586,16 @@ classDiagram
         -DietFilterService dietFilter
         +SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)
         +bySavings() List~RecipeSuggestionDto~
-        +byExpiring(int days) List~RecipeSuggestionDto~
-        +pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) PantrySuggestionPageDto
+        +byExpiring(int days, Caller caller) List~RecipeSuggestionDto~
+        +pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear, Caller caller) PantrySuggestionPageDto
     }
     class suggestions_SuggestionService["SuggestionService"]
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class diet_DietFilterService["DietFilterService"]
     class api_RecipeSuggestionDto["RecipeSuggestionDto"] {
+        <<record>>
+    }
+    class api_Caller["Caller"] {
         <<record>>
     }
     class api_PantrySuggestionPageDto["PantrySuggestionPageDto"] {
@@ -4570,6 +4605,7 @@ classDiagram
     api_SuggestionController --> suggestions_PantrySuggestionService
     api_SuggestionController --> diet_DietFilterService
     api_SuggestionController ..> api_RecipeSuggestionDto
+    api_SuggestionController ..> api_Caller
     api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
 
@@ -4583,8 +4619,8 @@ classDiagram
 |---|---|---|
 | `SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)` | public |  |
 | `List<RecipeSuggestionDto> bySavings()` | public | Recipes ranked by how many ingredients are currently on sale. |
-| `List<RecipeSuggestionDto> byExpiring(int days)` | public | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
-| `PantrySuggestionPageDto pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
+| `List<RecipeSuggestionDto> byExpiring(int days, Caller caller)` | public | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
+| `PantrySuggestionPageDto pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear, Caller caller)` | public | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
 
 ## TagDto
 

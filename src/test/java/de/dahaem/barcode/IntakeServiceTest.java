@@ -10,6 +10,7 @@ import de.dahaem.shared.Database;
 import de.dahaem.stores.StoreRepository;
 import de.dahaem.stores.UnknownStoreException;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,7 @@ class IntakeServiceTest {
 
     private IntakeService intake;
     private StockService stock;
+    private int household;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
@@ -48,6 +50,7 @@ class IntakeServiceTest {
         PurchaseService purchases = new PurchaseService(purchaseRepository, stores, inventory);
         intake = new IntakeService(barcodes, purchases, stores, new IntakeRequestRepository());
         stock = new StockService(purchaseRepository, inventory);
+        household = TestHousehold.defaultHousehold();
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, "
                 + "inventory_item_quantity, inventory_item_unit, inventory_item_category) VALUES "
                 + "(1, 'spaghetti', 'spaghetti', 0, 'g', 'pasta'), (2, 'milk', 'milch', 0, 'ml', 'dairy')");
@@ -63,14 +66,14 @@ class IntakeServiceTest {
 
     @Test
     void stockGrowsByPacksTimesPackSizeInTheItemsUnitAndTheStoreItemIsLinked() throws SQLException {
-        IntakeService.LineResult r = intake.intake("Aldi", true, TODAY, List.of(
+        IntakeService.LineResult r = intake.intake(household, "Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null))).get(0);
 
         assertTrue(r.ok(), r.message());
         assertEquals(1000, r.stockAdded());
         assertEquals("g", r.stockUnit());
-        assertEquals(1000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
-        assertEquals("2026-12-01", text("SELECT inventory_item_earliest_exp_date FROM inventory_item WHERE inventory_item_id = 1"));
+        assertEquals(1000, count("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household + ""));
+        assertEquals("2026-12-01", text("SELECT MIN(household_stock_earliest_exp_date) FROM household_stock WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household));
         // the store item for (Aldi, Barilla, spaghetti, 500 g) exists and carries the barcode
         assertEquals(1, count("SELECT COUNT(*) FROM store_item WHERE store_item_package_size = 500 AND store_item_package_unit = 'g'"));
         assertEquals(1, count("SELECT COUNT(*) FROM product_barcode_store_item WHERE product_barcode_store_item_code = '"
@@ -82,11 +85,11 @@ class IntakeServiceTest {
     @Test
     void useTakesFromTheEarliestExpiringBatchInGramsAndMovesTheDateOn() throws SQLException {
         // 2 packs (1000 g) expiring 1 Dec, 1 pack (500 g) expiring 10 Dec
-        intake.intake("Aldi", true, TODAY, List.of(
+        intake.intake(household, "Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 10), 1.29, null, null)));
 
-        Item item = stock.use(1, 1200).orElseThrow();
+        Item item = stock.use(household, 1, 1200).orElseThrow();
 
         assertEquals(300, item.getQuantity());
         assertEquals(LocalDate.of(2026, 12, 10), item.getEarliestExpDate());
@@ -96,10 +99,10 @@ class IntakeServiceTest {
 
     @Test
     void aLinePriceIsOptionalWhenTheStoreItemHasAKnownPrice() throws SQLException {
-        intake.intake("Aldi", true, TODAY, List.of(new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null)));
+        intake.intake(household, "Aldi", true, TODAY, List.of(new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null)));
         exec("UPDATE store_item SET store_item_price = 1.29");
 
-        IntakeService.LineResult r = intake.intake("Aldi", true, TODAY, List.of(
+        IntakeService.LineResult r = intake.intake(household, "Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 3, LocalDate.of(2026, 12, 5), null, null, null))).get(0);
 
         assertTrue(r.ok(), r.message());
@@ -108,7 +111,7 @@ class IntakeServiceTest {
 
     @Test
     void withoutAKnownPriceTheLineNeedsOneAndNothingIsCreated() throws SQLException {
-        IntakeService.LineResult r = intake.intake("Lidl", true, TODAY, List.of(
+        IntakeService.LineResult r = intake.intake(household, "Lidl", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), null, null, null))).get(0);
 
         assertFalse(r.ok());
@@ -120,18 +123,18 @@ class IntakeServiceTest {
 
     @Test
     void aSpecialPackIsItsOwnStoreItemAndAddsItsOwnSize() throws SQLException {
-        IntakeService.LineResult r = intake.intake("Aldi", true, TODAY, List.of(
+        IntakeService.LineResult r = intake.intake(household, "Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.98, 550, "g"))).get(0);
 
         assertTrue(r.ok(), r.message());
         assertEquals(1100, r.stockAdded());
         assertEquals(1, count("SELECT COUNT(*) FROM store_item WHERE store_item_package_size = 550"));
-        assertEquals(1100, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+        assertEquals(1100, count("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household + ""));
     }
 
     @Test
     void oneBadLineDoesNotStopTheOthers() throws SQLException {
-        List<IntakeService.LineResult> results = intake.intake("Aldi", true, TODAY, List.of(
+        List<IntakeService.LineResult> results = intake.intake(household, "Aldi", true, TODAY, List.of(
                 new IntakeService.Line("4006381333932", 1, LocalDate.of(2026, 12, 1), 1.0, null, null),   // typo
                 new IntakeService.Line("4012345678901", 1, LocalDate.of(2026, 12, 1), 1.0, null, null),   // not assigned
                 new IntakeService.Line(SPAGHETTI, 1, null, 1.0, null, null),                              // no expiry
@@ -145,21 +148,21 @@ class IntakeServiceTest {
         assertTrue(results.get(4).ok());
         assertEquals(2000, results.get(4).stockAdded());
         assertEquals("ml", results.get(4).stockUnit());
-        assertEquals(2000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 2"));
-        assertEquals(0, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+        assertEquals(2000, count("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock WHERE household_stock_item_id = 2 AND household_stock_household_id = " + household + ""));
+        assertEquals(0, count("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household + ""));
         assertNull(results.get(0).purchaseId());
     }
 
     @Test
     void anUnknownStoreIsRefusedUnlessAskedAndTheCaseOfAnExistingOneDoesNotMatter() throws SQLException {
         IntakeService.Line line = new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null);
-        intake.intake("Aldi", true, TODAY, List.of(line));   // asked to create it: the store now exists
+        intake.intake(household, "Aldi", true, TODAY, List.of(line));   // asked to create it: the store now exists
 
-        assertThrows(UnknownStoreException.class, () -> intake.intake("Aldii", false, TODAY, List.of(line)));
+        assertThrows(UnknownStoreException.class, () -> intake.intake(household, "Aldii", false, TODAY, List.of(line)));
         assertEquals(1, count("SELECT COUNT(*) FROM store"), "a refused store must not be created");
         assertEquals(1, count("SELECT COUNT(*) FROM purchase_history"), "and nothing is recorded for it");
 
-        IntakeService.LineResult r = intake.intake("  aldi ", false, TODAY, List.of(line)).get(0);
+        IntakeService.LineResult r = intake.intake(household, "  aldi ", false, TODAY, List.of(line)).get(0);
         assertTrue(r.ok(), r.message());
         assertEquals(1, count("SELECT COUNT(*) FROM store"), "'aldi' is the existing Aldi, not a new store");
         assertEquals(2, count("SELECT COUNT(*) FROM purchase_history"));
@@ -167,11 +170,11 @@ class IntakeServiceTest {
 
     @Test
     void batchesListWhatIsLeftOfEachPurchaseInUseOrder() {
-        intake.intake("Aldi", true, TODAY, List.of(
+        intake.intake(household, "Aldi", true, TODAY, List.of(
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 10), 1.29, null, null)));
 
-        List<StockBatch> batches = stock.batches(1, false).orElseThrow();
+        List<StockBatch> batches = stock.batches(household, 1, false).orElseThrow();
 
         assertEquals(2, batches.size());
         StockBatch first = batches.get(0);
@@ -185,15 +188,15 @@ class IntakeServiceTest {
         assertEquals("g", first.unit());
         assertEquals(500, batches.get(1).remaining());
 
-        stock.use(1, 1200);   // the first batch is used up, 300 g are left of the second
+        stock.use(household, 1, 1200);   // the first batch is used up, 300 g are left of the second
 
-        List<StockBatch> left = stock.batches(1, false).orElseThrow();
+        List<StockBatch> left = stock.batches(household, 1, false).orElseThrow();
         assertEquals(1, left.size());
         assertEquals(300, left.get(0).remaining());
-        List<StockBatch> all = stock.batches(1, true).orElseThrow();
+        List<StockBatch> all = stock.batches(household, 1, true).orElseThrow();
         assertEquals(2, all.size());
         assertEquals(0, all.get(0).remaining());
-        assertTrue(stock.batches(999, false).isEmpty(), "no such item");
+        assertTrue(stock.batches(household, 999, false).isEmpty(), "no such item");
     }
 
     @Test
@@ -202,30 +205,30 @@ class IntakeServiceTest {
                 new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
                 new IntakeService.Line("4006381333932", 1, LocalDate.of(2026, 12, 1), 1.0, null, null));
 
-        IntakeService.Outcome first = intake.intakeOnce("req-0000001", "body-1", "Aldi", true, TODAY, lines);
-        IntakeService.Outcome again = intake.intakeOnce("req-0000001", "body-1", "Aldi", true, TODAY, lines);
+        IntakeService.Outcome first = intake.intakeOnce(household, "req-0000001", "body-1", "Aldi", true, TODAY, lines);
+        IntakeService.Outcome again = intake.intakeOnce(household, "req-0000001", "body-1", "Aldi", true, TODAY, lines);
 
         assertFalse(first.replayed());
         assertTrue(again.replayed());
         assertEquals(first.results(), again.results(), "the same answer, including the failed line");
         assertEquals(1, count("SELECT COUNT(*) FROM purchase_history"), "recorded once");
-        assertEquals(1000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+        assertEquals(1000, count("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household + ""));
     }
 
     @Test
     void theSameRequestIdWithAnotherBodyOrWhileProcessingIsAConflict() {
         List<IntakeService.Line> lines = List.of(
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
-        intake.intakeOnce("req-0000002", "body-1", "Aldi", true, TODAY, lines);
+        intake.intakeOnce(household, "req-0000002", "body-1", "Aldi", true, TODAY, lines);
 
         IntakeConflictException reused = assertThrows(IntakeConflictException.class,
-                () -> intake.intakeOnce("req-0000002", "body-2", "Aldi", true, TODAY, lines));
+                () -> intake.intakeOnce(household, "req-0000002", "body-2", "Aldi", true, TODAY, lines));
         assertEquals("REQUEST_ID_REUSED", reused.code());
 
         // a claim without an answer yet = a request still being processed
-        new IntakeRequestRepository().claim("req-0000003", sha("body-3"));
+        new IntakeRequestRepository().claim(sha(household + ":req-0000003"), sha("body-3"));
         IntakeConflictException busy = assertThrows(IntakeConflictException.class,
-                () -> intake.intakeOnce("req-0000003", "body-3", "Aldi", true, TODAY, lines));
+                () -> intake.intakeOnce(household, "req-0000003", "body-3", "Aldi", true, TODAY, lines));
         assertEquals("REQUEST_IN_PROGRESS", busy.code());
     }
 
@@ -233,11 +236,11 @@ class IntakeServiceTest {
     void aRequestThatFailsBeforeRecordingGivesItsIdBackSoTheCorrectedOneCanUseIt() throws SQLException {
         List<IntakeService.Line> lines = List.of(
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
-        intake.intakeOnce("req-0000004", "body-4", "Aldi", true, TODAY, lines);   // makes the store Aldi exist
+        intake.intakeOnce(household, "req-0000004", "body-4", "Aldi", true, TODAY, lines);   // makes the store Aldi exist
 
         assertThrows(UnknownStoreException.class,
-                () -> intake.intakeOnce("req-0000005", "body-5", "Aldii", false, TODAY, lines));
-        IntakeService.Outcome fixed = intake.intakeOnce("req-0000005", "body-5", "Aldi", false, TODAY, lines);
+                () -> intake.intakeOnce(household, "req-0000005", "body-5", "Aldii", false, TODAY, lines));
+        IntakeService.Outcome fixed = intake.intakeOnce(household, "req-0000005", "body-5", "Aldi", false, TODAY, lines);
 
         assertFalse(fixed.replayed(), "the failed attempt did not keep the id");
         assertTrue(fixed.results().get(0).ok());
@@ -245,12 +248,30 @@ class IntakeServiceTest {
     }
 
     @Test
+    void theSameRequestIdOfAnotherHouseholdIsAnotherRequest() throws SQLException {
+        int other = TestHousehold.createHousehold("Other", null);
+        List<IntakeService.Line> lines = List.of(
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
+
+        IntakeService.Outcome mine = intake.intakeOnce(household, "req-0000009", "body-9", "Aldi", true, TODAY, lines);
+        IntakeService.Outcome theirs = intake.intakeOnce(other, "req-0000009", "body-9", "Aldi", true, TODAY, lines);
+
+        assertFalse(mine.replayed());
+        assertFalse(theirs.replayed(), "another household does not get the first one's answer, and records its own");
+        assertEquals(2, count("SELECT COUNT(*) FROM purchase_history"));
+        assertEquals(1, count("SELECT COUNT(*) FROM purchase_history WHERE purchase_history_household_id = " + household));
+        assertEquals(1, count("SELECT COUNT(*) FROM purchase_history WHERE purchase_history_household_id = " + other));
+        assertEquals(500, count("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock "
+                + "WHERE household_stock_item_id = 1 AND household_stock_household_id = " + other));
+    }
+
+    @Test
     void withoutARequestIdItIsJustAnIntake() throws SQLException {
         List<IntakeService.Line> lines = List.of(
                 new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
 
-        intake.intakeOnce(null, "x", "Aldi", true, TODAY, lines);
-        intake.intakeOnce(null, "x", "Aldi", true, TODAY, lines);
+        intake.intakeOnce(household, null, "x", "Aldi", true, TODAY, lines);
+        intake.intakeOnce(household, null, "x", "Aldi", true, TODAY, lines);
 
         assertEquals(2, count("SELECT COUNT(*) FROM purchase_history"));
         assertEquals(0, count("SELECT COUNT(*) FROM intake_request"));

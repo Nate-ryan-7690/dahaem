@@ -23,18 +23,20 @@ import java.util.Map;
  */
 public class SuggestionRepository {
 
-    /** Recipes ranked by how many ingredients are inventory items expiring on or before `limit`. */
-    public List<RecipeSuggestion> findRankedByExpiring(LocalDate limit) {
+    /** Recipes ranked by how many ingredients are items of this household's stock expiring on or before `limit`. */
+    public List<RecipeSuggestion> findRankedByExpiring(int householdId, LocalDate limit) {
         String sql = "SELECT DISTINCT r.recipe_id, r.recipe_name, ri.recipe_ingredient_item_id " +
                 "FROM recipe r " +
                 "JOIN recipe_ingredient ri ON ri.recipe_ingredient_recipe_id = r.recipe_id " +
-                "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id " +
-                "WHERE ii.inventory_item_earliest_exp_date IS NOT NULL " +
-                "AND ii.inventory_item_earliest_exp_date <= ? " +
+                "JOIN household_stock hs ON hs.household_stock_item_id = ri.recipe_ingredient_item_id " +
+                "AND hs.household_stock_household_id = ? " +
+                "WHERE hs.household_stock_earliest_exp_date IS NOT NULL " +
+                "AND hs.household_stock_earliest_exp_date <= ? " +
                 "ORDER BY r.recipe_id";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, limit.toString());
+            ps.setInt(1, householdId);
+            ps.setString(2, limit.toString());
             try (ResultSet rs = ps.executeQuery()) {
                 return rank(rs);
             }
@@ -97,19 +99,21 @@ public class SuggestionRepository {
      * store named {@code store} (null = no store asked, counted as 0). "To taste" ingredients are left out. Only
      * counts come back (about one small row per recipe), so the ranking never loads 100,000 ingredient rows.
      */
-    public List<PantryCoverage> coverageByRecipe(LocalDate expiryLimit, LocalDate today, String store) {
+    public List<PantryCoverage> coverageByRecipe(int householdId, LocalDate expiryLimit, LocalDate today, String store) {
         // Usable stock: some is there and it has not expired (no date = unknown, counted as usable). Stock whose
         // date has passed is NOT usable: the ingredient counts as still to buy (shown as EXPIRED, see pantryLines).
-        String usable = "(ii.inventory_item_quantity > 0 AND (ii.inventory_item_earliest_exp_date IS NULL " +
-                "OR ii.inventory_item_earliest_exp_date >= ?))";
+        String usable = "(COALESCE(hs.household_stock_quantity, 0) > 0 AND (hs.household_stock_earliest_exp_date IS NULL " +
+                "OR hs.household_stock_earliest_exp_date >= ?))";
         String sql = "SELECT ri.recipe_ingredient_recipe_id AS recipe_id, COUNT(*) AS needed, " +
                 "SUM(" + usable + ") AS in_stock, " +
-                "SUM(" + usable + " AND ii.inventory_item_earliest_exp_date IS NOT NULL " +
-                "    AND ii.inventory_item_earliest_exp_date <= ?) AS expiring, " +
+                "SUM(" + usable + " AND hs.household_stock_earliest_exp_date IS NOT NULL " +
+                "    AND hs.household_stock_earliest_exp_date <= ?) AS expiring, " +
                 "SUM(NOT " + usable + " AND sale.item_id IS NOT NULL) AS missing_on_sale, " +
                 "SUM(NOT " + usable + " AND store_sale.item_id IS NOT NULL) AS missing_at_store " +
                 "FROM recipe_ingredient ri " +
                 "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id " +
+                "LEFT JOIN household_stock hs ON hs.household_stock_item_id = ii.inventory_item_id " +
+                "  AND hs.household_stock_household_id = ? " +
                 "LEFT JOIN (SELECT DISTINCT si.store_item_item_id AS item_id " +
                 "           FROM store_item si " +
                 "           JOIN store_discount sd ON sd.store_discount_store_item_id = si.store_item_id " +
@@ -128,18 +132,19 @@ public class SuggestionRepository {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             // placeholders in the order they appear: in_stock, expiring (usable, then limit), the two missing sums,
-            // the sale join (start, end), the store sale join (store, start, end)
+            // the household of the stock join, the sale join (start, end), the store sale join (store, start, end)
             String todayText = today.toString();
             ps.setString(1, todayText);
             ps.setString(2, todayText);
             ps.setString(3, expiryLimit.toString());
             ps.setString(4, todayText);
             ps.setString(5, todayText);
-            ps.setString(6, todayText);
+            ps.setInt(6, householdId);
             ps.setString(7, todayText);
-            ps.setString(8, store == null ? "" : store);   // "" matches no store: nothing is counted at a store
-            ps.setString(9, todayText);
+            ps.setString(8, todayText);
+            ps.setString(9, store == null ? "" : store);   // "" matches no store: nothing is counted at a store
             ps.setString(10, todayText);
+            ps.setString(11, todayText);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new PantryCoverage(rs.getInt("recipe_id"), rs.getInt("needed"), rs.getInt("in_stock"),
@@ -158,8 +163,8 @@ public class SuggestionRepository {
      * some is there but its date is before {@code today} (not counted as usable stock), TO_TASTE for "nach
      * Geschmack", otherwise MISSING. Offers are not filled in here (see {@link #offersOnSale}).
      */
-    public Map<Integer, List<PantryLine>> pantryLines(Collection<Integer> recipeIds, LocalDate expiryLimit,
-                                                      LocalDate today) {
+    public Map<Integer, List<PantryLine>> pantryLines(int householdId, Collection<Integer> recipeIds,
+                                                      LocalDate expiryLimit, LocalDate today) {
         if (recipeIds.isEmpty()) {
             return Map.of();
         }
@@ -167,9 +172,12 @@ public class SuggestionRepository {
         String sql = "SELECT ri.recipe_ingredient_recipe_id AS recipe_id, ii.inventory_item_id, " +
                 "ii.inventory_item_name_deutsch, ii.inventory_item_name_english, " +
                 "ri.recipe_ingredient_quantity_needed, ri.recipe_ingredient_unit, ri.recipe_ingredient_to_taste, " +
-                "ii.inventory_item_quantity, ii.inventory_item_unit, ii.inventory_item_earliest_exp_date " +
+                "COALESCE(hs.household_stock_quantity, 0) AS inventory_item_quantity, ii.inventory_item_unit, " +
+                "hs.household_stock_earliest_exp_date AS inventory_item_earliest_exp_date " +
                 "FROM recipe_ingredient ri " +
                 "JOIN inventory_item ii ON ii.inventory_item_id = ri.recipe_ingredient_item_id " +
+                "LEFT JOIN household_stock hs ON hs.household_stock_item_id = ii.inventory_item_id " +
+                "  AND hs.household_stock_household_id = ? " +
                 "WHERE ri.recipe_ingredient_recipe_id IN (" + placeholders(recipeIds.size()) + ") " +
                 "ORDER BY ri.recipe_ingredient_recipe_id, " +
                 "COALESCE(ii.inventory_item_name_deutsch, ii.inventory_item_name_english), ii.inventory_item_id";
@@ -177,6 +185,7 @@ public class SuggestionRepository {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             int i = 1;
+            ps.setInt(i++, householdId);
             for (int id : recipeIds) {
                 ps.setInt(i++, id);
             }

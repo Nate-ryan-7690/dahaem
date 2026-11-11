@@ -16,9 +16,9 @@ public class SuggestionService {
         this.repository = repository;
     }
 
-    /** Recipes ranked by how many ingredients are inventory items expiring within the next `days` days. */
-    public List<RecipeSuggestion> suggestByExpiring(int days) {
-        return repository.findRankedByExpiring(LocalDate.now().plusDays(days));
+    /** Recipes ranked by how many ingredients are inventory items of the household's stock expiring within the next `days` days. */
+    public List<RecipeSuggestion> suggestByExpiring(int householdId, int days) {
+        return repository.findRankedByExpiring(householdId, LocalDate.now().plusDays(days));
     }
 
     /** Recipes ranked by how many ingredients are currently on sale. */

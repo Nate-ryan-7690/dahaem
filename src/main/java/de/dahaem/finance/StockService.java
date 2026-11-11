@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Takes food out of stock, in the item's own unit (g, ml, Stück). Using it and throwing it away are the same action: the
+ * Takes food out of a household's stock, in the item's own unit (g, ml, Stück). Using it and throwing it away are the same action: the
  * amount leaves the batch that expires first, the item's quantity goes down, and its earliest expiry date is worked out again from the batches that are left.
  * No SQL here. Everything runs in one transaction on the item's locked row.
  */
@@ -29,14 +29,14 @@ public class StockService {
      * The batches (purchases) of an item, in the order they are used (earliest expiry first), with what is left of each in
      * the item's own unit. Used-up batches are left out unless {@code includeUsedUp}. Empty if there is no such item.
      */
-    public Optional<List<StockBatch>> batches(int inventoryItemId, boolean includeUsedUp) {
-        Optional<Item> found = inventoryRepository.findById(inventoryItemId);
+    public Optional<List<StockBatch>> batches(int householdId, int inventoryItemId, boolean includeUsedUp) {
+        Optional<Item> found = inventoryRepository.findById(householdId, inventoryItemId);
         if (found.isEmpty()) {
             return Optional.empty();
         }
         String unit = found.get().getUnit();
         List<StockBatch> out = new ArrayList<>();
-        for (PurchaseRepository.BatchRow row : purchaseRepository.findBatchesOfItem(inventoryItemId)) {
+        for (PurchaseRepository.BatchRow row : purchaseRepository.findBatchesOfItem(householdId, inventoryItemId)) {
             int remaining = row.remaining() != null ? row.remaining()
                     : row.quantityPurchased() * StockAmounts.perPack(row.packSize(), row.packUnit(), unit);
             if (remaining > 0 || includeUsedUp) {
@@ -54,13 +54,13 @@ public class StockService {
      * or typed in by hand) is only counted down; when no purchase batch is left the stored date is kept unless the
      * item is now empty, in which case it is cleared.
      */
-    public Optional<Item> use(int inventoryItemId, int quantity) {
+    public Optional<Item> use(int householdId, int inventoryItemId, int quantity) {
         if (quantity <= 0) {
             throw new IllegalArgumentException("quantity must be greater than 0");
         }
         Connection con = purchaseRepository.openTransaction();
         try {
-            Optional<Item> found = inventoryRepository.findByIdForUpdate(con, inventoryItemId);
+            Optional<Item> found = inventoryRepository.findByIdForUpdate(con, householdId, inventoryItemId);
             if (found.isEmpty()) {
                 con.rollback();
                 return Optional.empty();
@@ -71,7 +71,7 @@ public class StockService {
             }
 
             int toTake = quantity;
-            for (PurchaseRepository.Batch batch : purchaseRepository.lockBatchesWithStock(con, inventoryItemId)) {
+            for (PurchaseRepository.Batch batch : purchaseRepository.lockBatchesWithStock(con, householdId, inventoryItemId)) {
                 if (toTake == 0) {
                     break;
                 }
@@ -83,11 +83,11 @@ public class StockService {
             }
 
             int newQuantity = item.getQuantity() - quantity;
-            LocalDate newDate = purchaseRepository.earliestExpiryWithStock(con, inventoryItemId);
+            LocalDate newDate = purchaseRepository.earliestExpiryWithStock(con, householdId, inventoryItemId);
             if (newDate == null) {
                 newDate = newQuantity == 0 ? null : item.getEarliestExpDate();
             }
-            inventoryRepository.setStock(con, inventoryItemId, newQuantity, newDate);
+            inventoryRepository.setStock(con, householdId, inventoryItemId, newQuantity, newDate);
             con.commit();
             return Optional.of(new Item(item.getId(), item.getNameEnglish(), item.getNameDeutsch(), newQuantity,
                     item.getUnit(), item.getCategory(), item.getSubcategory(), newDate));

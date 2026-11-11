@@ -3,6 +3,7 @@ package de.dahaem.finance;
 import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import de.dahaem.stores.StoreRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,12 +31,14 @@ class PurchaseServiceNewProductTest {
 
     private PurchaseRepository purchaseRepository;
     private PurchaseService service;
+    private int household;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
         TestDatabase.reset();
         purchaseRepository = new PurchaseRepository();
         service = new PurchaseService(purchaseRepository, new StoreRepository(), new InventoryRepository());
+        household = TestHousehold.defaultHousehold();
     }
 
     @AfterEach
@@ -45,7 +48,7 @@ class PurchaseServiceNewProductTest {
 
     @Test
     void recordingABrandNewProductCreatesStoreBrandInventoryItemStoreItemAndPurchase() throws SQLException {
-        int purchaseId = service.recordNewProductPurchase("Rewe", "Ja!", null,
+        int purchaseId = service.recordNewProductPurchase(household, "Rewe", "Ja!", null,
                 "oat drink", "hafergetränk", "dairy alternative",
                 "ml", 1000, 1.19,
                 2, 2.38, LocalDate.of(2026, 9, 25), LocalDate.of(2026, 12, 1));
@@ -63,7 +66,7 @@ class PurchaseServiceNewProductTest {
         int storeItemId = soleStoreItemId();
         assertEquals(inventoryItemId, storeItemInventoryItemId(storeItemId));
 
-        Purchase purchase = purchaseRepository.findAll().get(0);
+        Purchase purchase = purchaseRepository.findAll(household).get(0);
         assertEquals(storeItemId, purchase.getStoreItemId());
         assertEquals(2, purchase.getQuantityPurchased());
         assertEquals(2.38, purchase.getPricePaid(), 0.001);
@@ -73,7 +76,7 @@ class PurchaseServiceNewProductTest {
     void recordingAgainstAnExistingInventoryItemReusesItInsteadOfCreatingAGenericOne() throws SQLException {
         int existingItemId = seedInventoryItem("carrots", "karotten", "vegetable");
 
-        service.recordNewProductPurchase("Aldi", "Gut Bio", existingItemId,
+        service.recordNewProductPurchase(household, "Aldi", "Gut Bio", existingItemId,
                 null, null, null,
                 "g", 500, 0.99,
                 1, 0.99, LocalDate.of(2026, 9, 25), LocalDate.of(2026, 10, 10));
@@ -84,12 +87,12 @@ class PurchaseServiceNewProductTest {
 
     @Test
     void reRecordingTheSameNewProductDoesNotDuplicateTheStoreItem() throws SQLException {
-        service.recordNewProductPurchase("Rewe", "Ja!", null,
+        service.recordNewProductPurchase(household, "Rewe", "Ja!", null,
                 "oat drink", "hafergetränk", "dairy alternative",
                 "ml", 1000, 1.19,
                 1, 1.19, LocalDate.of(2026, 9, 25), LocalDate.of(2026, 12, 1));
 
-        service.recordNewProductPurchase("Rewe", "Ja!", null,
+        service.recordNewProductPurchase(household, "Rewe", "Ja!", null,
                 "oat drink", "hafergetränk", "dairy alternative",
                 "ml", 1000, 1.19,
                 1, 1.19, LocalDate.of(2026, 9, 26), LocalDate.of(2026, 12, 5));
@@ -98,7 +101,7 @@ class PurchaseServiceNewProductTest {
         assertEquals(1, countBrands());
         assertEquals(1, countInventoryItems(), "the second purchase must reuse the generic item created by the first");
         assertEquals(1, countStoreItems(), "the second purchase must reuse the store_item created by the first");
-        assertEquals(2, purchaseRepository.findAll().size());
+        assertEquals(2, purchaseRepository.findAll(household).size());
 
         int inventoryItemId = soleInventoryItemId();
         assertEquals(2000, inventoryQuantity(inventoryItemId), "both 1000 ml packs must add to the same inventory_item");
@@ -170,7 +173,8 @@ class PurchaseServiceNewProductTest {
     private int inventoryQuantity(int inventoryItemId) throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
-                     "SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = ?")) {
+                     "SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock "
+                             + "WHERE household_stock_item_id = ? AND household_stock_household_id = " + household)) {
             ps.setInt(1, inventoryItemId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
@@ -182,7 +186,8 @@ class PurchaseServiceNewProductTest {
     private String inventoryEarliestExpDate(int inventoryItemId) throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
-                     "SELECT inventory_item_earliest_exp_date FROM inventory_item WHERE inventory_item_id = ?")) {
+                     "SELECT MIN(household_stock_earliest_exp_date) FROM household_stock "
+                             + "WHERE household_stock_item_id = ? AND household_stock_household_id = " + household)) {
             ps.setInt(1, inventoryItemId);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();

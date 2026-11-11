@@ -12,6 +12,7 @@ import de.dahaem.tags.TagFixtures;
 import de.dahaem.tags.TagRepository;
 import de.dahaem.tags.TagService;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,10 +39,12 @@ class PantrySuggestionServiceTest {
     private DietFilterService dietFilter;
     private DietRules noRules;
     private final LocalDate today = LocalDate.now();
+    private int household;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
         TestDatabase.reset();
+        household = TestHousehold.defaultHousehold();
         repository = new SuggestionRepository();
         dietFilter = new DietFilterService(new DietFilterRepository(), DietPresets.load(DietPresets.DEFAULT_FILE), 0,
                 System::nanoTime);
@@ -74,15 +77,15 @@ class PantrySuggestionServiceTest {
         seedStoreItem(100, 1, 12);
         seedDiscount(1000, 100, today.minusDays(1), today.plusDays(3), 0.99);
 
-        PantryCoverage c = repository.coverageByRecipe(today.plusDays(7), today, "Aldi").get(0);
+        PantryCoverage c = repository.coverageByRecipe(household, today.plusDays(7), today, "Aldi").get(0);
 
         assertEquals(4, c.needed());
         assertEquals(2, c.inStock());
         assertEquals(1, c.expiring());
         assertEquals(1, c.missingOnSale());
         assertEquals(1, c.missingOnSaleAtStore());
-        assertEquals(0, repository.coverageByRecipe(today.plusDays(7), today, "Edeka").get(0).missingOnSaleAtStore());
-        assertEquals(0, repository.coverageByRecipe(today.plusDays(7), today, null).get(0).missingOnSaleAtStore());
+        assertEquals(0, repository.coverageByRecipe(household, today.plusDays(7), today, "Edeka").get(0).missingOnSaleAtStore());
+        assertEquals(0, repository.coverageByRecipe(household, today.plusDays(7), today, null).get(0).missingOnSaleAtStore());
     }
 
     @Test
@@ -97,7 +100,7 @@ class PantrySuggestionServiceTest {
         seedDiscount(1000, 100, today.minusDays(10), today.minusDays(1), 0.99);   // expired
         seedDiscount(1001, 101, today.plusDays(1), today.plusDays(5), 0.99);      // starts tomorrow
 
-        assertEquals(0, repository.coverageByRecipe(today.plusDays(7), today, null).get(0).missingOnSale());
+        assertEquals(0, repository.coverageByRecipe(household, today.plusDays(7), today, null).get(0).missingOnSale());
         assertTrue(repository.offersOnSale(List.of(12, 13), today).isEmpty());
     }
 
@@ -119,7 +122,7 @@ class PantrySuggestionServiceTest {
         seedDiscount(1001, 101, today, today.plusDays(3), 1.19);
         seedDiscount(1002, 102, today, today.plusDays(3), 0.99);
 
-        PantrySuggestionService.Entry entry = service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(1, 24))
+        PantrySuggestionService.Entry entry = service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24))
                 .items().get(0);
 
         assertEquals(PantryLine.Status.EXPIRING, line(entry, 10).status());
@@ -143,7 +146,7 @@ class PantrySuggestionServiceTest {
         seedStoreItem(100, 1, 10);
         seedDiscount(1000, 100, today, today.plusDays(3), 0.99);
 
-        PantrySuggestionService.Result result = service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(1, 24));
+        PantrySuggestionService.Result result = service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24));
 
         assertEquals(List.of("AllInStock", "AllOnSale"), result.items().stream().map(e -> e.recipe().getName()).toList());
         assertEquals(2, result.total());
@@ -155,7 +158,7 @@ class PantrySuggestionServiceTest {
         seedItem(10, "Pasta", 0, null);
         seedIngredient(10, 1, false);
 
-        assertEquals(0, service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
+        assertEquals(0, service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
     }
 
     @Test
@@ -166,12 +169,12 @@ class PantrySuggestionServiceTest {
         seedIngredient(10, 1, false);
         seedIngredient(10, 2, false);
 
-        assertEquals(2, service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
-        assertEquals(1, service.suggest("suppe", null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
-        assertEquals(0, service.suggest(null, 10, null, null, null, null, noRules, PageRequest.of(1, 24)).total(),
+        assertEquals(2, service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
+        assertEquals(1, service.suggest(household, "suppe", null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
+        assertEquals(0, service.suggest(household, null, 10, null, null, null, null, noRules, PageRequest.of(1, 24)).total(),
                 "both recipes take 40 minutes");
-        assertEquals(2, service.suggest(null, 45, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
-        assertEquals(0, service.suggest(null, null, "Aldi", null, null, null, noRules, PageRequest.of(1, 24)).total(),
+        assertEquals(2, service.suggest(household, null, 45, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
+        assertEquals(0, service.suggest(household, null, null, "Aldi", null, null, null, noRules, PageRequest.of(1, 24)).total(),
                 "no missing ingredient is on sale at Aldi");
     }
 
@@ -183,12 +186,12 @@ class PantrySuggestionServiceTest {
             seedIngredient(10, i, false);
         }
 
-        PantrySuggestionService.Result second = service.suggest(null, null, null, null, null, "name", noRules, PageRequest.of(2, 2));
+        PantrySuggestionService.Result second = service.suggest(household, null, null, null, null, null, "name", noRules, PageRequest.of(2, 2));
 
         assertEquals(5, second.total());
         assertEquals(3, second.totalPages());
         assertEquals(List.of("Rezept 3", "Rezept 4"), second.items().stream().map(e -> e.recipe().getName()).toList());
-        assertTrue(service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(9, 2)).items().isEmpty());
+        assertTrue(service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(9, 2)).items().isEmpty());
     }
 
     // ---------- expired stock: shown, but not usable ----------
@@ -205,7 +208,7 @@ class PantrySuggestionServiceTest {
         seedStoreItem(100, 1, 10);
         seedDiscount(1000, 100, today, today.plusDays(3), 0.99);
 
-        PantryCoverage c = repository.coverageByRecipe(today.plusDays(7), today, "Aldi").get(0);
+        PantryCoverage c = repository.coverageByRecipe(household, today.plusDays(7), today, "Aldi").get(0);
 
         assertEquals(3, c.needed());
         assertEquals(2, c.inStock(), "the expired onion is not usable stock");
@@ -214,7 +217,7 @@ class PantrySuggestionServiceTest {
         assertEquals(1, c.missingOnSale(), "an expired ingredient on sale counts as a missing one on sale");
         assertEquals(1, c.missingOnSaleAtStore());
 
-        PantrySuggestionService.Entry entry = service.suggest(null, null, null, null, null, null, noRules,
+        PantrySuggestionService.Entry entry = service.suggest(household, null, null, null, null, null, null, noRules,
                 PageRequest.of(1, 24)).items().get(0);
         assertEquals(PantryLine.Status.EXPIRED, line(entry, 10).status());
         assertEquals(2, line(entry, 10).stockQuantity(), "the amount and the date are still shown");
@@ -233,7 +236,7 @@ class PantrySuggestionServiceTest {
         seedIngredient(10, 1, false);
         seedIngredient(11, 2, false);
 
-        PantrySuggestionService.Result result = service.suggest(null, null, null, null, null, null, noRules,
+        PantrySuggestionService.Result result = service.suggest(household, null, null, null, null, null, null, noRules,
                 PageRequest.of(1, 24));
 
         assertEquals(List.of("OnGoodStock"), result.items().stream().map(e -> e.recipe().getName()).toList(),
@@ -253,17 +256,17 @@ class PantrySuggestionServiceTest {
         TagFixtures.animal(11, "Schwein");
         TagFixtures.tag(2, "Schwein", "Tier", "derived");
 
-        assertEquals(2, service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
+        assertEquals(2, service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total());
 
         DietRules noPork = dietFilter.rules(null, null, List.of(11), null, null, false);
-        PantrySuggestionService.Result result = service.suggest(null, null, null, null, null, null, noPork,
+        PantrySuggestionService.Result result = service.suggest(household, null, null, null, null, null, null, noPork,
                 PageRequest.of(1, 24));
 
         assertEquals(1, result.total());
         assertEquals(1, result.totalMatching());
         assertEquals(List.of("Gemuesepfanne"), result.items().stream().map(e -> e.recipe().getName()).toList());
         assertEquals(DietStatus.OK, result.items().get(0).diet().status());
-        assertEquals(null, service.suggest(null, null, null, null, null, null, noRules, PageRequest.of(1, 24))
+        assertEquals(null, service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24))
                 .items().get(0).diet(), "without rules there is no verdict");
     }
 
@@ -277,7 +280,7 @@ class PantrySuggestionServiceTest {
         seedIngredient(11, 2, false);
 
         DietRules avoidMushrooms = dietFilter.rules(null, null, null, null, List.of(10), false);
-        PantrySuggestionService.Result result = service.suggest(null, null, null, null, null, "name",
+        PantrySuggestionService.Result result = service.suggest(household, null, null, null, null, null, "name",
                 avoidMushrooms, PageRequest.of(1, 24));
 
         assertEquals(List.of("Zzz Ohne Pilze", "Aaa Mit Pilzen"),
@@ -295,7 +298,7 @@ class PantrySuggestionServiceTest {
             seedIngredient(10, i, false);
         }
 
-        PantrySuggestionService.Result first = service.suggest(null, null, null, null, null, "name", noRules,
+        PantrySuggestionService.Result first = service.suggest(household, null, null, null, null, null, "name", noRules,
                 PageRequest.of(1, 100));
         assertEquals(200, first.total());
         assertEquals(205, first.totalMatching());
@@ -303,13 +306,13 @@ class PantrySuggestionServiceTest {
         assertEquals(2, first.totalPages());
         assertEquals(100, first.items().size());
 
-        PantrySuggestionService.Result second = service.suggest(null, null, null, null, null, "name", noRules,
+        PantrySuggestionService.Result second = service.suggest(household, null, null, null, null, null, "name", noRules,
                 PageRequest.of(2, 100));
         assertEquals("Rezept 200", second.items().get(99).recipe().getName(), "the best 200 in name order");
-        assertTrue(service.suggest(null, null, null, null, null, "name", noRules, PageRequest.of(3, 100)).items()
+        assertTrue(service.suggest(household, null, null, null, null, null, "name", noRules, PageRequest.of(3, 100)).items()
                 .isEmpty(), "nothing past the cap");
 
-        PantrySuggestionService.Result narrowed = service.suggest("Rezept 20", null, null, null, null, null,
+        PantrySuggestionService.Result narrowed = service.suggest(household, "Rezept 20", null, null, null, null, null,
                 noRules, PageRequest.of(1, 100));
         assertEquals(8, narrowed.total(), "020, 120 and 200-205 contain both words: narrowing is below the cap");
         assertEquals(false, narrowed.capped());
@@ -324,8 +327,10 @@ class PantrySuggestionServiceTest {
     }
 
     private void seedItem(int id, String name, int quantity, LocalDate earliestExpDate) throws SQLException {
-        String exp = earliestExpDate == null ? "NULL" : "'" + earliestExpDate + "'";
-        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (" + id + ", '" + name + "', NULL, " + quantity + ", 'pcs', 'Misc', NULL, " + exp + ")");
+        exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (" + id + ", '" + name + "', NULL, 0, 'pcs', 'Misc', NULL, NULL)");
+        if (quantity != 0 || earliestExpDate != null) {
+            TestHousehold.setStock(household, id, quantity, earliestExpDate == null ? null : earliestExpDate.toString());
+        }
     }
 
     private void seedIngredient(int itemId, int recipeId, boolean toTaste) throws SQLException {

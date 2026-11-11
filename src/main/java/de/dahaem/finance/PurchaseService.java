@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * Business logic for purchases. No SQL here, no UI here.
- * Recording a purchase touches both purchase_history and the linked inventory_item,
+ * Recording a purchase touches both purchase_history and the household's stock of the linked inventory_item,
  * so it runs both writes in one transaction: either both land or neither does.
  */
 public class PurchaseService {
@@ -30,29 +30,29 @@ public class PurchaseService {
         this.inventoryRepository = inventoryRepository;
     }
 
-    public List<Purchase> allPurchases() {
-        return repository.findAll();
+    public List<Purchase> allPurchases(int householdId) {
+        return repository.findAll(householdId);
     }
 
-    public double spendingTotal() {
-        return repository.spendingTotal();
+    public double spendingTotal(int householdId) {
+        return repository.spendingTotal(householdId);
     }
 
-    public double spendingBetween(LocalDate from, LocalDate to) {
-        return repository.spendingBetween(from, to);
+    public double spendingBetween(int householdId, LocalDate from, LocalDate to) {
+        return repository.spendingBetween(householdId, from, to);
     }
 
     /**
      * Records a purchase and applies it to inventory in one transaction: inserts the
-     * purchase_history row, then (via store_item.store_item_item_id) increases the linked
-     * inventory_item's quantity by {@code quantityPurchased} and pulls its earliest expiration
+     * purchase_history row, then (via store_item.store_item_item_id) increases the household's
+     * stock of the linked inventory_item by {@code quantityPurchased} and pulls its earliest expiration
      * date down to {@code expirationDate} if that is sooner. Returns the new purchase's id.
      */
-    public int recordPurchase(int storeItemId, Integer discountId, boolean wasDiscounted, LocalDate purchaseDate,
-                               int quantityPurchased, double pricePaid, LocalDate expirationDate) {
+    public int recordPurchase(int householdId, int storeItemId, Integer discountId, boolean wasDiscounted,
+                               LocalDate purchaseDate, int quantityPurchased, double pricePaid, LocalDate expirationDate) {
         Connection con = repository.openTransaction();
         try {
-            int purchaseId = repository.insert(con, storeItemId, discountId, wasDiscounted, purchaseDate,
+            int purchaseId = repository.insert(con, householdId, storeItemId, discountId, wasDiscounted, purchaseDate,
                     quantityPurchased, pricePaid, expirationDate);
 
             PurchaseRepository.StoreItemStock stock = repository.findStoreItemStock(con, storeItemId);
@@ -62,7 +62,7 @@ public class PurchaseService {
             // stock is counted in the item's own unit: each pack adds its size (500 g packs x 2 = 1000 g)
             int added = Math.multiplyExact(quantityPurchased,
                     StockAmounts.perPack(stock.packSize(), stock.packUnit(), stock.itemUnit()));
-            repository.applyPurchaseToInventory(con, stock.inventoryItemId(), added, expirationDate);
+            repository.applyPurchaseToInventory(con, householdId, stock.inventoryItemId(), added, expirationDate);
 
             con.commit();
             return purchaseId;
@@ -88,14 +88,14 @@ public class PurchaseService {
      * <p>Exactly one of {@code existingInventoryItemId} or the {@code newItem*} fields must be used:
      * pass an id to reuse a known item, or leave it null and pass name/category to create a generic one.
      */
-    public int recordNewProductPurchase(String storeName, String brandName, Integer existingInventoryItemId,
+    public int recordNewProductPurchase(int householdId, String storeName, String brandName, Integer existingInventoryItemId,
                                          String newItemNameEnglish, String newItemNameDeutsch, String newItemCategory,
                                          String packageUnit, int packageSize, Double normalPrice,
                                          int quantityPurchased, double pricePaid, LocalDate purchaseDate,
                                          LocalDate expirationDate) {
         int storeItemId = findOrCreateStoreItem(storeName, brandName, existingInventoryItemId, newItemNameEnglish,
                 newItemNameDeutsch, newItemCategory, packageUnit, packageSize, normalPrice);
-        return recordPurchase(storeItemId, null, false, purchaseDate, quantityPurchased, pricePaid, expirationDate);
+        return recordPurchase(householdId, storeItemId, null, false, purchaseDate, quantityPurchased, pricePaid, expirationDate);
     }
 
     /**

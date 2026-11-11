@@ -370,15 +370,20 @@ public class ShoppingListRepository {
                 + "sli.shopping_list_item_quantity_needed, sli.shopping_list_item_store_item_id, "
                 + "sli.shopping_list_item_is_manual, sli.shopping_list_item_needs_review, "
                 + "sli.shopping_list_item_purchase_status, "
-                + "ii.inventory_item_quantity, ii.inventory_item_unit AS stock_unit "
+                + "CASE WHEN ii.inventory_item_id IS NULL THEN NULL ELSE COALESCE(hs.household_stock_quantity, 0) END "
+                + "AS inventory_item_quantity, ii.inventory_item_unit AS stock_unit "
                 + "FROM shopping_list_item sli "
                 + "LEFT JOIN inventory_item ii ON ii.inventory_item_id = sli.shopping_list_item_inventory_item_id "
+                + "LEFT JOIN household_stock hs ON hs.household_stock_item_id = ii.inventory_item_id "
+                + "AND hs.household_stock_household_id = (SELECT shopping_list_household_id FROM shopping_list "
+                + "WHERE shopping_list_id = ?) "
                 + "WHERE sli.shopping_list_id = ? "
                 + "ORDER BY sli.shopping_list_item_id";
         List<ShoppingListItemRow> out = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, shoppingListId);
+            ps.setInt(2, shoppingListId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     out.add(new ShoppingListItemRow(

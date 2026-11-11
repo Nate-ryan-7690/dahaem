@@ -4,6 +4,7 @@ import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.inventory.Item;
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class StockServiceTest {
 
     private PurchaseService purchases;
     private StockService stock;
+    private int household;
 
     @BeforeEach
     void setUp() throws IOException, SQLException {
@@ -35,6 +37,7 @@ class StockServiceTest {
         PurchaseRepository repository = new PurchaseRepository();
         purchases = new PurchaseService(repository);
         stock = new StockService(repository, new InventoryRepository());
+        household = TestHousehold.defaultHousehold();
         exec("INSERT INTO store (store_id, store_name) VALUES (1, 'Aldi')");
         exec("INSERT INTO brand (brand_id, brand_name) VALUES (1, 'TestBrand')");
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_quantity, "
@@ -54,7 +57,7 @@ class StockServiceTest {
         buy(2, "2026-12-10");   // bought first, expires later
         buy(3, "2026-12-01");   // bought second, expires first
 
-        Item item = stock.use(1, 4).orElseThrow();
+        Item item = stock.use(household, 1, 4).orElseThrow();
 
         assertEquals(1, item.getQuantity());
         assertEquals(LocalDate.of(2026, 12, 10), item.getEarliestExpDate(),
@@ -70,7 +73,7 @@ class StockServiceTest {
         buy(3, "2026-12-01");
         buy(2, "2026-12-10");
 
-        Item item = stock.use(1, 1).orElseThrow();
+        Item item = stock.use(household, 1, 1).orElseThrow();
 
         assertEquals(4, item.getQuantity());
         assertEquals(LocalDate.of(2026, 12, 1), item.getEarliestExpDate());
@@ -81,7 +84,7 @@ class StockServiceTest {
     void emptyingTheItemClearsTheDate() throws SQLException {
         buy(2, "2026-12-01");
 
-        Item item = stock.use(1, 2).orElseThrow();
+        Item item = stock.use(household, 1, 2).orElseThrow();
 
         assertEquals(0, item.getQuantity());
         assertNull(item.getEarliestExpDate());
@@ -92,8 +95,8 @@ class StockServiceTest {
     void moreThanInStockIsRefusedAndNothingChanges() throws SQLException {
         buy(2, "2026-12-01");
 
-        assertThrows(IllegalArgumentException.class, () -> stock.use(1, 3));
-        assertThrows(IllegalArgumentException.class, () -> stock.use(1, 0));
+        assertThrows(IllegalArgumentException.class, () -> stock.use(household, 1, 3));
+        assertThrows(IllegalArgumentException.class, () -> stock.use(household, 1, 0));
 
         assertEquals(2, storedQuantity());
         assertEquals(2, remaining("2026-12-01"));
@@ -101,15 +104,14 @@ class StockServiceTest {
 
     @Test
     void unknownItemIsEmpty() {
-        assertTrue(stock.use(999, 1).isEmpty());
+        assertTrue(stock.use(household, 999, 1).isEmpty());
     }
 
     @Test
     void stockWithoutAPurchaseIsOnlyCountedDownAndKeepsItsDate() throws SQLException {
-        exec("UPDATE inventory_item SET inventory_item_quantity = 5, inventory_item_earliest_exp_date = '2026-12-05' "
-                + "WHERE inventory_item_id = 1");
+        TestHousehold.setStock(household, 1, 5, "2026-12-05");
 
-        Item item = stock.use(1, 2).orElseThrow();
+        Item item = stock.use(household, 1, 2).orElseThrow();
 
         assertEquals(3, item.getQuantity());
         assertEquals(LocalDate.of(2026, 12, 5), item.getEarliestExpDate());
@@ -118,7 +120,7 @@ class StockServiceTest {
     // ---------- helpers ----------
 
     private void buy(int quantity, String expires) {
-        purchases.recordPurchase(1, null, false, LocalDate.of(2026, 11, 10), quantity, 1.00, LocalDate.parse(expires));
+        purchases.recordPurchase(household, 1, null, false, LocalDate.of(2026, 11, 10), quantity, 1.00, LocalDate.parse(expires));
     }
 
     /** What is left of the purchase that expires on the given day; NULL (untouched) counts as all of it. */
@@ -128,14 +130,15 @@ class StockServiceTest {
     }
 
     private int storedQuantity() throws SQLException {
-        return queryInt("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1");
+        return queryInt("SELECT COALESCE(SUM(household_stock_quantity), 0) FROM household_stock "
+                + "WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household);
     }
 
     private String storedDate() throws SQLException {
         try (Connection con = Database.getConnection();
              Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery("SELECT inventory_item_earliest_exp_date FROM inventory_item "
-                     + "WHERE inventory_item_id = 1")) {
+             ResultSet rs = st.executeQuery("SELECT MIN(household_stock_earliest_exp_date) FROM household_stock "
+                     + "WHERE household_stock_item_id = 1 AND household_stock_household_id = " + household)) {
             rs.next();
             return rs.getString(1);
         }
