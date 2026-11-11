@@ -82,7 +82,7 @@ public class BarcodeService {
         if (printedName != null && printedName.length() > 200) {
             throw new IllegalArgumentException("'name' must be at most 200 characters");
         }
-        Item item = inventoryRepository.findById(inventoryItemId)
+        Item item = inventoryRepository.findCatalogueItem(inventoryItemId)
                 .orElseThrow(() -> new IllegalArgumentException("No inventory item with id " + inventoryItemId));
         Pack pack = canonicalPack(packSize, unit, item.getUnit());
         Connection con = repository.openTransaction();

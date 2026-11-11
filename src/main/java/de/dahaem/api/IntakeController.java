@@ -54,7 +54,7 @@ public class IntakeController {
      * EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
      */
     @PostMapping
-    public IntakeResult intake(@RequestBody IntakeRequest request) {
+    public IntakeResult intake(@RequestBody IntakeRequest request, Caller caller) {
         if (request.storeName() == null || request.storeName().isBlank() || request.storeName().length() > 100) {
             throw new BadRequestException("'storeName' is required (at most 100 characters)");
         }
@@ -70,7 +70,7 @@ public class IntakeController {
         if (requestId != null && !requestId.matches("[A-Za-z0-9_-]{8,64}")) {
             throw new BadRequestException("'requestId' must be 8 to 64 letters, digits, - or _");
         }
-        IntakeService.Outcome outcome = intakeService.intakeOnce(requestId, request.toString(),
+        IntakeService.Outcome outcome = intakeService.intakeOnce(caller.householdId(), requestId, request.toString(),
                 request.storeName(), Boolean.TRUE.equals(request.createStore()), purchaseDate, request.lines());
         List<IntakeService.LineResult> results = outcome.results();
         int recorded = (int) results.stream().filter(IntakeService.LineResult::ok).count();

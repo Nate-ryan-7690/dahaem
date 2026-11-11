@@ -24,8 +24,8 @@ public class PurchaseController {
     }
 
     @GetMapping("/api/purchases")
-    public List<PurchaseDto> all() {
-        return purchaseService.allPurchases().stream().map(PurchaseDto::from).toList();
+    public List<PurchaseDto> all(Caller caller) {
+        return purchaseService.allPurchases(caller.householdId()).stream().map(PurchaseDto::from).toList();
     }
 
     /**
@@ -34,7 +34,7 @@ public class PurchaseController {
      */
     @PostMapping("/api/purchases")
     @ResponseStatus(HttpStatus.CREATED)
-    public PurchaseDto create(@RequestBody CreatePurchaseRequest request) {
+    public PurchaseDto create(@RequestBody CreatePurchaseRequest request, Caller caller) {
         if (request.storeItemId() == null) {
             throw new BadRequestException("'storeItemId' is required");
         }
@@ -51,7 +51,7 @@ public class PurchaseController {
         boolean wasDiscounted = Boolean.TRUE.equals(request.wasDiscounted());
         LocalDate purchaseDate = request.purchaseDate() != null ? request.purchaseDate() : LocalDate.now();
 
-        int id = purchaseService.recordPurchase(request.storeItemId(), request.discountId(), wasDiscounted,
+        int id = purchaseService.recordPurchase(caller.householdId(), request.storeItemId(), request.discountId(), wasDiscounted,
                 purchaseDate, request.quantityPurchased(), request.pricePaid(), request.expirationDate());
         return new PurchaseDto(id, request.storeItemId(), request.discountId(), wasDiscounted, purchaseDate,
                 request.quantityPurchased(), request.pricePaid(), request.expirationDate());
@@ -61,9 +61,10 @@ public class PurchaseController {
     @GetMapping("/api/analytics/spending")
     public SpendingDto spending(
             @RequestParam(name = "from", required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
-            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to) {
+            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to,
+            Caller caller) {
         if (from == null && to == null) {
-            return new SpendingDto(null, null, purchaseService.spendingTotal());
+            return new SpendingDto(null, null, purchaseService.spendingTotal(caller.householdId()));
         }
         if (from == null || to == null) {
             throw new BadRequestException("'from' and 'to' must be given together (YYYY-MM-DD)");
@@ -71,6 +72,6 @@ public class PurchaseController {
         if (from.isAfter(to)) {
             throw new BadRequestException("'from' must not be after 'to'");
         }
-        return new SpendingDto(from, to, purchaseService.spendingBetween(from, to));
+        return new SpendingDto(from, to, purchaseService.spendingBetween(caller.householdId(), from, to));
     }
 }

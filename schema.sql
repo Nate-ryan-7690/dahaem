@@ -9,6 +9,8 @@ CREATE TABLE inventory_item (
 	inventory_item_id	INTEGER PRIMARY KEY AUTO_INCREMENT,
 	inventory_item_name_english	TEXT NOT NULL,
 	inventory_item_name_deutsch	TEXT,
+	-- LEGACY (migration 0024): the stock of a household is in household_stock now; this column and the expiry date below
+	-- are no longer read or written, they keep the stock as it was at the migration and are dropped later.
 	inventory_item_quantity	INTEGER NOT NULL DEFAULT 0,
 	inventory_item_unit	TEXT NOT NULL,
 	inventory_item_category	TEXT NOT NULL,
@@ -100,6 +102,19 @@ CREATE TABLE household ( household_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 
 ALTER TABLE meal_plan
 	ADD CONSTRAINT meal_plan_household_fk FOREIGN KEY (meal_plan_household_id) REFERENCES household(household_id);
+
+-- What a household has in stock (migration 0024): one row per household and catalogue item that has or had stock.
+-- quantity is in the item's own unit (g, ml, Stück); earliest_exp_date is the earliest expiry among the batches left.
+CREATE TABLE household_stock (
+	household_stock_household_id      INTEGER NOT NULL,
+	household_stock_item_id           INTEGER NOT NULL,
+	household_stock_quantity          INTEGER NOT NULL DEFAULT 0,
+	household_stock_earliest_exp_date DATE NULL,
+	PRIMARY KEY (household_stock_household_id, household_stock_item_id),
+	CONSTRAINT household_stock_household_fk
+		FOREIGN KEY (household_stock_household_id) REFERENCES household(household_id),
+	CONSTRAINT household_stock_item_fk
+		FOREIGN KEY (household_stock_item_id) REFERENCES inventory_item(inventory_item_id));
 
 CREATE TABLE app_user ( user_id INTEGER PRIMARY KEY AUTO_INCREMENT,
 	user_email TEXT NOT NULL UNIQUE,
@@ -288,6 +303,9 @@ CREATE TABLE purchase_history(purchase_history_purchase_id INTEGER PRIMARY KEY A
 
 	purchase_history_purchase_date DATE NOT NULL,
 
+	-- whose purchase it is (migration 0024); NULL only on a purchase made before it
+	purchase_history_household_id INTEGER NULL,
+
 	purchase_history_quantity_purchased INTEGER NOT NULL,
 
 	-- migration 0018: how much of this purchase is still in stock, in the catalogue item's own unit (g, ml, Stück);
@@ -301,6 +319,9 @@ CREATE TABLE purchase_history(purchase_history_purchase_id INTEGER PRIMARY KEY A
 	FOREIGN KEY(purchase_history_store_item_id) REFERENCES store_item(store_item_id),
 
 	FOREIGN KEY(purchase_history_discount_id) REFERENCES store_discount(store_discount_id));
+
+ALTER TABLE purchase_history
+	ADD CONSTRAINT purchase_history_household_fk FOREIGN KEY (purchase_history_household_id) REFERENCES household(household_id);
 
 -- Purchase receipts (migration 0008): every printed line, matched to an item or not; never touches stock.
 

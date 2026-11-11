@@ -181,11 +181,13 @@ public class ShoppingListService {
                                      ShoppingList list) {
         Connection con = repository.openTransaction();
         try {
-            int shoppingListId = repository.insertShoppingList(con,
-                    mealPlanRepository.findHouseholdIdOfPlan(mealPlanId).orElse(null), mealPlanId, today, shoppingDate, from, false);
+            Integer householdId = mealPlanRepository.findHouseholdIdOfPlan(mealPlanId).orElse(null);
+            int shoppingListId = repository.insertShoppingList(con, householdId, mealPlanId, today, shoppingDate, from, false);
 
             for (ShoppingListItem item : list.items()) {
-                Item stock = inventoryRepository.findById(item.inventoryItemId()).orElse(null);
+                // the stock of the household the list (and its plan) belongs to
+                Item stock = householdId == null ? null
+                        : inventoryRepository.findById(householdId, item.inventoryItemId()).orElse(null);
                 double usable = usableStock(stock, shoppingDate);
                 boolean sameUnit = stock != null && sameUnit(item.unit(), stock.getUnit());
                 // Stock is subtracted only in the same unit; otherwise nothing is, and a person reviews the line.
@@ -305,7 +307,7 @@ public class ShoppingListService {
         if (text != null && text.length() > 200) {
             throw new IllegalArgumentException("'name' must be at most 200 characters");
         }
-        if (inventoryItemId != null && inventoryRepository.findById(inventoryItemId).isEmpty()) {
+        if (inventoryItemId != null && inventoryRepository.findCatalogueItem(inventoryItemId).isEmpty()) {
             throw new IllegalArgumentException("No inventory item with id " + inventoryItemId);
         }
         Connection con = repository.openTransaction();

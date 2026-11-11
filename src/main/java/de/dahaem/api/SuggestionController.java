@@ -39,11 +39,12 @@ public class SuggestionController {
 
     /** Recipes ranked by how many ingredients are inventory items expiring within {@code days} days (default 7). */
     @GetMapping("/by-expiring")
-    public List<RecipeSuggestionDto> byExpiring(@RequestParam(name = "days", defaultValue = "7") int days) {
+    public List<RecipeSuggestionDto> byExpiring(@RequestParam(name = "days", defaultValue = "7") int days,
+                                                Caller caller) {
         if (days < 1) {
             throw new BadRequestException("'days' must be 1 or greater");
         }
-        return suggestionService.suggestByExpiring(days).stream().map(RecipeSuggestionDto::from).toList();
+        return suggestionService.suggestByExpiring(caller.householdId(), days).stream().map(RecipeSuggestionDto::from).toList();
     }
 
     /**
@@ -91,10 +92,11 @@ public class SuggestionController {
                                           @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
                                           @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
                                           @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
-                                          @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
+                                          @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear,
+                                          Caller caller) {
         PageRequest request = PageRequest.of(page, pageSize);
         DietRules rules = dietFilter.rules(diet, excludeTags, excludeItems, avoidTags, avoidItems, includeUnclear);
-        PantrySuggestionService.Result result = pantrySuggestions.suggest(q, maxTime, store, minMatches, days, sort,
+        PantrySuggestionService.Result result = pantrySuggestions.suggest(caller.householdId(), q, maxTime, store, minMatches, days, sort,
                 rules, request);
         return new PantrySuggestionPageDto(result.items().stream().map(PantrySuggestionDto::from).toList(),
                 result.total(), result.totalMatching(), result.capped(), request.page(), request.pageSize(),

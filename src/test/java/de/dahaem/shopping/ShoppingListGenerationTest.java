@@ -4,6 +4,7 @@ import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -394,12 +395,16 @@ class ShoppingListGenerationTest {
                 + "WHERE shopping_list_item_id = " + itemId));
     }
 
+    /** A plan of the test household; the stock the test seeded into inventory_item is this household's stock. */
     private int createPlan(LocalDate weekStart) throws SQLException {
+        int household = TestHousehold.defaultHousehold();
+        TestHousehold.seedStockOf(household);
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
-                     "INSERT INTO meal_plan (meal_plan_week_start_date) VALUES (?)",
+                     "INSERT INTO meal_plan (meal_plan_household_id, meal_plan_week_start_date) VALUES (?, ?)",
                      Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, weekStart.toString());
+            ps.setInt(1, household);
+            ps.setString(2, weekStart.toString());
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();

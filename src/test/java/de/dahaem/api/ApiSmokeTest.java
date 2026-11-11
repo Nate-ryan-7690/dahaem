@@ -83,6 +83,8 @@ class ApiSmokeTest {
         // the calls act as a user of a household that owns the demo meal plan
         int household = TestHousehold.createAndActAs("Smoke Haushalt", null);
         TestHousehold.adoptOrphanPlans(household);
+        TestHousehold.adoptOrphanPurchases(household);
+        TestHousehold.seedStockOf(household);   // the demo data writes the stock into the legacy columns
     }
 
     @AfterAll
@@ -1150,9 +1152,13 @@ class ApiSmokeTest {
     private static void setEarliestExpDate(int inventoryItemId, LocalDate date) throws SQLException {
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(
-                     "UPDATE inventory_item SET inventory_item_earliest_exp_date = ? WHERE inventory_item_id = ?")) {
-            ps.setString(1, date == null ? null : date.toString());
+                     "INSERT INTO household_stock (household_stock_household_id, household_stock_item_id, "
+                             + "household_stock_quantity, household_stock_earliest_exp_date) "
+                             + "VALUES ((SELECT household_id FROM household_member WHERE user_id = ?), ?, 0, ?) "
+                             + "ON DUPLICATE KEY UPDATE household_stock_earliest_exp_date = VALUES(household_stock_earliest_exp_date)")) {
+            ps.setInt(1, TestHousehold.actingUserId());
             ps.setInt(2, inventoryItemId);
+            ps.setString(3, date == null ? null : date.toString());
             ps.executeUpdate();
         }
     }

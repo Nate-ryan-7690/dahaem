@@ -59,14 +59,16 @@ public class IntakeService {
      * that fails before anything was recorded (an unknown store) gives its id back, so the corrected request can be sent
      * with the same id. Without a request id this is plain {@link #intake}.
      */
-    public Outcome intakeOnce(String requestId, String fingerprint, String storeName, boolean createStore,
-                              LocalDate purchaseDate, List<Line> lines) {
+    public Outcome intakeOnce(int householdId, String requestId, String fingerprint, String storeName,
+                              boolean createStore, LocalDate purchaseDate, List<Line> lines) {
         if (requestId == null) {
-            return new Outcome(intake(storeName, createStore, purchaseDate, lines), false);
+            return new Outcome(intake(householdId, storeName, createStore, purchaseDate, lines), false);
         }
+        // the same request id of two households are two requests: the stored key is made from both
+        String key = sha256(householdId + ":" + requestId);
         String hash = sha256(fingerprint);
-        if (!requests.claim(requestId, hash)) {
-            IntakeRequestRepository.Stored stored = requests.find(requestId)
+        if (!requests.claim(key, hash)) {
+            IntakeRequestRepository.Stored stored = requests.find(key)
                     .orElseThrow(() -> new IntakeConflictException("REQUEST_IN_PROGRESS",
                             "This request id was just given back: send the request again"));
             if (!stored.hash().equals(hash)) {
@@ -80,11 +82,11 @@ public class IntakeService {
             return new Outcome(fromJson(stored.resultJson()), true);
         }
         try {
-            List<LineResult> results = intake(storeName, createStore, purchaseDate, lines);
-            requests.complete(requestId, toJson(results));
+            List<LineResult> results = intake(householdId, storeName, createStore, purchaseDate, lines);
+            requests.complete(key, toJson(results));
             return new Outcome(results, false);
         } catch (RuntimeException e) {
-            requests.release(requestId);   // every line is handled on its own; only the store check can fail before any is recorded
+            requests.release(key);   // every line is handled on its own; only the store check can fail before any is recorded
             throw e;
         }
     }
@@ -135,7 +137,8 @@ public class IntakeService {
      * is set, so a typo cannot add a bogus store: otherwise an UnknownStoreException (400 UNKNOWN_STORE) and nothing is
      * recorded.
      */
-    public List<LineResult> intake(String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines) {
+    public List<LineResult> intake(int householdId, String storeName, boolean createStore, LocalDate purchaseDate,
+                                   List<Line> lines) {
         String wanted = storeName.trim();
         Optional<StoreRef> existing = stores.findStoreByName(wanted);
         if (existing.isEmpty() && !createStore) {
@@ -144,12 +147,12 @@ public class IntakeService {
         String store = existing.map(StoreRef::name).orElse(wanted);
         List<LineResult> out = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) {
-            out.add(one(i, store, purchaseDate, lines.get(i)));
+            out.add(one(householdId, i, store, purchaseDate, lines.get(i)));
         }
         return out;
     }
 
-    private LineResult one(int index, String storeName, LocalDate purchaseDate, Line line) {
+    private LineResult one(int householdId, int index, String storeName, LocalDate purchaseDate, Line line) {
         String shown = line.barcode();
         try {
             String code = Gtin.normalize(line.barcode());
@@ -196,7 +199,7 @@ public class IntakeService {
             int storeItemId = purchases.findOrCreateStoreItem(storeName, brand, product.inventoryItemId(), null, null,
                     null, packUnit, packSize, null);
             barcodes.link(code, storeItemId);
-            int purchaseId = purchases.recordPurchase(storeItemId, null, false, purchaseDate, packs, price,
+            int purchaseId = purchases.recordPurchase(householdId, storeItemId, null, false, purchaseDate, packs, price,
                     line.expirationDate());
             int added = packs * StockAmounts.perPack(packSize, packUnit, product.itemUnit());
             return new LineResult(index, code, true, purchaseId, storeItemId, added, product.itemUnit(), null, null);

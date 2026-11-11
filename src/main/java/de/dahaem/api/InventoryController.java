@@ -32,11 +32,11 @@ public class InventoryController {
      * item as it is now, with its earliest expiry date worked out again.
      */
     @PostMapping("/{id}/use")
-    public ItemDto use(@PathVariable("id") int id, @RequestBody UseStockRequest request) {
+    public ItemDto use(@PathVariable("id") int id, @RequestBody UseStockRequest request, Caller caller) {
         if (request.quantity() == null || request.quantity() <= 0) {
             throw new BadRequestException("'quantity' must be greater than 0");
         }
-        return stockService.use(id, request.quantity()).map(ItemDto::from)
+        return stockService.use(caller.householdId(), id, request.quantity()).map(ItemDto::from)
                 .orElseThrow(() -> new NotFoundException("No inventory item with id " + id));
     }
 
@@ -47,14 +47,14 @@ public class InventoryController {
      */
     @GetMapping("/{id}/batches")
     public List<StockBatch> batches(@PathVariable("id") int id,
-                                    @RequestParam(name = "all", defaultValue = "false") boolean all) {
-        return stockService.batches(id, all)
+                                    @RequestParam(name = "all", defaultValue = "false") boolean all, Caller caller) {
+        return stockService.batches(caller.householdId(), id, all)
                 .orElseThrow(() -> new NotFoundException("No inventory item with id " + id));
     }
 
     @GetMapping
-    public List<ItemDto> all() {
-        return inventoryService.allItems().stream().map(ItemDto::from).toList();
+    public List<ItemDto> all(Caller caller) {
+        return inventoryService.allItems(caller.householdId()).stream().map(ItemDto::from).toList();
     }
 
     /**
@@ -66,28 +66,29 @@ public class InventoryController {
     public ItemPageDto search(@RequestParam(name = "q", required = false) String q,
                               @RequestParam(name = "category", required = false) String category,
                               @RequestParam(name = "page", required = false) Integer page,
-                              @RequestParam(name = "pageSize", required = false) Integer pageSize) {
+                              @RequestParam(name = "pageSize", required = false) Integer pageSize,
+                              Caller caller) {
         PageRequest request = PageRequest.of(page, pageSize);
-        ItemPage result = inventoryService.search(q, category, request.offset(), request.pageSize());
+        ItemPage result = inventoryService.search(caller.householdId(), q, category, request.offset(), request.pageSize());
         return new ItemPageDto(result.items().stream().map(ItemDto::from).toList(), result.total(), request.page(),
                 request.pageSize(), request.totalPages(result.total()));
     }
 
     /** Items expiring within the next {@code days} days (default 7). */
     @GetMapping("/expiring")
-    public List<ItemDto> expiring(@RequestParam(name = "days", defaultValue = "7") int days) {
+    public List<ItemDto> expiring(@RequestParam(name = "days", defaultValue = "7") int days, Caller caller) {
         if (days < 0) {
             throw new BadRequestException("'days' must be 0 or greater");
         }
-        return inventoryService.expiringWithin(days).stream().map(ItemDto::from).toList();
+        return inventoryService.expiringWithin(caller.householdId(), days).stream().map(ItemDto::from).toList();
     }
 
     /** Items at or below {@code threshold} units in stock (default 1). */
     @GetMapping("/low-stock")
-    public List<ItemDto> lowStock(@RequestParam(name = "threshold", defaultValue = "1") int threshold) {
+    public List<ItemDto> lowStock(@RequestParam(name = "threshold", defaultValue = "1") int threshold, Caller caller) {
         if (threshold < 0) {
             throw new BadRequestException("'threshold' must be 0 or greater");
         }
-        return inventoryService.lowStock(threshold).stream().map(ItemDto::from).toList();
+        return inventoryService.lowStock(caller.householdId(), threshold).stream().map(ItemDto::from).toList();
     }
 }

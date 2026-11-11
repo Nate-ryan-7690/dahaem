@@ -665,8 +665,11 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
 - [x] PR 1: `Caller` + migration 0022 + meal plans scoped (`X-Acting-User` now required on the meal plan endpoints; the
   freeze job runs per household). Migration 0022 needs a snapshot and Nate's go-ahead before it runs live.
 - [x] PR 2: shopping lists scoped (migration 0023; lists from a plan take the plan's household, others the oldest). Needs 0022 first. Generating a list still subtracts the shared stock until PR 3.
-- [ ] PR 3: purchases, stock, intake, batches; new `household_stock` table (stock now lives on `inventory_item`), the biggest step.
-- [ ] PR 4: receipts, pantry suggestions, the remaining endpoints, per-household recipe preferred servings, NOT NULL migration.
+- [x] PR 3: stock, purchases, batches, intake and the stock-based suggestions (migration 0024): new `household_stock` table and
+  `purchase_history.purchase_history_household_id`; intake request ids are stored per household. Apply 0024 BEFORE the API starts.
+  The old `inventory_item_quantity` / `inventory_item_earliest_exp_date` columns are frozen (not read or written any more); drop
+  them in PR 4 once nobody needs the rollback.
+- [ ] PR 4: receipts, the remaining endpoints, per-household recipe preferred servings, drop the frozen stock columns, NOT NULL migration.
 - [ ] PR 5: operator tool for a second household; invitations ("Konto erstellen": `household_invite`, admin creates/lists/revokes,
   code shown once, 7 days, single use, hashed, throttled; accepting creates a MEMBER in the inviter's household); frontend pages.
 

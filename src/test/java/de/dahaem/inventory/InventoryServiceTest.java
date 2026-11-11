@@ -2,6 +2,7 @@ package de.dahaem.inventory;
 
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,7 +58,10 @@ class InventoryServiceTest {
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (1, 'Zucchini', NULL, 3, 'pcs', 'Vegetables', NULL, NULL)");
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Apple', 'Apfel', 6, 'pcs', 'Fruit', 'Pome', '2026-10-05')");
 
-        List<Item> items = service.allItems();
+        int household = TestHousehold.defaultHousehold();
+        TestHousehold.seedStockOf(household);
+
+        List<Item> items = service.allItems(household);
 
         assertEquals(2, items.size());
         Item apple = items.get(0);
@@ -83,7 +87,10 @@ class InventoryServiceTest {
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (2, 'Sugar', 'Zucker', 6, 'kg', 'Baking', NULL, NULL)");
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (3, 'Salt', 'Salz', 0, 'kg', 'Baking', NULL, NULL)");
 
-        List<Item> lowStock = service.lowStock(5);
+        int household = TestHousehold.defaultHousehold();
+        TestHousehold.seedStockOf(household);
+
+        List<Item> lowStock = service.lowStock(household, 5);
 
         assertEquals(2, lowStock.size(), "threshold is inclusive, so quantity 5 and 0 stay, 6 is filtered out");
         assertTrue(lowStock.stream().anyMatch(i -> i.getId() == 1));
@@ -99,7 +106,10 @@ class InventoryServiceTest {
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (3, 'BeyondLimit', NULL, 1, 'pcs', 'Misc', NULL, '" + today.plusDays(8) + "')");
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, inventory_item_quantity, inventory_item_unit, inventory_item_category, inventory_item_subcategory, inventory_item_earliest_exp_date) VALUES (4, 'AlreadyExpired', NULL, 1, 'pcs', 'Misc', NULL, '" + today.minusDays(1) + "')");
 
-        List<Item> expiring = service.expiringWithin(7);
+        int household = TestHousehold.defaultHousehold();
+        TestHousehold.seedStockOf(household);
+
+        List<Item> expiring = service.expiringWithin(household, 7);
 
         assertEquals(2, expiring.size());
         assertTrue(expiring.stream().anyMatch(i -> i.getId() == 2), "an item expiring exactly on the limit day must be included");

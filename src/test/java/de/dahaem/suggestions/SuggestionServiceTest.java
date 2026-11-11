@@ -2,6 +2,7 @@ package de.dahaem.suggestions;
 
 import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +50,10 @@ class SuggestionServiceTest {
         seedIngredient(10, 1);
         seedIngredient(11, 2);
 
-        List<RecipeSuggestion> suggestions = service.suggestByExpiring(7);
+        int household = TestHousehold.defaultHousehold();
+        TestHousehold.seedStockOf(household);
+
+        List<RecipeSuggestion> suggestions = service.suggestByExpiring(household, 7);
 
         assertEquals(1, suggestions.size(), "only the recipe with an expiring ingredient should be surfaced");
         RecipeSuggestion top = suggestions.get(0);
@@ -71,7 +75,10 @@ class SuggestionServiceTest {
         seedIngredient(11, 2);
         seedIngredient(12, 2);
 
-        List<RecipeSuggestion> suggestions = service.suggestByExpiring(7);
+        int household = TestHousehold.defaultHousehold();
+        TestHousehold.seedStockOf(household);
+
+        List<RecipeSuggestion> suggestions = service.suggestByExpiring(household, 7);
 
         assertEquals(2, suggestions.size());
         assertEquals(2, suggestions.get(0).getRecipeId(), "the recipe with more matching expiring items ranks first");

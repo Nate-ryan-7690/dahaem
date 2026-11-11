@@ -90,8 +90,8 @@ public class PantrySuggestionService {
      *                   exactly as in the recipe search); null or no rules = no filtering
      * Bad values are an IllegalArgumentException (the API answers 400).
      */
-    public Result suggest(String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays,
-                          String sort, DietRules rules, PageRequest page) {
+    public Result suggest(int householdId, String q, Integer maxTime, String store, Integer minMatches,
+                          Integer expiryDays, String sort, DietRules rules, PageRequest page) {
         int min = minMatches == null ? DEFAULT_MIN_MATCHES : minMatches;
         int days = expiryDays == null ? DEFAULT_EXPIRY_DAYS : expiryDays;
         if (min < 1) {
@@ -108,7 +108,7 @@ public class PantrySuggestionService {
         LocalDate expiryLimit = today.plusDays(days);
 
         List<PantryCoverage> fitting = PantryRanking.filter(
-                suggestions.coverageByRecipe(expiryLimit, today, storeName), min, storeName != null);
+                suggestions.coverageByRecipe(householdId, expiryLimit, today, storeName), min, storeName != null);
         List<Integer> orderedIds = orderedIds(fitting, order, query);
 
         // Diet rules are the household's, so they apply before anything is counted or cut: a recipe it does not eat
@@ -174,7 +174,7 @@ public class PantrySuggestionService {
         }
         List<Recipe> page = recipes.findByIds(pageIds);
         Map<Integer, List<String>> tagNames = tags.tagNamesForRecipes(pageIds);
-        Map<Integer, List<PantryLine>> lines = suggestions.pantryLines(pageIds, expiryLimit, today);
+        Map<Integer, List<PantryLine>> lines = suggestions.pantryLines(householdId, pageIds, expiryLimit, today);
 
         // missing and expired ingredients are the ones still to buy, so they carry the offers on sale
         Set<Integer> toBuyItems = new LinkedHashSet<>();
