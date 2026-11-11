@@ -53,6 +53,9 @@ Every error has the same shape:
 | GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
 | PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
 | GET | [`/api/brands`](#get-apibrands) | Brands, by name, one page: q matches the name as a case-insensitive substring (optional); page (from 1, default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. |
+| GET | [`/api/household/invitations`](#get-apihouseholdinvitations) | The newest invitations of the caller's household (admins only), newest first, at most 50. |
+| POST | [`/api/household/invitations`](#post-apihouseholdinvitations) | Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). |
+| DELETE | [`/api/household/invitations/{id}`](#delete-apihouseholdinvitationsid) | Revokes an invitation that can still be used (admins only). |
 | GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
 | PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
 | POST | [`/api/intake`](#post-apiintake) | Puts the lines away. |
@@ -62,6 +65,7 @@ Every error has the same shape:
 | GET | [`/api/inventory/search`](#get-apiinventorysearch) | Search the catalogue, one page of items plus the total. |
 | GET | [`/api/inventory/{id}/batches`](#get-apiinventoryidbatches) |  |
 | POST | [`/api/inventory/{id}/use`](#post-apiinventoryiduse) | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
+| POST | [`/api/invitations/accept`](#post-apiinvitationsaccept) | Uses a code to make an account ("Konto erstellen"): body code (typed as shown, dashes and case do not matter), email, displayName, password (at least 10 characters). |
 | GET | [`/api/meal-plans`](#get-apimeal-plans) |  |
 | POST | [`/api/meal-plans`](#post-apimeal-plans) | Creates an empty plan for the week. |
 | POST | [`/api/meal-plans/meals`](#post-apimeal-plansmeals) | Plans a recipe on a day and returns the meal. |
@@ -434,6 +438,105 @@ Every store, by name: [{id, name]}.
     "name": "…"
   }
 ]
+```
+
+### InvitationController
+
+Invitations into a household ("Konto erstellen"). An admin of the household makes an invitation and gets its code ONCE;
+whoever enters the code on the sign-up page gets an account as a MEMBER of that household. There is no open sign-up.
+The PHP front end shows the pages; every call needs the internal token. The admin calls also need X-Acting-User.
+
+
+#### GET /api/household/invitations
+
+The newest invitations of the caller's household (admins only), newest first, at most 50.
+
+**Answer** 200 `List<InvitationDto>`
+
+```json
+[
+  {
+    "id": 0,
+    "hint": "…",
+    "note": "…",
+    "status": "…",
+    "createdAt": "2026-10-14T08:00:00Z",
+    "expiresAt": "2026-10-14T08:00:00Z",
+    "usedByEmail": "…"
+  }
+]
+```
+
+#### POST /api/household/invitations
+
+Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). Optional body
+{"note": "Anna"} (at most 100 characters) to tell invitations apart. 201 with the code, shown only now; it is
+valid for 7 days and works once. At most 20 invitations can be open at a time (400).
+
+**Request body** `JsonNode`
+
+```json
+"…"
+```
+
+**Answer** 201 `CreatedInvitationDto`
+
+```json
+{
+  "id": 0,
+  "code": "…",
+  "note": "…",
+  "expiresAt": "2026-10-14T08:00:00Z"
+}
+```
+
+#### DELETE /api/household/invitations/{id}
+
+Revokes an invitation that can still be used (admins only). 204; 404 if there is no such open invitation in the household.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `id` | `int` |
+
+**Answer** 204 `void`
+
+
+#### POST /api/invitations/accept
+
+Uses a code to make an account ("Konto erstellen"): body code (typed as shown, dashes and case do not matter),
+email, displayName, password (at least 10 characters). 201 with the new user and the household
+(CurrentUserDto, role MEMBER); the PHP then logs the user in. No acting user is needed (nobody is logged in
+yet). 400 INVALID_INVITATION for a code that is wrong, used, revoked or expired (one answer for all);
+400 BAD_REQUEST for an invalid email, name or password (the code stays usable); 409 EMAIL_TAKEN
+(the code stays usable); 429 TOO_MANY_ATTEMPTS with Retry-After after repeated wrong codes from one
+client address (X-Client-Ip), like a login.
+
+**Request body** `AcceptRequest`
+
+```json
+{
+  "code": "…",
+  "email": "…",
+  "displayName": "…",
+  "password": "…"
+}
+```
+
+**Answer** 201 `CurrentUserDto`
+
+```json
+{
+  "id": 0,
+  "email": "…",
+  "displayName": "…",
+  "household": {
+    "id": 0,
+    "name": "…",
+    "role": "…"
+  }
+}
 ```
 
 ### HouseholdController
@@ -2226,6 +2329,54 @@ true when this is the stored answer to a requestId seen before: nothing was reco
 | `recorded` | `int` |
 | `failed` | `int` |
 | `replayed` | `boolean` |
+
+```json
+{ … }
+```
+
+### InvitationController.AcceptRequest
+
+Body of POST /api/invitations/accept.
+
+| Property | Type |
+|---|---|
+| `code` | `String` |
+| `email` | `String` |
+| `displayName` | `String` |
+| `password` | `String` |
+
+```json
+{ … }
+```
+
+### InvitationController.CreatedInvitationDto
+
+What the admin gets back when making an invitation. code is shown only here, never again.
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `code` | `String` |
+| `note` | `String` |
+| `expiresAt` | `Instant` |
+
+```json
+{ … }
+```
+
+### InvitationController.InvitationDto
+
+One invitation in the list: never the code, only its last four characters (hint). status: OPEN, USED, REVOKED, EXPIRED.
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `hint` | `String` |
+| `note` | `String` |
+| `status` | `String` |
+| `createdAt` | `Instant` |
+| `expiresAt` | `Instant` |
+| `usedByEmail` | `String` |
 
 ```json
 { … }
