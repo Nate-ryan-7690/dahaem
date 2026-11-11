@@ -542,6 +542,28 @@ CREATE TABLE household_member ( household_member_id INTEGER PRIMARY KEY AUTO_INC
 	FOREIGN KEY(household_id) REFERENCES household(household_id),
 	FOREIGN KEY(user_id) REFERENCES app_user(user_id));
 
+-- Invitations into a household (migration 0025): the code is never stored, only its SHA-256 and its last four characters.
+CREATE TABLE household_invite (
+	household_invite_id           INTEGER PRIMARY KEY AUTO_INCREMENT,
+	household_invite_household_id INTEGER     NOT NULL,
+	household_invite_code_hash    CHAR(64)    NOT NULL,
+	household_invite_code_hint    VARCHAR(8)  NOT NULL,
+	household_invite_note         VARCHAR(100) NULL,
+	household_invite_created_by   INTEGER     NOT NULL,
+	household_invite_created_at   DATETIME    NOT NULL,
+	household_invite_expires_at   DATETIME    NOT NULL,
+	household_invite_used_at      DATETIME    NULL,
+	household_invite_used_by      INTEGER     NULL,
+	household_invite_revoked_at   DATETIME    NULL,
+	UNIQUE KEY household_invite_code (household_invite_code_hash),
+	INDEX household_invite_by_household (household_invite_household_id),
+	CONSTRAINT household_invite_household_fk
+		FOREIGN KEY (household_invite_household_id) REFERENCES household(household_id),
+	CONSTRAINT household_invite_created_by_fk
+		FOREIGN KEY (household_invite_created_by) REFERENCES app_user(user_id),
+	CONSTRAINT household_invite_used_by_fk
+		FOREIGN KEY (household_invite_used_by) REFERENCES app_user(user_id));
+
 -- Barcodes (migration 0020): the product a barcode number identifies (independent of any store), and the store items
 -- that carry it (one row per barcode and store item, because the same number is on the shelf in several stores).
 -- The number is stored as GTIN-13 (a 12-digit UPC-A gets a leading 0; 8 and 14 digits stay).

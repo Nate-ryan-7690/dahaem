@@ -29,6 +29,7 @@ public class AccountService {
     public static final String DEFAULT_HOUSEHOLD_NAME = "DAHÄM";
     public static final int MIN_PASSWORD_LENGTH = 10;
     static final int MAX_EMAIL_LENGTH = 254;
+    static final int MAX_DISPLAY_NAME = 100;
     /** BCrypt cost of newly made hashes: 12 is about 4 times the work of the old default 10 (a login takes ~0.25 s). */
     public static final int DEFAULT_BCRYPT_STRENGTH = 12;
     // BCrypt only looks at the first 72 bytes; Spring's encoder rejects anything longer.
@@ -97,6 +98,36 @@ public class AccountService {
         } finally {
             close(con);
         }
+    }
+
+    /** A validated new account, not saved yet: the email as it is stored, the name, and the BCrypt hash of the password. */
+    public record NewUser(String email, String displayName, String passwordHash) {
+    }
+
+    /**
+     * Checks the data of a new account and hashes the password, without saving anything (the caller saves it in its own
+     * transaction, e.g. together with using up an invitation).
+     *
+     * @throws IllegalArgumentException for an invalid email, display name or password
+     * @throws EmailTakenException      if an account has this email already
+     */
+    public NewUser prepareNewUser(String email, String displayName, String rawPassword) {
+        String normalizedEmail = normalizeEmail(email);
+        if (normalizedEmail == null || normalizedEmail.length() > MAX_EMAIL_LENGTH
+                || !EMAIL.matcher(normalizedEmail).matches()) {
+            throw new IllegalArgumentException("Not a valid email address");
+        }
+        if (displayName == null || displayName.isBlank()) {
+            throw new IllegalArgumentException("Display name must not be empty");
+        }
+        if (displayName.trim().length() > MAX_DISPLAY_NAME) {
+            throw new IllegalArgumentException("Display name must be at most " + MAX_DISPLAY_NAME + " characters");
+        }
+        validatePassword(rawPassword);
+        if (repository.findUserByEmail(normalizedEmail).isPresent()) {
+            throw new EmailTakenException();
+        }
+        return new NewUser(normalizedEmail, displayName.trim(), passwordEncoder.encode(rawPassword));
     }
 
     /**

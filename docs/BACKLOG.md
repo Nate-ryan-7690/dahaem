@@ -669,9 +669,12 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
   `purchase_history.purchase_history_household_id`; intake request ids are stored per household. Apply 0024 BEFORE the API starts.
   The old `inventory_item_quantity` / `inventory_item_earliest_exp_date` columns are frozen (not read or written any more); drop
   them in PR 4 once nobody needs the rollback.
+- [x] Invitations ("Konto erstellen", migration 0025; done before PR 4 because it works inside ONE household): an admin makes an
+  invitation (`POST /api/household/invitations`, code shown once, 7 days, single use, stored as a hash, at most 20 open), lists
+  and revokes them; `POST /api/invitations/accept` makes a MEMBER account in the inviter's household. The PHP pages (admin:
+  create/list/revoke; public: "Konto erstellen") are Nate's. A second HOUSEHOLD still needs PR 4 first.
 - [ ] PR 4: receipts, the remaining endpoints, per-household recipe preferred servings, drop the frozen stock columns, NOT NULL migration.
-- [ ] PR 5: operator tool for a second household; invitations ("Konto erstellen": `household_invite`, admin creates/lists/revokes,
-  code shown once, 7 days, single use, hashed, throttled; accepting creates a MEMBER in the inviter's household); frontend pages.
+- [ ] PR 5: operator tool for a second household (after PR 4).
 
 ## Platform
 

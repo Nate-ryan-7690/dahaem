@@ -3,6 +3,8 @@ package de.dahaem.api;
 import de.dahaem.auth.AccountRepository;
 import de.dahaem.auth.AccountSelfService;
 import de.dahaem.auth.AccountService;
+import de.dahaem.auth.InvitationRepository;
+import de.dahaem.auth.InvitationService;
 import de.dahaem.auth.LoginService;
 import de.dahaem.auth.LoginThrottle;
 import de.dahaem.diet.DietFilterRepository;
@@ -155,6 +157,19 @@ public class ServiceConfig {
     @Bean
     public AccountSelfService accountSelfService(AccountService accountService, LoginThrottle loginThrottle) {
         return new AccountSelfService(accountService, loginThrottle);
+    }
+
+    @Bean
+    public InvitationRepository invitationRepository() {
+        return new InvitationRepository();
+    }
+
+    @Bean
+    public InvitationService invitationService(InvitationRepository invitationRepository,
+                                               AccountRepository accountRepository, AccountService accountService,
+                                               LoginThrottle loginThrottle) {
+        return new InvitationService(invitationRepository, accountRepository, accountService, loginThrottle,
+                java.time.Clock.systemUTC());
     }
 
     @Bean
