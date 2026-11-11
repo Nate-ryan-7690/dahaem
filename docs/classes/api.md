@@ -372,7 +372,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`DietDto.Item`](#dietdtoitem) | record |  |  |
 | [`DietDto.SoftHits`](#dietdtosofthits) | record |  |  |
 | [`DietDto.Unmatched`](#dietdtounmatched) | record |  |  |
-| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PAC |
+| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY |
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
@@ -554,6 +554,7 @@ classDiagram
         +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +invalidBarcode(InvalidBarcodeException e) ResponseEntity~ErrorResponse~
+        +intakeConflict(IntakeConflictException e) ResponseEntity~ErrorResponse~
         +unknownStore(UnknownStoreException e) ResponseEntity~ErrorResponse~
         +unknownBrand(UnknownBrandException e) ResponseEntity~ErrorResponse~
         +packUnit(PackUnitException e) ResponseEntity~ErrorResponse~
@@ -572,6 +573,7 @@ classDiagram
     class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
+    class barcode_IntakeConflictException["IntakeConflictException"]
     class stores_UnknownStoreException["UnknownStoreException"]
     class stores_UnknownBrandException["UnknownBrandException"]
     class barcode_PackUnitException["PackUnitException"]
@@ -582,6 +584,7 @@ classDiagram
     api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> barcode_InvalidBarcodeException
+    api_ApiExceptionHandler ..> barcode_IntakeConflictException
     api_ApiExceptionHandler ..> stores_UnknownStoreException
     api_ApiExceptionHandler ..> stores_UnknownBrandException
     api_ApiExceptionHandler ..> barcode_PackUnitException
@@ -599,6 +602,7 @@ classDiagram
 | `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e)` | public | A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). |
+| `ResponseEntity<ErrorResponse> intakeConflict(IntakeConflictException e)` | public | An intake request id that cannot be used again as it is: a conflict with a code of its own. |
 | `ResponseEntity<ErrorResponse> unknownStore(UnknownStoreException e)` | public | A store or brand name that does not exist, where creating one was not asked for: a bad request with its own code. |
 | `ResponseEntity<ErrorResponse> unknownBrand(UnknownBrandException e)` | public |  |
 | `ResponseEntity<ErrorResponse> packUnit(PackUnitException e)` | public | The pack of a barcode cannot be stocked in the item's unit: a bad request with a code of its own. |
@@ -1189,7 +1193,7 @@ classDiagram
 *record*
 
 JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable
-machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
+machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
 CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN) that a client can map to its own text.
 
 ```mermaid
@@ -1370,6 +1374,7 @@ classDiagram
 
 Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new
 one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines.
+requestId (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see .intake.
 
 ```mermaid
 classDiagram
@@ -1380,6 +1385,7 @@ classDiagram
         +Boolean createStore
         +LocalDate purchaseDate
         +List~IntakeService.Line~ lines
+        +String requestId
     }
     class api_IntakeController["IntakeController"] {
         <<controller>>
@@ -1395,6 +1401,7 @@ classDiagram
 | `createStore` | `Boolean` |
 | `purchaseDate` | `LocalDate` |
 | `lines` | `List<IntakeService.Line>` |
+| `requestId` | `String` |
 
 **Referenced by:** `IntakeController`
 
@@ -1402,7 +1409,8 @@ classDiagram
 
 *record*
 
-results has one entry per line, in order; recorded / failed count them.
+results has one entry per line, in order; recorded / failed count them. replayed is
+true when this is the stored answer to a requestId seen before: nothing was recorded again.
 
 ```mermaid
 classDiagram
@@ -1412,6 +1420,7 @@ classDiagram
         +List~IntakeService.LineResult~ results
         +int recorded
         +int failed
+        +boolean replayed
     }
     class api_IntakeController["IntakeController"] {
         <<controller>>
@@ -1426,6 +1435,7 @@ classDiagram
 | `results` | `List<IntakeService.LineResult>` |
 | `recorded` | `int` |
 | `failed` | `int` |
+| `replayed` | `boolean` |
 
 **Referenced by:** `IntakeController`
 
@@ -3316,7 +3326,8 @@ classDiagram
         +productDataSource(String mode, String url) ProductDataSource
         +barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource) BarcodeService
         +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
-        +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository) IntakeService
+        +intakeRequestRepository() IntakeRequestRepository
+        +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository) IntakeService
         +stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository) StockService
         +accountRepository() AccountRepository
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
@@ -3362,7 +3373,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 12 more neighbours not drawn
+    %% 13 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -3384,7 +3395,8 @@ classDiagram
 | `ProductDataSource productDataSource(String mode, String url)` | public | Where unknown barcodes are looked up: dahaem.barcode.lookup=openfoodfacts (env DAHAEM_BARCODE_LOOKUP) asks Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on. |
 | `BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource)` | public |  |
 | `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
-| `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository)` | public |  |
+| `IntakeRequestRepository intakeRequestRepository()` | public |  |
+| `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository)` | public |  |
 | `StockService stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)` | public |  |
 | `AccountRepository accountRepository()` | public |  |
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
