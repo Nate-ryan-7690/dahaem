@@ -31,8 +31,8 @@ Every error has the same shape:
 ```
 
 `message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
-`BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH` (400); `UNAUTHORIZED`,
-`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`,
+`BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH`, `UNKNOWN_STORE`, `UNKNOWN_BRAND` (400); `UNAUTHORIZED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
 `CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
@@ -55,13 +55,15 @@ Every error has the same shape:
 | GET | [`/api/auth/me`](#get-apiauthme) | The logged-in user and their household. |
 | GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
 | PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
+| GET | [`/api/brands`](#get-apibrands) | Brands, by name, one page: q matches the name as a case-insensitive substring (optional); page (from 1, default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. |
 | GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
 | PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
 | POST | [`/api/intake`](#post-apiintake) | Puts the lines away. |
-| GET | [`/api/inventory`](#get-apiinventory) |  |
+| GET | [`/api/inventory`](#get-apiinventory) | The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date, expiry date, packs and pack size bought, and what is left in the item's own unit (remaining, unit). |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
 | GET | [`/api/inventory/search`](#get-apiinventorysearch) | Search the catalogue, one page of items plus the total. |
+| GET | [`/api/inventory/{id}/batches`](#get-apiinventoryidbatches) |  |
 | POST | [`/api/inventory/{id}/use`](#post-apiinventoryiduse) | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
 | GET | [`/api/meal-plans`](#get-apimeal-plans) |  |
 | POST | [`/api/meal-plans`](#post-apimeal-plans) | Creates an empty plan for the week. |
@@ -92,6 +94,7 @@ Every error has the same shape:
 | PUT | [`/api/shopping-lists/{listId}/items/{itemId}/quantity`](#put-apishopping-listslistiditemsitemidquantity) | Changes the amount of a line ({"quantity": 2.5}, above 0); the unit stays. |
 | PUT | [`/api/shopping-lists/{listId}/items/{itemId}/store-item`](#put-apishopping-listslistiditemsitemidstore-item) | Sets which store product the user picked for a persisted line ({"storeItemId": 5}), or clears the pick ({"storeItemId": null}). |
 | PUT | [`/api/shopping-lists/{listId}/status`](#put-apishopping-listslistidstatus) | Completes a list ({"completed": true}: it becomes read-only) or reopens it. |
+| GET | [`/api/stores`](#get-apistores) | Every store, by name: [{id, name]}. |
 | GET | [`/api/suggestions/by-expiring`](#get-apisuggestionsby-expiring) | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
 | GET | [`/api/suggestions/by-savings`](#get-apisuggestionsby-savings) | Recipes ranked by how many ingredients are currently on sale. |
 | GET | [`/api/suggestions/pantry`](#get-apisuggestionspantry) | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
@@ -291,7 +294,8 @@ PACK_UNIT_MISMATCH: an item counted in g takes a pack in g or kg, not in ml).
   "packSize": 0,
   "packUnit": "…",
   "name": "…",
-  "storeItemId": 0
+  "storeItemId": 0,
+  "createBrand": false
 }
 ```
 
@@ -328,6 +332,58 @@ PACK_UNIT_MISMATCH: an item counted in g takes a pack in g or kg, not in ml).
     "source": "…"
   }
 }
+```
+
+### StoreCatalogController
+
+The stores and brands DAHÄM has, for pickers (so nobody types a store or brand name that does not exist).
+
+
+#### GET /api/brands
+
+Brands, by name, one page: q matches the name as a case-insensitive substring (optional); page
+(from 1, default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search.
+
+**Query parameters**
+
+| Name | Type | Required | Default |
+|---|---|---|---|
+| `q` | `String` | no |  |
+| `page` | `Integer` | no |  |
+| `pageSize` | `Integer` | no |  |
+
+
+
+**Answer** 200 `BrandPageDto`
+
+```json
+{
+  "items": [
+    {
+      "id": 0,
+      "name": "…"
+    }
+  ],
+  "total": 0,
+  "page": 0,
+  "pageSize": 0,
+  "totalPages": 0
+}
+```
+
+#### GET /api/stores
+
+Every store, by name: [{id, name]}.
+
+**Answer** 200 `List<StoreRef>`
+
+```json
+[
+  {
+    "id": 0,
+    "name": "…"
+  }
+]
 ```
 
 ### HouseholdController
@@ -396,7 +452,10 @@ Puts the lines away. Each line: barcode, expirationDate (required), packs (defau
 pricePaid (total for the packs; optional if the store item's price is known), and optionally
 packSize + packUnit for a special package. The barcode must have been assigned
 (PUT /api/barcodes/{code}). Stock grows by packs x pack size in the item's own unit and the expiry date is
-kept as a batch (the earliest is used first). Always answers 200 when the request itself is fine: a line that could
+kept as a batch (the earliest is used first). An unknown store is a 400 with code UNKNOWN_STORE unless createStore is true.
+With a requestId, sending the same request again (same body) returns the stored answer with replayed
+true and records nothing twice; another body with the same id is 409 REQUEST_ID_REUSED, a request still being
+processed 409 REQUEST_IN_PROGRESS. Always answers 200 when the request itself is fine: a line that could
 not be recorded has ok: false with a code (INVALID_BARCODE, BARCODE_CHECKSUM, BARCODE_UNKNOWN,
 EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
 
@@ -405,8 +464,10 @@ EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other 
 ```json
 {
   "storeName": "…",
+  "createStore": false,
   "purchaseDate": "2026-10-14",
-  "lines": ["…"]
+  "lines": ["…"],
+  "requestId": "…"
 }
 ```
 
@@ -416,7 +477,8 @@ EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other 
 {
   "results": ["…"],
   "recorded": 0,
-  "failed": 0
+  "failed": 0,
+  "replayed": false
 }
 ```
 
@@ -425,19 +487,26 @@ EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other 
 
 #### GET /api/inventory
 
-**Answer** 200 `List<ItemDto>`
+The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date,
+expiry date, packs and pack size bought, and what is left in the item's own unit (remaining, unit).
+Used-up batches are left out; ?all=true includes them. 404 if there is no such item.
+
+**Answer** 200 `List<StockBatch>`
 
 ```json
 [
   {
-    "id": 0,
-    "nameEnglish": "…",
-    "nameDeutsch": "…",
-    "quantity": 0,
-    "unit": "…",
-    "category": "…",
-    "subcategory": "…",
-    "earliestExpDate": "2026-10-14"
+    "purchaseId": 0,
+    "storeItemId": 0,
+    "storeName": "…",
+    "brandName": "…",
+    "purchaseDate": "2026-10-14",
+    "expirationDate": "2026-10-14",
+    "packs": 0,
+    "packSize": 0,
+    "packUnit": "…",
+    "remaining": 0,
+    "unit": "…"
   }
 ]
 ```
@@ -538,6 +607,25 @@ default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. Out-
   "pageSize": 0,
   "totalPages": 0
 }
+```
+
+#### GET /api/inventory/{id}/batches
+
+**Answer** 200 `List<ItemDto>`
+
+```json
+[
+  {
+    "id": 0,
+    "nameEnglish": "…",
+    "nameDeutsch": "…",
+    "quantity": 0,
+    "unit": "…",
+    "category": "…",
+    "subcategory": "…",
+    "earliestExpDate": "2026-10-14"
+  }
+]
 ```
 
 #### POST /api/inventory/{id}/use
@@ -1792,7 +1880,7 @@ Body of PUT /api/barcodes/{code}: what the barcode is. inventoryItemId (the cata
 and packUnit (500 g, 1 kg, 1,5 l, 6 stück) are required; the pack is stored in g, ml or stück like a store
 item (1 kg becomes 1000 g, 1,5 l is sent as 1.5 l or 1500 ml) and must fit the item's unit (else 400 PACK_UNIT_MISMATCH); brand (blank or missing =
 no brand), name (as printed) and storeItemId (also link the store item that carries it, which must be
-for the same catalogue item) are optional.
+for the same catalogue item) are optional. The brand must be an existing one (GET /api/brands); createBrand: true is needed to add a new brand, so a typo cannot create a bogus one (400 UNKNOWN_BRAND).
 
 | Property | Type |
 |---|---|
@@ -1802,6 +1890,7 @@ for the same catalogue item) are optional.
 | `packUnit` | `String` |
 | `name` | `String` |
 | `storeItemId` | `Integer` |
+| `createBrand` | `Boolean` |
 
 ```json
 { … }
@@ -1856,6 +1945,37 @@ A store item that carries the barcode: which store, and its current normal price
 | `storeItemId` | `int` |
 | `storeName` | `String` |
 | `price` | `Double` |
+
+```json
+{ … }
+```
+
+### BrandPageDto
+
+One page of GET /api/brands. total is the number of brands that match in ALL pages; page (from
+1) and pageSize echo the request with its defaults applied; totalPages is ceil(total / pageSize),
+0 when nothing matches.
+
+| Property | Type |
+|---|---|
+| `items` | `List<BrandRef>` |
+| `total` | `long` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
+
+```json
+{ … }
+```
+
+### BrandRef
+
+A brand: its id and name.
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
 
 ```json
 { … }
@@ -2032,13 +2152,17 @@ A household as the API shows it. people is the head count and null until someone
 
 ### IntakeController.IntakeRequest
 
-Body: the store, the purchase day (default today, not in the future) and the lines.
+Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new
+one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines.
+requestId (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see .intake.
 
 | Property | Type |
 |---|---|
 | `storeName` | `String` |
+| `createStore` | `Boolean` |
 | `purchaseDate` | `LocalDate` |
 | `lines` | `List<IntakeService.Line>` |
+| `requestId` | `String` |
 
 ```json
 { … }
@@ -2046,13 +2170,15 @@ Body: the store, the purchase day (default today, not in the future) and the lin
 
 ### IntakeController.IntakeResult
 
-results has one entry per line, in order; recorded / failed count them.
+results has one entry per line, in order; recorded / failed count them. replayed is
+true when this is the stored answer to a requestId seen before: nothing was recorded again.
 
 | Property | Type |
 |---|---|
 | `results` | `List<IntakeService.LineResult>` |
 | `recorded` | `int` |
 | `failed` | `int` |
+| `replayed` | `boolean` |
 
 ```json
 { … }
@@ -2728,6 +2854,42 @@ Total spent; from/to are null when the total covers all purchases.
 | `from` | `LocalDate` |
 | `to` | `LocalDate` |
 | `total` | `double` |
+
+```json
+{ … }
+```
+
+### StockBatch
+
+One batch of an item's stock = one purchase: where and when it was bought, when it expires, how many packs of which size
+were bought, and how much of it is left in the item's own unit (unit). Used earliest-expiring first.
+
+| Property | Type |
+|---|---|
+| `purchaseId` | `int` |
+| `storeItemId` | `int` |
+| `storeName` | `String` |
+| `brandName` | `String` |
+| `purchaseDate` | `LocalDate` |
+| `expirationDate` | `LocalDate` |
+| `packs` | `int` |
+| `packSize` | `int` |
+| `packUnit` | `String` |
+| `remaining` | `int` |
+| `unit` | `String` |
+
+```json
+{ … }
+```
+
+### StoreRef
+
+A store: its id and name (as listed in the pickers).
+
+| Property | Type |
+|---|---|
+| `id` | `int` |
+| `name` | `String` |
 
 ```json
 { … }

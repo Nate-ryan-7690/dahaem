@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-87 types in 59 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+89 types in 61 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -30,6 +30,9 @@ classDiagram
     class api_BadRequestException["BadRequestException"]
     class api_BarcodeController["BarcodeController"] {
         <<controller>>
+    }
+    class api_BrandPageDto["BrandPageDto"] {
+        <<record>>
     }
     class api_CreateMealPlanRequest["CreateMealPlanRequest"] {
         <<record>>
@@ -248,6 +251,9 @@ classDiagram
     class api_SpendingDto["SpendingDto"] {
         <<record>>
     }
+    class api_StoreCatalogController["StoreCatalogController"] {
+        <<controller>>
+    }
     class api_SuggestionController["SuggestionController"] {
         <<controller>>
     }
@@ -337,6 +343,7 @@ classDiagram
     api_ShoppingListItemController ..> api_SelectStoreItemRequest
     api_ShoppingListItemController ..> api_ShoppingListItemSelectionDto
     api_ShoppingListItemController ..> api_ShoppingListEdits
+    api_StoreCatalogController ..> api_BrandPageDto
     api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
@@ -353,6 +360,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`AuthController`](#authcontroller) | class | REST controller | The parts of the login flow that are plain endpoints. |
 | [`BadRequestException`](#badrequestexception) | class |  | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](#barcodecontroller) | class | REST controller | Barcode numbers: what a number is, and remembering it. |
+| [`BrandPageDto`](#brandpagedto) | record |  | One page of GET /api/brands. |
 | [`CreateMealPlanRequest`](#createmealplanrequest) | record |  | Body of POST /api/meal-plans, e.g. |
 | [`CreatePurchaseRequest`](#createpurchaserequest) | record |  | Body of POST /api/purchases: a purchase of a known store_item. |
 | [`CsrfTokenDto`](#csrftokendto) | record |  | A CSRF token and where to put it: in the headerName header (or the parameterName form field). |
@@ -364,12 +372,12 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`DietDto.Item`](#dietdtoitem) | record |  |  |
 | [`DietDto.SoftHits`](#dietdtosofthits) | record |  |  |
 | [`DietDto.Unmatched`](#dietdtounmatched) | record |  |  |
-| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PAC |
+| [`ErrorResponse`](#errorresponse) | record |  | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY |
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
 | [`IntakeController`](#intakecontroller) | class | REST controller | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
-| [`IntakeController.IntakeRequest`](#intakecontrollerintakerequest) | record |  | Body: the store, the purchase day (default today, not in the future) and the lines. |
+| [`IntakeController.IntakeRequest`](#intakecontrollerintakerequest) | record |  | Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines. |
 | [`IntakeController.IntakeResult`](#intakecontrollerintakeresult) | record |  | results has one entry per line, in order; recorded / failed count them. |
 | [`InternalTokenFilter`](#internaltokenfilter) | class | Spring component | Shared-secret gate for the internal API. |
 | [`InventoryController`](#inventorycontroller) | class | REST controller |  |
@@ -428,6 +436,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`ShoppingListItemController`](#shoppinglistitemcontroller) | class | REST controller |  |
 | [`ShoppingListItemSelectionDto`](#shoppinglistitemselectiondto) | record |  | Response of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item: the line's new selection. |
 | [`SpendingDto`](#spendingdto) | record |  | Total spent; from/to are null when the total covers all purchases. |
+| [`StoreCatalogController`](#storecatalogcontroller) | class | REST controller | The stores and brands DAHÄM has, for pickers (so nobody types a store or brand name that does not exist). |
 | [`SuggestionController`](#suggestioncontroller) | class | REST controller | Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf, it only ranks and presents (see SuggestionService). |
 | [`TagDto`](#tagdto) | record |  |  |
 | [`UnauthorizedException`](#unauthorizedexception) | class |  | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
@@ -545,6 +554,9 @@ classDiagram
         +listCompleted(ListCompletedException e) ResponseEntity~ErrorResponse~
         +unauthorized(UnauthorizedException e) ResponseEntity~ErrorResponse~
         +invalidBarcode(InvalidBarcodeException e) ResponseEntity~ErrorResponse~
+        +intakeConflict(IntakeConflictException e) ResponseEntity~ErrorResponse~
+        +unknownStore(UnknownStoreException e) ResponseEntity~ErrorResponse~
+        +unknownBrand(UnknownBrandException e) ResponseEntity~ErrorResponse~
         +packUnit(PackUnitException e) ResponseEntity~ErrorResponse~
         +pastShoppingDay(PastShoppingDayException e) ResponseEntity~ErrorResponse~
         +badRequest(RuntimeException e) ResponseEntity~ErrorResponse~
@@ -561,6 +573,9 @@ classDiagram
     class shopping_ListCompletedException["ListCompletedException"]
     class api_UnauthorizedException["UnauthorizedException"]
     class barcode_InvalidBarcodeException["InvalidBarcodeException"]
+    class barcode_IntakeConflictException["IntakeConflictException"]
+    class stores_UnknownStoreException["UnknownStoreException"]
+    class stores_UnknownBrandException["UnknownBrandException"]
     class barcode_PackUnitException["PackUnitException"]
     class shopping_PastShoppingDayException["PastShoppingDayException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
@@ -569,6 +584,9 @@ classDiagram
     api_ApiExceptionHandler ..> shopping_ListCompletedException
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> barcode_InvalidBarcodeException
+    api_ApiExceptionHandler ..> barcode_IntakeConflictException
+    api_ApiExceptionHandler ..> stores_UnknownStoreException
+    api_ApiExceptionHandler ..> stores_UnknownBrandException
     api_ApiExceptionHandler ..> barcode_PackUnitException
     api_ApiExceptionHandler ..> shopping_PastShoppingDayException
 ```
@@ -584,6 +602,9 @@ classDiagram
 | `ResponseEntity<ErrorResponse> listCompleted(ListCompletedException e)` | public | A completed shopping list cannot be edited. |
 | `ResponseEntity<ErrorResponse> unauthorized(UnauthorizedException e)` | public |  |
 | `ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e)` | public | A barcode number that cannot be right: a bad request with a code of its own (INVALID_BARCODE, BARCODE_CHECKSUM). |
+| `ResponseEntity<ErrorResponse> intakeConflict(IntakeConflictException e)` | public | An intake request id that cannot be used again as it is: a conflict with a code of its own. |
+| `ResponseEntity<ErrorResponse> unknownStore(UnknownStoreException e)` | public | A store or brand name that does not exist, where creating one was not asked for: a bad request with its own code. |
+| `ResponseEntity<ErrorResponse> unknownBrand(UnknownBrandException e)` | public |  |
 | `ResponseEntity<ErrorResponse> packUnit(PackUnitException e)` | public | The pack of a barcode cannot be stocked in the item's unit: a bad request with a code of its own. |
 | `ResponseEntity<ErrorResponse> pastShoppingDay(PastShoppingDayException e)` | public | The shopping day of a list is in the past: a bad request with a code of its own. |
 | `ResponseEntity<ErrorResponse> badRequest(RuntimeException e)` | public |  |
@@ -600,7 +621,7 @@ Body of PUT /api/barcodes/{code}: what the barcode is. inventoryItemId (the cata
 and packUnit (500 g, 1 kg, 1,5 l, 6 stück) are required; the pack is stored in g, ml or stück like a store
 item (1 kg becomes 1000 g, 1,5 l is sent as 1.5 l or 1500 ml) and must fit the item's unit (else 400 PACK_UNIT_MISMATCH); brand (blank or missing =
 no brand), name (as printed) and storeItemId (also link the store item that carries it, which must be
-for the same catalogue item) are optional.
+for the same catalogue item) are optional. The brand must be an existing one (GET /api/brands); createBrand: true is needed to add a new brand, so a typo cannot create a bogus one (400 UNKNOWN_BRAND).
 
 ```mermaid
 classDiagram
@@ -613,6 +634,7 @@ classDiagram
         +String packUnit
         +String name
         +Integer storeItemId
+        +Boolean createBrand
     }
     class api_BarcodeController["BarcodeController"] {
         <<controller>>
@@ -628,6 +650,7 @@ classDiagram
 | `packUnit` | `String` |
 | `name` | `String` |
 | `storeItemId` | `Integer` |
+| `createBrand` | `Boolean` |
 
 **Referenced by:** `BarcodeController`
 
@@ -729,6 +752,45 @@ classDiagram
 | `BarcodeController(BarcodeService barcodeService, MealPlanService mealPlanService)` | public |  |
 | `BarcodeLookup lookup(String code)` | public | What a barcode is. |
 | `BarcodeLookup assign(String code, AssignBarcodeRequest request)` | public | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
+
+## BrandPageDto
+
+*record*
+
+One page of GET /api/brands. total is the number of brands that match in ALL pages; page (from
+1) and pageSize echo the request with its defaults applied; totalPages is ceil(total / pageSize),
+0 when nothing matches.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_BrandPageDto["BrandPageDto"] {
+        <<record>>
+        +List~BrandRef~ items
+        +long total
+        +int page
+        +int pageSize
+        +int totalPages
+    }
+    class stores_BrandRef["BrandRef"] {
+        <<record>>
+    }
+    class api_StoreCatalogController["StoreCatalogController"] {
+        <<controller>>
+    }
+    api_BrandPageDto --> stores_BrandRef
+    api_StoreCatalogController ..> api_BrandPageDto
+```
+
+| Component | Type |
+|---|---|
+| `items` | `List<BrandRef>` |
+| `total` | `long` |
+| `page` | `int` |
+| `pageSize` | `int` |
+| `totalPages` | `int` |
+
+**Referenced by:** `StoreCatalogController`
 
 ## CreateMealPlanRequest
 
@@ -1131,7 +1193,7 @@ classDiagram
 *record*
 
 JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable
-machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
+machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PACK_UNIT_MISMATCH, UNKNOWN_STORE, UNKNOWN_BRAND, LIST_COMPLETED, CONFLICT, LOGIN_REQUIRED,
 CSRF_INVALID, BAD_CREDENTIALS, INVALID_TOKEN) that a client can map to its own text.
 
 ```mermaid
@@ -1310,7 +1372,9 @@ classDiagram
 
 *record*
 
-Body: the store, the purchase day (default today, not in the future) and the lines.
+Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new
+one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines.
+requestId (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see .intake.
 
 ```mermaid
 classDiagram
@@ -1318,8 +1382,10 @@ classDiagram
     class api_IntakeController_IntakeRequest["IntakeController.IntakeRequest"] {
         <<record>>
         +String storeName
+        +Boolean createStore
         +LocalDate purchaseDate
         +List~IntakeService.Line~ lines
+        +String requestId
     }
     class api_IntakeController["IntakeController"] {
         <<controller>>
@@ -1332,8 +1398,10 @@ classDiagram
 | Component | Type |
 |---|---|
 | `storeName` | `String` |
+| `createStore` | `Boolean` |
 | `purchaseDate` | `LocalDate` |
 | `lines` | `List<IntakeService.Line>` |
+| `requestId` | `String` |
 
 **Referenced by:** `IntakeController`
 
@@ -1341,7 +1409,8 @@ classDiagram
 
 *record*
 
-results has one entry per line, in order; recorded / failed count them.
+results has one entry per line, in order; recorded / failed count them. replayed is
+true when this is the stored answer to a requestId seen before: nothing was recorded again.
 
 ```mermaid
 classDiagram
@@ -1351,6 +1420,7 @@ classDiagram
         +List~IntakeService.LineResult~ results
         +int recorded
         +int failed
+        +boolean replayed
     }
     class api_IntakeController["IntakeController"] {
         <<controller>>
@@ -1365,6 +1435,7 @@ classDiagram
 | `results` | `List<IntakeService.LineResult>` |
 | `recorded` | `int` |
 | `failed` | `int` |
+| `replayed` | `boolean` |
 
 **Referenced by:** `IntakeController`
 
@@ -1428,6 +1499,7 @@ classDiagram
         -StockService stockService
         +InventoryController(InventoryService inventoryService, StockService stockService)
         +use(int id, UseStockRequest request) ItemDto
+        +batches(int id, boolean all) List~StockBatch~
         +all() List~ItemDto~
         +search(String q, String category, Integer page, Integer pageSize) ItemPageDto
         +expiring(int days) List~ItemDto~
@@ -1441,6 +1513,9 @@ classDiagram
     class api_UseStockRequest["UseStockRequest"] {
         <<record>>
     }
+    class finance_StockBatch["StockBatch"] {
+        <<record>>
+    }
     class api_ItemPageDto["ItemPageDto"] {
         <<record>>
     }
@@ -1448,6 +1523,7 @@ classDiagram
     api_InventoryController --> finance_StockService
     api_InventoryController ..> api_ItemDto
     api_InventoryController ..> api_UseStockRequest
+    api_InventoryController ..> finance_StockBatch
     api_InventoryController ..> api_ItemPageDto
 ```
 
@@ -1460,6 +1536,7 @@ classDiagram
 |---|---|---|
 | `InventoryController(InventoryService inventoryService, StockService stockService)` | public |  |
 | `ItemDto use(int id, UseStockRequest request)` | public | Takes quantity out of stock, from the batch that expires first (used or thrown away: the same). |
+| `List<StockBatch> batches(int id, boolean all)` | public | The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date, expiry date, packs and pack size bought, and what is left in the item's own unit (remaining, unit). |
 | `List<ItemDto> all()` | public |  |
 | `ItemPageDto search(String q, String category, Integer page, Integer pageSize)` | public | Search the catalogue, one page of items plus the total. |
 | `List<ItemDto> expiring(int days)` | public | Items expiring within the next days days (default 7). |
@@ -3248,7 +3325,9 @@ classDiagram
         +productBarcodeRepository() ProductBarcodeRepository
         +productDataSource(String mode, String url) ProductDataSource
         +barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource) BarcodeService
-        +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository) IntakeService
+        +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
+        +intakeRequestRepository() IntakeRequestRepository
+        +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository) IntakeService
         +stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository) StockService
         +accountRepository() AccountRepository
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
@@ -3294,7 +3373,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 11 more neighbours not drawn
+    %% 13 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -3315,7 +3394,9 @@ classDiagram
 | `ProductBarcodeRepository productBarcodeRepository()` | public |  |
 | `ProductDataSource productDataSource(String mode, String url)` | public | Where unknown barcodes are looked up: dahaem.barcode.lookup=openfoodfacts (env DAHAEM_BARCODE_LOOKUP) asks Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on. |
 | `BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource)` | public |  |
-| `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository)` | public |  |
+| `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
+| `IntakeRequestRepository intakeRequestRepository()` | public |  |
+| `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository, IntakeRequestRepository intakeRequestRepository)` | public |  |
 | `StockService stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)` | public |  |
 | `AccountRepository accountRepository()` | public |  |
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
@@ -3976,6 +4057,44 @@ classDiagram
 | `total` | `double` |
 
 **Referenced by:** `PurchaseController`
+
+## StoreCatalogController
+
+*class · REST controller*
+
+The stores and brands DAHÄM has, for pickers (so nobody types a store or brand name that does not exist).
+
+```mermaid
+classDiagram
+    direction LR
+    class api_StoreCatalogController["StoreCatalogController"] {
+        <<controller>>
+        -StoreCatalogService service
+        +StoreCatalogController(StoreCatalogService service)
+        +stores() List~StoreRef~
+        +brands(String q, Integer page, Integer pageSize) BrandPageDto
+    }
+    class stores_StoreCatalogService["StoreCatalogService"]
+    class stores_StoreRef["StoreRef"] {
+        <<record>>
+    }
+    class api_BrandPageDto["BrandPageDto"] {
+        <<record>>
+    }
+    api_StoreCatalogController --> stores_StoreCatalogService
+    api_StoreCatalogController ..> stores_StoreRef
+    api_StoreCatalogController ..> api_BrandPageDto
+```
+
+| Field | Type |
+|---|---|
+| `service` | `StoreCatalogService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `StoreCatalogController(StoreCatalogService service)` | public |  |
+| `List<StoreRef> stores()` | public | Every store, by name: [{id, name]}. |
+| `BrandPageDto brands(String q, Integer page, Integer pageSize)` | public | Brands, by name, one page: q matches the name as a case-insensitive substring (optional); page (from 1, default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. |
 
 ## SuggestionController
 
