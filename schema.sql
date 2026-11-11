@@ -542,6 +542,19 @@ CREATE TABLE household_member ( household_member_id INTEGER PRIMARY KEY AUTO_INC
 	FOREIGN KEY(household_id) REFERENCES household(household_id),
 	FOREIGN KEY(user_id) REFERENCES app_user(user_id));
 
+-- The preferred servings of a recipe ("this meal is always for X people") per household (migration 0026). The old column
+-- recipe.recipe_preferred_servings is frozen: no longer read or written, dropped later.
+CREATE TABLE household_recipe_servings (
+	household_recipe_servings_household_id INTEGER NOT NULL,
+	household_recipe_servings_recipe_id    INTEGER NOT NULL,
+	household_recipe_servings_servings     INTEGER NOT NULL,
+	PRIMARY KEY (household_recipe_servings_household_id, household_recipe_servings_recipe_id),
+	CONSTRAINT household_recipe_servings_at_least_one CHECK (household_recipe_servings_servings >= 1),
+	CONSTRAINT household_recipe_servings_household_fk
+		FOREIGN KEY (household_recipe_servings_household_id) REFERENCES household(household_id),
+	CONSTRAINT household_recipe_servings_recipe_fk
+		FOREIGN KEY (household_recipe_servings_recipe_id) REFERENCES recipe(recipe_id));
+
 -- Invitations into a household (migration 0025): the code is never stored, only its SHA-256 and its last four characters.
 CREATE TABLE household_invite (
 	household_invite_id           INTEGER PRIMARY KEY AUTO_INCREMENT,

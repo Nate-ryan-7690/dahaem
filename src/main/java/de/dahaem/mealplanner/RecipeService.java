@@ -27,15 +27,16 @@ public class RecipeService {
         {return repository.findAllInstructions(recipeId);}
 
     /**
-     * Sets the recipe's permanent preferred servings; null clears it. Returns false when there is no such recipe.
+     * Sets the household's permanent preferred servings of a recipe; null clears it. Returns false when there is no
+     * such recipe.
      *
      * @throws IllegalArgumentException if servings is below 1
      */
-    public boolean setPreferredServings(int recipeId, Integer servings) {
+    public boolean setPreferredServings(int householdId, int recipeId, Integer servings) {
         if (servings != null && servings < 1) {
             throw new IllegalArgumentException("'servings' must be at least 1 (or null to clear it)");
         }
-        return repository.setPreferredServings(recipeId, servings);
+        return repository.setPreferredServings(householdId, recipeId, servings);
     }
 
 }

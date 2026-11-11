@@ -673,8 +673,16 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
   invitation (`POST /api/household/invitations`, code shown once, 7 days, single use, stored as a hash, at most 20 open), lists
   and revokes them; `POST /api/invitations/accept` makes a MEMBER account in the inviter's household. The PHP pages (admin:
   create/list/revoke; public: "Konto erstellen") are Nate's. A second HOUSEHOLD still needs PR 4 first.
-- [ ] PR 4: receipts, the remaining endpoints, per-household recipe preferred servings, drop the frozen stock columns, NOT NULL migration.
-- [ ] PR 5: operator tool for a second household (after PR 4).
+- [x] PR 4: the last unscoped endpoints and the per-household recipe preference (migration 0026): `GET/PUT /api/households/{id}`
+  only for the caller's own household (404 for any other); `household_recipe_servings` replaces the shared
+  `recipe.recipe_preferred_servings` (copied to the oldest household; the old column is frozen). Apply 0026 BEFORE the API starts.
+- [ ] Left open on purpose, each needs Nate's decision: (a) drop the frozen columns `inventory_item_quantity`,
+  `inventory_item_earliest_exp_date`, `recipe_preferred_servings` (destructive: snapshot + approval, after a few days without a
+  rollback); (b) NOT NULL on the four household columns (`meal_plan`, `shopping_list`, `purchase_history`; the code always sets
+  them, but `seed/demo_data.sql` inserts plans and lists before any household exists, so the seed must change first);
+  (c) `purchase_receipt` has no household yet: there is no receipts API, only the operator's import command, so nothing leaks;
+  add the column when receipts get an API or a second household imports its own.
+- [ ] PR 5: operator tool for a second household (`UserAdminRunner`: create a household with its first admin). Needed before a second household can exist.
 
 ## Platform
 

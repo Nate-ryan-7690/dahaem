@@ -2,13 +2,16 @@ package de.dahaem.api;
 
 import de.dahaem.auth.AccountRepository;
 import de.dahaem.auth.AccountService;
+import de.dahaem.testsupport.ActingUserTestConfig;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.test.context.support.WithAnonymousUser;
@@ -33,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(ActingUserTestConfig.class)
 @WithMockUser
 class HouseholdApiTest {
 
@@ -44,8 +48,9 @@ class HouseholdApiTest {
     @BeforeAll
     static void createDatabaseAndUser() throws IOException {
         TestDatabase.reset(SCRIPTS);
-        new AccountService(new AccountRepository(), new BCryptPasswordEncoder(4))
-                .createUser("anna@example.de", "Anna", "correct horse battery", "Zuhause", LocalDate.of(2026, 9, 25));
+        TestHousehold.actAs(new AccountService(new AccountRepository(), new BCryptPasswordEncoder(4))
+                .createUser("anna@example.de", "Anna", "correct horse battery", "Zuhause", LocalDate.of(2026, 9, 25))
+                .user().getId());
     }
 
     @AfterAll

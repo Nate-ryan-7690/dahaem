@@ -11,9 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.NoSuchElementException;
 
 /**
- * The household's head count, so the app can scale portions to the people it feeds. The PHP decides
- * which logged-in account may call this; the household is named in the URL so the API can check
- * membership later without a contract change.
+ * The household's head count, so the app can scale portions to the people it feeds. The household is named in the URL
+ * and must be the acting user's own (anything else is a 404); any member of it may read and set the head count.
  */
 @RestController
 @RequestMapping("/api/households")
@@ -26,7 +25,8 @@ public class HouseholdController {
     }
 
     @GetMapping("/{id}")
-    public HouseholdDto get(@PathVariable("id") int id) {
+    public HouseholdDto get(@PathVariable("id") int id, Caller caller) {
+        requireOwn(id, caller);
         return accountService.findHousehold(id)
                 .map(HouseholdDto::from)
                 .orElseThrow(() -> new NotFoundException("No household with id " + id));
@@ -34,7 +34,9 @@ public class HouseholdController {
 
     /** Sets the head count and returns the household. 400 when people is missing or below 1, 404 for an unknown household. */
     @PutMapping("/{id}/people")
-    public HouseholdDto setPeople(@PathVariable("id") int id, @RequestBody SetHouseholdPeopleRequest request) {
+    public HouseholdDto setPeople(@PathVariable("id") int id, @RequestBody SetHouseholdPeopleRequest request,
+                                  Caller caller) {
+        requireOwn(id, caller);
         if (request.people() == null) {
             throw new BadRequestException("'people' is required (a whole number, at least 1)");
         }
@@ -42,6 +44,13 @@ public class HouseholdController {
             return HouseholdDto.from(accountService.setHouseholdPeople(id, request.people()));
         } catch (NoSuchElementException e) {
             throw new NotFoundException(e.getMessage());
+        }
+    }
+
+    /** The caller's own household is the only one there is for them: any other id is not found, like an unknown one. */
+    private static void requireOwn(int id, Caller caller) {
+        if (id != caller.householdId()) {
+            throw new NotFoundException("No household with id " + id);
         }
     }
 }

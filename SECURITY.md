@@ -25,10 +25,12 @@ DAHÄM is a self-hosted, single/two-user household application. It is not a mult
 
 ## Known limits (see docs/BACKLOG.md, "Go-live review")
 
-- **Per-household scoping is being rolled out, one area per PR.** Meal plans, shopping lists, stock, purchases and intake are scoped: the household comes from the acting
-  user's membership (`X-Acting-User`, believed only with the token), never from a request parameter, and another household's
-  plan, meal or list answers 404. Receipts and the rest are still one shared pool until their PRs
-  land (see docs/BACKLOG.md, "Households"), so a second household must not be created before then.
+- **Everything the API exposes that is a household's own is scoped per household:** meal plans, shopping lists, stock,
+  purchases, intake, the head count and the preferred servings of recipes. The household comes from the acting user's
+  membership (`X-Acting-User`, believed only with the token), never from a request parameter, and another household's plan,
+  meal, list or household answers 404. Shared on purpose: the catalogue (items, recipes, stores, prices, barcodes,
+  user-added tags). Receipts have no API (a command-line import by the operator) and are not tied to a household yet. The
+  household columns are still NULL-able in the schema (the code always sets them); see docs/BACKLOG.md, "Households".
 - **The PHP front end owns the user session.** It checks a login with `POST /api/auth/verify` (internal token required;
   answers the user, household and role; starts no session and sets no cookie) and sends the id of the logged-in user in
   `X-Acting-User` on its later calls (for the audit log; believed only with the token). The API has no session login, no

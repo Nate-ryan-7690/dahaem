@@ -147,11 +147,14 @@ public class MealPlanRepository {
             "r.recipe_name, r.recipe_thumbnail_url, " +
             // a row made by the old endpoint has no date: it lands on its week's Monday
             "COALESCE(mpr.meal_plan_recipe_date, mp.meal_plan_week_start_date) AS meal_date, " +
-            "mpr.meal_plan_recipe_meal_time, mpr.meal_plan_recipe_servings, r.recipe_preferred_servings, " +
+            "mpr.meal_plan_recipe_meal_time, mpr.meal_plan_recipe_servings, hrs.household_recipe_servings_servings AS recipe_preferred_servings, " +
             "mpr.meal_plan_recipe_position, mpr.meal_plan_recipe_note " +
             "FROM meal_plan_recipe mpr " +
             "INNER JOIN recipe r ON mpr.meal_plan_recipe_id = r.recipe_id " +
-            "INNER JOIN meal_plan mp ON mpr.meal_plan_recipe_plan_id = mp.meal_plan_id ";
+            "INNER JOIN meal_plan mp ON mpr.meal_plan_recipe_plan_id = mp.meal_plan_id " +
+            // the preference of the household the plan belongs to (migration 0026), not a shared one
+            "LEFT JOIN household_recipe_servings hrs ON hrs.household_recipe_servings_recipe_id = mpr.meal_plan_recipe_id " +
+            "AND hrs.household_recipe_servings_household_id = mp.meal_plan_household_id ";
 
     /** The plan of the household for the week that starts on this Monday, if there is one. */
     public Optional<MealPlan> findPlanByWeekStart(int householdId, LocalDate weekStart) {

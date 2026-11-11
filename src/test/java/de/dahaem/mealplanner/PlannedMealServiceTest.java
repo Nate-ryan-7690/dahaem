@@ -37,6 +37,7 @@ class PlannedMealServiceTest {
     private final TestClock clock = new TestClock(LocalDate.of(2026, 11, 1));   // a Sunday: the whole week is ahead
     private MealPlanService service;
     private RecipeService recipes;
+    private int household;
     private int soup;
     private int stew;
 
@@ -44,8 +45,8 @@ class PlannedMealServiceTest {
     void setUp() throws SQLException {
         TestDatabase.reset();
         clock.setToday(LocalDate.of(2026, 11, 1));
-        service = new MealPlanService(new MealPlanRepository(), clock)
-                .forHousehold(TestHousehold.createHousehold("Zuhause", null));
+        household = TestHousehold.createHousehold("Zuhause", null);
+        service = new MealPlanService(new MealPlanRepository(), clock).forHousehold(household);
         recipes = new RecipeService(new RecipeRepository());
         soup = TagFixtures.recipe("Suppe", 10, 20, null, null);
         stew = TagFixtures.recipe("Eintopf", 10, 40, null, null);
@@ -257,16 +258,16 @@ class PlannedMealServiceTest {
         PlannedMeal meal = service.addMeal(soup, WED, null, null, null, null);
         assertNull(meal.getRecipePreferredServings());
 
-        assertTrue(recipes.setPreferredServings(soup, 6));
+        assertTrue(recipes.setPreferredServings(household, soup, 6));
         assertEquals(6, service.findMeal(meal.getEntryId()).orElseThrow().getRecipePreferredServings());
         assertEquals(new MealServings.Resolved(6, "recipe"),
                 MealServings.resolve(service.findMeal(meal.getEntryId()).orElseThrow(), 3));
 
-        assertTrue(recipes.setPreferredServings(soup, 6), "the same number again still finds the recipe");
-        assertTrue(recipes.setPreferredServings(soup, null));
+        assertTrue(recipes.setPreferredServings(household, soup, 6), "the same number again still finds the recipe");
+        assertTrue(recipes.setPreferredServings(household, soup, null));
         assertNull(service.findMeal(meal.getEntryId()).orElseThrow().getRecipePreferredServings());
-        assertFalse(recipes.setPreferredServings(9999, 4));
-        assertThrows(IllegalArgumentException.class, () -> recipes.setPreferredServings(soup, 0));
+        assertFalse(recipes.setPreferredServings(household, 9999, 4));
+        assertThrows(IllegalArgumentException.class, () -> recipes.setPreferredServings(household, soup, 0));
     }
 
     // ---------- past days: refused, and frozen overnight ----------
@@ -317,7 +318,7 @@ class PlannedMealServiceTest {
 
     @Test
     void theFreezeWritesTheResolvedServingsOntoPastMealsOnly() {
-        recipes.setPreferredServings(stew, 6);
+        recipes.setPreferredServings(household, stew, 6);
         PlannedMeal followsHousehold = service.addMeal(soup, MON, null, null, null, null);
         PlannedMeal followsRecipe = service.addMeal(stew, MON, null, null, null, null);
         PlannedMeal ownNumber = service.addMeal(soup, MON, null, 5, null, null);
@@ -339,7 +340,7 @@ class PlannedMealServiceTest {
         clock.setToday(MON.plusDays(1));
         service.freezePastServings(3);
 
-        recipes.setPreferredServings(soup, 8);
+        recipes.setPreferredServings(household, soup, 8);
 
         PlannedMeal frozen = service.findMeal(meal.getEntryId()).orElseThrow();
         assertEquals(new MealServings.Resolved(3, "meal"), MealServings.resolve(frozen, 5));
