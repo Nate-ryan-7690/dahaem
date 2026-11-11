@@ -62,8 +62,8 @@ classDiagram
     mealplanner_MealPlanService *-- mealplanner_MealPlanService_Day
     mealplanner_MealPlanService *-- mealplanner_MealPlanService_Week
     mealplanner_MealPlanService --> mealplanner_MealPlanRepository
-    mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_MealPlan
+    mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_PlannedMeal
     mealplanner_MealPlanService ..> mealplanner_MealChange
     mealplanner_MealPlanService_Day --> mealplanner_PlannedMeal
@@ -302,20 +302,21 @@ The rest of the app never writes SQL against the database; it calls these method
 classDiagram
     direction LR
     class mealplanner_MealPlanRepository["MealPlanRepository"] {
-        +create(LocalDate weekStartDate) int
+        +create(int householdId, LocalDate weekStartDate) int
         +addRecipe(int planId, int recipeId, String mealTime) void
         +removeRecipe(int planId, int recipeId) boolean
-        +findAll() List~MealPlan~
+        +findAll(int householdId) List~MealPlan~
+        +findPlan(int householdId, int planId) Optional~MealPlan~
         +findRecipesForPlan(int planId) List~MealPlanRecipe~
         -String MEAL_SELECT$
-        +findPlanByWeekStart(LocalDate weekStart) Optional~MealPlan~
+        +findPlanByWeekStart(int householdId, LocalDate weekStart) Optional~MealPlan~
         +findMeals(int planId) List~PlannedMeal~
-        +findMeal(int entryId) Optional~PlannedMeal~
-        +findUnfrozenMealsBefore(LocalDate today) List~PlannedMeal~
+        +findMeal(int householdId, int entryId) Optional~PlannedMeal~
+        +findUnfrozenMealsBefore(int householdId, LocalDate today) List~PlannedMeal~
         +freezeServings(int entryId, int servings) boolean
         +nextPosition(int planId, LocalDate date) int
         +insertMeal(int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) int
-        +updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) boolean
+        +updateMeal(int householdId, int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note) boolean
         +deleteMeal(int entryId) boolean
     }
     class mealplanner_MealPlanService["MealPlanService"]
@@ -340,19 +341,20 @@ classDiagram
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `int create(LocalDate weekStartDate)` | public |  |
+| `int create(int householdId, LocalDate weekStartDate)` | public |  |
 | `void addRecipe(int planId, int recipeId, String mealTime)` | public |  |
 | `boolean removeRecipe(int planId, int recipeId)` | public | Removes a recipe from a plan. |
-| `List<MealPlan> findAll()` | public |  |
+| `List<MealPlan> findAll(int householdId)` | public |  |
+| `Optional<MealPlan> findPlan(int householdId, int planId)` | public | The plan with this id if it belongs to the household (empty for another household's plan). |
 | `List<MealPlanRecipe> findRecipesForPlan(int planId)` | public |  |
-| `Optional<MealPlan> findPlanByWeekStart(LocalDate weekStart)` | public | The plan of the week that starts on this Monday, if there is one. |
+| `Optional<MealPlan> findPlanByWeekStart(int householdId, LocalDate weekStart)` | public | The plan of the household for the week that starts on this Monday, if there is one. |
 | `List<PlannedMeal> findMeals(int planId)` | public | Every meal of a plan, ordered by day, then position, then entry id. |
-| `Optional<PlannedMeal> findMeal(int entryId)` | public |  |
-| `List<PlannedMeal> findUnfrozenMealsBefore(LocalDate today)` | public | Meals on a day before today that still have no number of their own (they follow the default), oldest entry first. |
+| `Optional<PlannedMeal> findMeal(int householdId, int entryId)` | public | One planned meal if it is on a plan of the household (empty for another household's meal). |
+| `List<PlannedMeal> findUnfrozenMealsBefore(int householdId, LocalDate today)` | public | Meals of a household on a day before today that still have no number of their own (they follow the default), oldest entry first. |
 | `boolean freezeServings(int entryId, int servings)` | public | Writes a meal's own number only while it still has none, so a number set by hand in the meantime is never overwritten. |
 | `int nextPosition(int planId, LocalDate date)` | public | The next free position on a day of a plan (0 for an empty day). |
 | `int insertMeal(int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Adds one planned meal and returns its entry id. |
-| `boolean updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Writes every editable column of one meal. |
+| `boolean updateMeal(int householdId, int entryId, int planId, int recipeId, LocalDate date, String label, Integer servings, int position, String note)` | public | Writes every editable column of one meal. |
 | `boolean deleteMeal(int entryId)` | public | Removes one planned meal by its own id. |
 
 **Referenced by:** `MealPlanService`, `ServiceConfig`, `ShoppingListService`
@@ -365,6 +367,10 @@ Business logic for meal plans. No SQL here, no UI here.
 It asks the repository for data and answers questions about it.
 This is the class future web controllers will call.
 
+Meal plans belong to a household. The injected service is not bound to one (.today() and
+.forHousehold work, nothing else); forHousehold(id) gives the service for one household, and every
+plan and meal it reads, creates, changes or removes is that household's. Another household's ids are simply not found.
+
 ```mermaid
 classDiagram
     direction LR
@@ -372,10 +378,13 @@ classDiagram
         +ZoneId DEFAULT_ZONE$
         -MealPlanRepository repository
         -Clock clock
+        -Integer householdId
         +MealPlanService(MealPlanRepository repository)
         +MealPlanService(MealPlanRepository repository, Clock clock)
+        +forHousehold(int householdId) MealPlanService
         +today() LocalDate
         +createWeeklyPlan(LocalDate weekStart) int
+        +findPlan(int planId) Optional~MealPlan~
         +addRecipe(int planId, int recipeId, String mealTime) void
         +removeRecipe(int planId, int recipeId) boolean
         +recipesForPlan(int planId) List~MealPlanRecipe~
@@ -411,8 +420,8 @@ classDiagram
     class api_ShoppingListItemController["ShoppingListItemController"] {
         <<controller>>
     }
-    class mealplanner_MealPlanRecipe["MealPlanRecipe"]
     class mealplanner_MealPlan["MealPlan"]
+    class mealplanner_MealPlanRecipe["MealPlanRecipe"]
     class mealplanner_PlannedMeal["PlannedMeal"]
     class mealplanner_MealChange["MealChange"]
     class api_MealPlanWeekDto["MealPlanWeekDto"] {
@@ -427,8 +436,8 @@ classDiagram
     mealplanner_MealPlanService *-- mealplanner_MealPlanService_Day
     mealplanner_MealPlanService *-- mealplanner_MealPlanService_Week
     mealplanner_MealPlanService --> mealplanner_MealPlanRepository
-    mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_MealPlan
+    mealplanner_MealPlanService ..> mealplanner_MealPlanRecipe
     mealplanner_MealPlanService ..> mealplanner_PlannedMeal
     mealplanner_MealPlanService ..> mealplanner_MealChange
     api_BarcodeController --> mealplanner_MealPlanService
@@ -447,13 +456,16 @@ classDiagram
 | `DEFAULT_ZONE` | `ZoneId` |
 | `repository` | `MealPlanRepository` |
 | `clock` | `Clock` |
+| `householdId` | `Integer` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `MealPlanService(MealPlanRepository repository)` | public |  |
 | `MealPlanService(MealPlanRepository repository, Clock clock)` | public | The clock decides what "today" is, so tests (and a configured time zone) control which days are past. |
+| `MealPlanService forHousehold(int householdId)` | public | The meal plans of one household: the same service, bound to that household. |
 | `LocalDate today()` | public | Today's date on the service's clock. |
 | `int createWeeklyPlan(LocalDate weekStart)` | public |  |
+| `Optional<MealPlan> findPlan(int planId)` | public | The plan with this id if it is the household's, else empty. |
 | `void addRecipe(int planId, int recipeId, String mealTime)` | public |  |
 | `boolean removeRecipe(int planId, int recipeId)` | public | Removes a recipe from a plan. |
 | `List<MealPlanRecipe> recipesForPlan(int planId)` | public |  |

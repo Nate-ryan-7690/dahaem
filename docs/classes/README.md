@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (96)"]
+    api["api (100)"]
     auth["auth (16)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
@@ -21,7 +21,7 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|24| auth
+    api -->|29| auth
     api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
@@ -53,7 +53,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 96 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
+| [`api`](api.md) | 100 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
 | [`auth`](auth.md) | 16 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
@@ -75,7 +75,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`AccountRepository`](auth.md#accountrepository) | auth | class | All SQL for the household, app_user and household_member tables lives here. |
 | [`AccountSelfService`](auth.md#accountselfservice) | auth | class | What a logged-in user may do to their own account: change the email and the password. |
 | [`AccountService`](auth.md#accountservice) | auth | class | Business logic for user accounts and households. |
-| [`ActingUser`](api.md#actinguser) | api | class | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in). |
+| [`ActingUser`](api.md#actinguser) | api | class | The logged-in user on whose behalf the PHP front end calls: the id in the X-Acting-User header, believed only on a request that carries the internal token (the PHP owns the session and is the only one that can say who is logged in); without |
 | [`AddMealRequest`](api.md#addmealrequest) | api | record | Body of POST /api/meal-plans/meals, e.g. |
 | [`AddPlannedRecipeRequest`](api.md#addplannedreciperequest) | api | record | Body of POST /api/meal-plans/{id}/recipes, e.g. |
 | [`AddTagRequest`](api.md#addtagrequest) | api | record | Body of POST /api/recipes/{id}/tags. |
@@ -110,6 +110,8 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`BrandPage`](stores.md#brandpage) | stores | record | One page of brands plus how many match in all pages. |
 | [`BrandPageDto`](api.md#brandpagedto) | api | record | One page of GET /api/brands. |
 | [`BrandRef`](stores.md#brandref) | stores | record | A brand: its id and name. |
+| [`Caller`](api.md#caller) | api | record | Who is asking: the logged-in user the PHP front end names in X-Acting-User, and the household that user belongs to. |
+| [`CallerArgumentResolver`](api.md#callerargumentresolver) | api | class | Fills a controller parameter of type Caller: the acting user from X-Acting-User (believed only with the internal token, see ActingUser) and that user's household. |
 | [`CatalogChange`](stores.md#catalogchange) | stores | record | One difference found by the range comparator between the last pull and this one. |
 | [`CatalogChange.Type`](stores.md#catalogchangetype) | stores | enum |  |
 | [`CatalogItem`](stores.md#catalogitem) | stores | record | One inventory_item catalog row, with its normalized names cached for matching. |
@@ -192,7 +194,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`MatchGate.Verdict`](stores.md#matchgateverdict) | stores | record |  |
 | [`MealChange`](mealplanner.md#mealchange) | mealplanner | class | What to change on a planned meal. |
 | [`MealPlan`](mealplanner.md#mealplan) | mealplanner | class | Plain data holder for one row of the meal_plan table. |
-| [`MealPlanController`](api.md#mealplancontroller) | api | class |  |
+| [`MealPlanController`](api.md#mealplancontroller) | api | class | Meal plans of the household of the logged-in user (X-Acting-User). |
 | [`MealPlanDto`](api.md#mealplandto) | api | record | One weekly meal plan with the recipes slotted into it. |
 | [`MealPlanDto.PlannedRecipe`](api.md#mealplandtoplannedrecipe) | api | record |  |
 | [`MealPlanRecipe`](mealplanner.md#mealplanrecipe) | mealplanner | class | Plain data holder for one row of the meal_plan_recipe table, joined to the recipe's name. |
@@ -205,6 +207,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`MealServings`](mealplanner.md#mealservings) | mealplanner | class | The single definition of how many people a planned meal is cooked for. |
 | [`MealServings.Resolved`](mealplanner.md#mealservingsresolved) | mealplanner | record | The resolved number and where it came from (meal, recipe, household, default). |
 | [`MealServingsScheduleConfig`](api.md#mealservingsscheduleconfig) | api | class | Registers the nightly servings freeze. |
+| [`NoHouseholdException`](api.md#nohouseholdexception) | api | class | The acting user belongs to no household, so there is no data to work on. |
 | [`Normalizer`](stores.md#normalizer) | stores | class | Turns a German product or ingredient name into a comparable key: lowercase, umlauts to ae/oe/ue/ss, allergen markers and leading ALL-CAPS brand words removed, punctuation to spaces. |
 | [`NotFoundException`](api.md#notfoundexception) | api | class | Thrown by a controller when the requested resource does not exist; mapped to 404. |
 | [`OfferPull`](stores.md#offerpull) | stores | record | Offers pulled from one chain, plus the requests that failed (so a run can be marked PARTIAL). |
@@ -405,3 +408,4 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`UseStockRequest`](api.md#usestockrequest) | api | record | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 | [`VariantParser`](stores.md#variantparser) | stores | class | Splits the "Sorten:" block of an ALDI product description into flavour/size variants. |
 | [`VerifyRequest`](api.md#verifyrequest) | api | record | Body of POST /api/auth/verify: the login the PHP front end received from the user. |
+| [`WebConfig`](api.md#webconfig) | api | class | Registers the Caller parameter resolver. |

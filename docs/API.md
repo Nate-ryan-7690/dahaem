@@ -30,7 +30,7 @@ Every error has the same shape:
 
 `message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
 `BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH`, `UNKNOWN_STORE`, `UNKNOWN_BRAND` (400); `UNAUTHORIZED`,
-`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `TOO_MANY_ATTEMPTS` (429); `PAST_DAY`, `EMAIL_TAKEN`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID`, `NO_HOUSEHOLD` (403); `TOO_MANY_ATTEMPTS` (429); `PAST_DAY`, `EMAIL_TAKEN`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
 `CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
@@ -714,6 +714,9 @@ item as it is now, with its earliest expiry date worked out again.
 
 ### MealPlanController
 
+Meal plans of the household of the logged-in user (X-Acting-User). A plan, meal or list of another household is
+not found (404), and two households can each have a plan for the same week.
+
 
 #### GET /api/meal-plans
 
@@ -737,7 +740,7 @@ item as it is now, with its earliest expiry date worked out again.
 
 #### POST /api/meal-plans
 
-Creates an empty plan for the week. A second plan for the same week is rejected with 409.
+Creates an empty plan for the week. A second plan of the household for the same week is rejected with 409.
 
 **Request body** `CreateMealPlanRequest`
 
@@ -831,10 +834,10 @@ Builds and persists a shopping list from a plan's meals: one line per item still
 subtracting inventory, no store item pre-chosen. Returns the new list's id.
 
 By default every planned meal is scaled by its own servings (the meal's own number, then its recipe's
-preferred servings, then the household head count, then 2; see
-ShoppingListService.generateFromMealPlanByServings), so a recipe planned twice counts twice. The
-optional ?householdId=N lets the head count apply. An explicit ?people=N overrides all of
-that: every recipe is scaled to N people, as before.
+preferred servings, then the household's head count, then 2; see
+ShoppingListService.generateFromMealPlanByServings), so a recipe planned twice counts twice. The head count
+is the caller's household's. An explicit ?people=N overrides all of that: every recipe is scaled to N
+people, as before.
 
 ?shoppingDate=YYYY-MM-DD is the day of the shopping trip (default today, not in the past): the
 offers that run on that day are the ones shown, so a list made today for a trip next week shows next week's
@@ -854,7 +857,6 @@ has not expired by the shopping day; a unit mismatch leaves the line flagged nee
 | Name | Type | Required | Default |
 |---|---|---|---|
 | `people` | `Integer` | no |  |
-| `householdId` | `Integer` | no |  |
 | `shoppingDate` | `LocalDate` | no |  |
 | `from` | `LocalDate` | no |  |
 
@@ -911,22 +913,14 @@ The meal planner by date: read a week, plan a recipe on a day (as often as wante
 remove it, and set a recipe's preferred servings. Every meal is addressed by its own entryId. A plan is
 one Monday-to-Sunday week; the first meal added to a week creates its plan, so a page never has to create one.
 
-The household is named with an optional householdId so the servings can follow its head count; the
-PHP decides which household an account may use (see the backlog item "Auth and session review"). Without it,
-a meal that has no number of its own and no recipe preference is cooked for 2.
+Everything here is the household of the logged-in user (X-Acting-User): its week, its meals, and its head
+count for the servings. A meal of another household is a 404. A meal that has no number of its own, no recipe
+preference and a household without a head count is cooked for 2.
 
 
 #### POST /api/meal-plans/meals
 
 Plans a recipe on a day and returns the meal. The same recipe may be planned many times.
-
-**Query parameters**
-
-| Name | Type | Required | Default |
-|---|---|---|---|
-| `householdId` | `Integer` | no |  |
-
-
 
 **Request body** `AddMealRequest`
 
@@ -986,14 +980,6 @@ position, label, note, servings, recipeId. servings: null
 |---|---|
 | `entryId` | `int` |
 
-**Query parameters**
-
-| Name | Type | Required | Default |
-|---|---|---|---|
-| `householdId` | `Integer` | no |  |
-
-
-
 **Request body** `JsonNode`
 
 ```json
@@ -1030,7 +1016,6 @@ is seven empty days and planId: null. Any day of the week works; the answer star
 | Name | Type | Required | Default |
 |---|---|---|---|
 | `date` | `LocalDate` | no |  |
-| `householdId` | `Integer` | no |  |
 
 
 
