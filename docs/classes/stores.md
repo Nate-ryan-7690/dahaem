@@ -2398,6 +2398,7 @@ classDiagram
         +loadPromotableProducts() List~PromotableProduct~
         +findOrCreateBrand(Connection con, String name) int
         +findOrCreateStoreItem(Connection con, int storeId, int brandId, int itemId, String unit, int size, Double normalPrice) int
+        +findStoreItemPrice(String storeName, String brandName, int itemId, String unit, int size) java.util.Optional~Double~
         +deleteLegacyStoreItems(Connection con) int
         +upsertStoreItem(Connection con, int storeProductId, int storeId, int brandId, int itemId, String unit, int size, double price, boolean available, Double deposit) boolean
         +loadKnownOfferBrands() Set~String~
@@ -2409,6 +2410,7 @@ classDiagram
         +saveOffers(int storeId, List~StoreOffer~ offers, LocalDate pulledOn, String source) int
     }
     class barcode_BarcodeService["BarcodeService"]
+    class barcode_IntakeService["IntakeService"]
     class finance_PurchaseService["PurchaseService"]
     class stores_StoreDiscountService["StoreDiscountService"]
     class stores_StoreImportService["StoreImportService"]
@@ -2439,9 +2441,6 @@ classDiagram
     class stores_StoreOffer["StoreOffer"] {
         <<record>>
     }
-    class api_ServiceConfig["ServiceConfig"] {
-        <<spring>>
-    }
     stores_StoreRepository ..> stores_KnownProduct
     stores_StoreRepository ..> stores_CatalogChange
     stores_StoreRepository ..> stores_StoreProduct
@@ -2451,13 +2450,14 @@ classDiagram
     stores_StoreRepository ..> stores_PromotableProduct
     stores_StoreRepository ..> stores_OfferRow
     stores_StoreRepository ..> stores_StoreOffer
-    api_ServiceConfig ..> stores_StoreRepository
     barcode_BarcodeService --> stores_StoreRepository
+    barcode_IntakeService --> stores_StoreRepository
     finance_PurchaseService --> stores_StoreRepository
     stores_StoreDiscountService --> stores_StoreRepository
     stores_StoreImportService --> stores_StoreRepository
     stores_StoreMatchService --> stores_StoreRepository
     stores_StorePromotionService --> stores_StoreRepository
+    %% 1 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -2474,6 +2474,7 @@ classDiagram
 | `List<PromotableProduct> loadPromotableProducts()` | public | Sets store_product_inventory_item_id for the matched products, in one transaction. |
 | `int findOrCreateBrand(Connection con, String name)` | public | brand_id for a brand name, inserting the brand if it's new (brand_name is UNIQUE). |
 | `int findOrCreateStoreItem(Connection con, int storeId, int brandId, int itemId, String unit, int size, Double normalPrice)` | public | Find-or-create a store_item for a manual/receipt purchase, keyed by (store, brand, inventory item, package unit, package size) — the natural key for a product with no store_product or offer external_id. |
+| `java.util.Optional<Double> findStoreItemPrice(String storeName, String brandName, int itemId, String unit, int size)` | public | The normal price of the store item for (store, brand, item, unit, size), or empty if there is no such store item or it has no price. |
 | `int deleteLegacyStoreItems(Connection con)` | public | Removes promotion rows made before per-product keying existed (store_product_id IS NULL). |
 | `boolean upsertStoreItem(Connection con, int storeProductId, int storeId, int brandId, int itemId, String unit, int size, double price, boolean available, Double deposit)` | public | Insert or refresh one verified store_item, keyed by its source store_product, so each distinct product is its own store_item and nothing collapses. |
 | `Set<String> loadKnownOfferBrands()` | public | Brands the stores themselves report (offer brands and range brands), unlike the brand table, which also holds names the old first-word heuristic invented. |
@@ -2484,7 +2485,7 @@ classDiagram
 | `void saveMatches(Map<Integer, Integer> matches)` | public |  |
 | `int saveOffers(int storeId, List<StoreOffer> offers, LocalDate pulledOn, String source)` | public | Inserts offers, or refreshes them if the same offer (store, product, start date, region) was pulled before, e.g. |
 
-**Referenced by:** `BarcodeService`, `PurchaseService`, `ServiceConfig`, `StoreDiscountService`, `StoreImportService`, `StoreMatchService`, `StorePromotionService`
+**Referenced by:** `BarcodeService`, `IntakeService`, `PurchaseService`, `ServiceConfig`, `StoreDiscountService`, `StoreImportService`, `StoreMatchService`, `StorePromotionService`
 
 ## VariantParser
 

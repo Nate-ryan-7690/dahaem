@@ -57,6 +57,7 @@ Every error has the same shape:
 | PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
 | GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
 | PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
+| POST | [`/api/intake`](#post-apiintake) | Puts the lines away. |
 | GET | [`/api/inventory`](#get-apiinventory) |  |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
 | GET | [`/api/inventory/low-stock`](#get-apiinventorylow-stock) | Items at or below threshold units in stock (default 1). |
@@ -244,6 +245,7 @@ not fit (a typing error) a 400 with code BARCODE_CHECKSUM.
     "inventoryItemId": 0,
     "nameDeutsch": "…",
     "nameEnglish": "…",
+    "itemUnit": "…",
     "brand": "…",
     "packSize": 0,
     "packUnit": "…",
@@ -304,6 +306,7 @@ PACK_UNIT_MISMATCH: an item counted in g takes a pack in g or kg, not in ml).
     "inventoryItemId": 0,
     "nameDeutsch": "…",
     "nameEnglish": "…",
+    "itemUnit": "…",
     "brand": "…",
     "packSize": 0,
     "packUnit": "…",
@@ -379,6 +382,41 @@ Sets the head count and returns the household. 400 when people is missing or bel
   "name": "…",
   "people": 0,
   "createdDate": "2026-10-14"
+}
+```
+
+### IntakeController
+
+Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items.
+
+
+#### POST /api/intake
+
+Puts the lines away. Each line: barcode, expirationDate (required), packs (default 1),
+pricePaid (total for the packs; optional if the store item's price is known), and optionally
+packSize + packUnit for a special package. The barcode must have been assigned
+(PUT /api/barcodes/{code}). Stock grows by packs x pack size in the item's own unit and the expiry date is
+kept as a batch (the earliest is used first). Always answers 200 when the request itself is fine: a line that could
+not be recorded has ok: false with a code (INVALID_BARCODE, BARCODE_CHECKSUM, BARCODE_UNKNOWN,
+EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
+
+**Request body** `IntakeRequest`
+
+```json
+{
+  "storeName": "…",
+  "purchaseDate": "2026-10-14",
+  "lines": ["…"]
+}
+```
+
+**Answer** 200 `IntakeResult`
+
+```json
+{
+  "results": ["…"],
+  "recorded": 0,
+  "failed": 0
 }
 ```
 
@@ -1789,7 +1827,7 @@ UNAVAILABLE (the outside lookup was tried and failed: try again or enter the pro
 
 ### BarcodeProduct
 
-What DAHÄM knows about a barcode: the catalogue item it is, the brand (null = none), the pack (size in unit, like a
+What DAHÄM knows about a barcode: the catalogue item it is (itemUnit is the unit its stock is counted in), the brand (null = none), the pack (size in unit, like a
 store item) and the name as printed (may be null), plus the store items that carry it (one per store that sells it).
 
 | Property | Type |
@@ -1798,6 +1836,7 @@ store item) and the name as printed (may be null), plus the store items that car
 | `inventoryItemId` | `int` |
 | `nameDeutsch` | `String` |
 | `nameEnglish` | `String` |
+| `itemUnit` | `String` |
 | `brand` | `String` |
 | `packSize` | `int` |
 | `packUnit` | `String` |
@@ -1986,6 +2025,34 @@ A household as the API shows it. people is the head count and null until someone
 | `name` | `String` |
 | `people` | `Integer` |
 | `createdDate` | `LocalDate` |
+
+```json
+{ … }
+```
+
+### IntakeController.IntakeRequest
+
+Body: the store, the purchase day (default today, not in the future) and the lines.
+
+| Property | Type |
+|---|---|
+| `storeName` | `String` |
+| `purchaseDate` | `LocalDate` |
+| `lines` | `List<IntakeService.Line>` |
+
+```json
+{ … }
+```
+
+### IntakeController.IntakeResult
+
+results has one entry per line, in order; recorded / failed count them.
+
+| Property | Type |
+|---|---|
+| `results` | `List<IntakeService.LineResult>` |
+| `recorded` | `int` |
+| `failed` | `int` |
 
 ```json
 { … }

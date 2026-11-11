@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling.
 
-84 types in 58 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+87 types in 59 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -72,6 +72,15 @@ classDiagram
         <<controller>>
     }
     class api_HouseholdDto["HouseholdDto"] {
+        <<record>>
+    }
+    class api_IntakeController["IntakeController"] {
+        <<controller>>
+    }
+    class api_IntakeController_IntakeRequest["IntakeController.IntakeRequest"] {
+        <<record>>
+    }
+    class api_IntakeController_IntakeResult["IntakeController.IntakeResult"] {
         <<record>>
     }
     class api_InternalTokenFilter["InternalTokenFilter"] {
@@ -264,6 +273,8 @@ classDiagram
     api_DietDto_SoftHits --> api_DietDto_Hint
     api_HouseholdController ..> api_HouseholdDto
     api_HouseholdController ..> api_SetHouseholdPeopleRequest
+    api_IntakeController *-- api_IntakeController_IntakeRequest
+    api_IntakeController *-- api_IntakeController_IntakeResult
     api_InventoryController ..> api_ItemDto
     api_InventoryController ..> api_UseStockRequest
     api_InventoryController ..> api_ItemPageDto
@@ -357,6 +368,9 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
+| [`IntakeController`](#intakecontroller) | class | REST controller | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
+| [`IntakeController.IntakeRequest`](#intakecontrollerintakerequest) | record |  | Body: the store, the purchase day (default today, not in the future) and the lines. |
+| [`IntakeController.IntakeResult`](#intakecontrollerintakeresult) | record |  | results has one entry per line, in order; recorded / failed count them. |
 | [`InternalTokenFilter`](#internaltokenfilter) | class | Spring component | Shared-secret gate for the internal API. |
 | [`InventoryController`](#inventorycontroller) | class | REST controller |  |
 | [`ItemDto`](#itemdto) | record |  | One inventory item as returned by /api/inventory. |
@@ -1249,6 +1263,110 @@ classDiagram
 | `HouseholdDto from(Household household)` | public static |  |
 
 **Referenced by:** `HouseholdController`
+
+## IntakeController
+
+*class · REST controller*
+
+Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_IntakeController["IntakeController"] {
+        <<controller>>
+        ~int MAX_LINES$
+        -IntakeService intakeService
+        -MealPlanService mealPlanService
+        +IntakeController(IntakeService intakeService, MealPlanService mealPlanService)
+        +intake(IntakeRequest request) IntakeResult
+    }
+    class api_IntakeController_IntakeRequest["IntakeController.IntakeRequest"] {
+        <<record>>
+    }
+    class api_IntakeController_IntakeResult["IntakeController.IntakeResult"] {
+        <<record>>
+    }
+    class barcode_IntakeService["IntakeService"]
+    class mealplanner_MealPlanService["MealPlanService"]
+    api_IntakeController *-- api_IntakeController_IntakeRequest
+    api_IntakeController *-- api_IntakeController_IntakeResult
+    api_IntakeController --> barcode_IntakeService
+    api_IntakeController --> mealplanner_MealPlanService
+```
+
+| Field | Type |
+|---|---|
+| `MAX_LINES` | `int` |
+| `intakeService` | `IntakeService` |
+| `mealPlanService` | `MealPlanService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `IntakeController(IntakeService intakeService, MealPlanService mealPlanService)` | public |  |
+| `IntakeResult intake(IntakeRequest request)` | public | Puts the lines away. |
+
+## IntakeController.IntakeRequest
+
+*record*
+
+Body: the store, the purchase day (default today, not in the future) and the lines.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_IntakeController_IntakeRequest["IntakeController.IntakeRequest"] {
+        <<record>>
+        +String storeName
+        +LocalDate purchaseDate
+        +List~IntakeService.Line~ lines
+    }
+    class api_IntakeController["IntakeController"] {
+        <<controller>>
+    }
+    class barcode_IntakeService["IntakeService"]
+    api_IntakeController_IntakeRequest --> barcode_IntakeService
+    api_IntakeController *-- api_IntakeController_IntakeRequest
+```
+
+| Component | Type |
+|---|---|
+| `storeName` | `String` |
+| `purchaseDate` | `LocalDate` |
+| `lines` | `List<IntakeService.Line>` |
+
+**Referenced by:** `IntakeController`
+
+## IntakeController.IntakeResult
+
+*record*
+
+results has one entry per line, in order; recorded / failed count them.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_IntakeController_IntakeResult["IntakeController.IntakeResult"] {
+        <<record>>
+        +List~IntakeService.LineResult~ results
+        +int recorded
+        +int failed
+    }
+    class api_IntakeController["IntakeController"] {
+        <<controller>>
+    }
+    class barcode_IntakeService["IntakeService"]
+    api_IntakeController_IntakeResult --> barcode_IntakeService
+    api_IntakeController *-- api_IntakeController_IntakeResult
+```
+
+| Component | Type |
+|---|---|
+| `results` | `List<IntakeService.LineResult>` |
+| `recorded` | `int` |
+| `failed` | `int` |
+
+**Referenced by:** `IntakeController`
 
 ## InternalTokenFilter
 
@@ -3130,6 +3248,7 @@ classDiagram
         +productBarcodeRepository() ProductBarcodeRepository
         +productDataSource(String mode, String url) ProductDataSource
         +barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource) BarcodeService
+        +intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository) IntakeService
         +stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository) StockService
         +accountRepository() AccountRepository
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
@@ -3175,7 +3294,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 10 more neighbours not drawn
+    %% 11 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -3196,6 +3315,7 @@ classDiagram
 | `ProductBarcodeRepository productBarcodeRepository()` | public |  |
 | `ProductDataSource productDataSource(String mode, String url)` | public | Where unknown barcodes are looked up: dahaem.barcode.lookup=openfoodfacts (env DAHAEM_BARCODE_LOOKUP) asks Open Food Facts, with only the number sent; the default is off, so nothing leaves the server unless it is switched on. |
 | `BarcodeService barcodeService(ProductBarcodeRepository productBarcodeRepository, InventoryRepository inventoryRepository, StoreRepository storeRepository, ProductDataSource productDataSource)` | public |  |
+| `IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository, PurchaseService purchaseService, StoreRepository storeRepository)` | public |  |
 | `StockService stockService(PurchaseRepository purchaseRepository, InventoryRepository inventoryRepository)` | public |  |
 | `AccountRepository accountRepository()` | public |  |
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
