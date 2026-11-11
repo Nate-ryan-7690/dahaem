@@ -9,6 +9,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -17,7 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** With INTERNAL_API_TOKEN configured, /api/** is callable only with the matching X-Internal-Token. */
+/** With INTERNAL_API_TOKEN configured, EVERY request is callable only with the matching X-Internal-Token. */
 @SpringBootTest(properties = "dahaem.internal-token=test-secret-token")
 @AutoConfigureMockMvc
 class InternalTokenTest {
@@ -69,7 +70,39 @@ class InternalTokenTest {
     }
 
     @Test
-    void nonApiPathsAreNotGated() throws Exception {
-        mvc.perform(get("/")).andExpect(status().is(org.hamcrest.Matchers.not(401)));
+    void aPercentEncodedPathDoesNotSlipPastTheTokenCheck() throws Exception {
+        // "%61" is "a": the servlet container routes this to /api/recipes, but the raw path does not start with "/api/"
+        mvc.perform(get(URI.create("/%61pi/recipes")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+        mvc.perform(get(URI.create("/%61pi/auth/csrf")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+        mvc.perform(post(URI.create("/%61pi/auth/login")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+        mvc.perform(get(URI.create("/%61pi/recipes")).header(HEADER, "test-secret-token"))
+                .andExpect(status().is(org.hamcrest.Matchers.not(401)));   // with the token the request is accepted
+    }
+
+    @Test
+    void everyOtherPathNeedsTheTokenToo() throws Exception {
+        for (String path : new String[]{"/", "/index.html", "/app.js", "/actuator/health", "/error", "/api"}) {
+            mvc.perform(get(path))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("INVALID_TOKEN"));
+        }
+    }
+
+    @Test
+    void theApiServesNoPagesNorSessionLogin() throws Exception {
+        // with the token: a path outside /api is denied, and the old session login / CSRF endpoint are gone
+        mvc.perform(get("/index.html").header(HEADER, "test-secret-token"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/auth/csrf").header(HEADER, "test-secret-token"))
+                .andExpect(status().is4xxClientError());
+        mvc.perform(post("/api/auth/login").header(HEADER, "test-secret-token")
+                        .param("email", "a@b.de").param("password", "x"))
+                .andExpect(status().is4xxClientError());
     }
 }

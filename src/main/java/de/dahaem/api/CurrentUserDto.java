@@ -3,7 +3,7 @@ package de.dahaem.api;
 import de.dahaem.auth.AppUser;
 import de.dahaem.auth.HouseholdMembership;
 
-/** Answer of GET /api/auth/me. household is null for a user who is in no household. The password hash is never sent. */
+/** Answer of POST /api/auth/verify. household is null for a user who is in no household. The password hash is never sent. */
 public record CurrentUserDto(int id, String email, String displayName, HouseholdDto household) {
 
     public record HouseholdDto(int id, String name, String role) {

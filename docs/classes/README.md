@@ -8,7 +8,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (93)"]
+    api["api (92)"]
     auth["auth (14)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
@@ -21,7 +21,7 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|21| auth
+    api -->|19| auth
     api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
@@ -53,7 +53,7 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 93 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`api`](api.md) | 92 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
 | [`auth`](auth.md) | 14 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
@@ -92,9 +92,9 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ApiExceptionHandler`](api.md#apiexceptionhandler) | api | class | Turns exceptions into JSON error responses with sensible status codes. |
 | [`AppUser`](auth.md#appuser) | auth | class | Plain data holder for one row of the app_user table. |
 | [`AssignBarcodeRequest`](api.md#assignbarcoderequest) | api | record | Body of PUT /api/barcodes/{code}: what the barcode is. |
-| [`AuditFilter`](api.md#auditfilter) | api | class | Writes the audit line (see AuditLog) for every /api request that is a write or was refused with 401 / 403. |
+| [`AuditFilter`](api.md#auditfilter) | api | class | Writes the audit line (see AuditLog) for every request, on any path, that is a write or was refused with 401 / 403. |
 | [`AuditLog`](api.md#auditlog) | api | class | The audit trail: one line per login, failed login, write and refused request, in the logger "audit", with the client IP the PHP front end passes on. |
-| [`AuthController`](api.md#authcontroller) | api | class | The parts of the login flow that are plain endpoints. |
+| [`AuthController`](api.md#authcontroller) | api | class | Checking a login for the PHP front end, which owns the user's session. |
 | [`BadRequestException`](api.md#badrequestexception) | api | class | Thrown by a controller when request input fails validation; mapped to 400. |
 | [`BarcodeController`](api.md#barcodecontroller) | api | class | Barcode numbers: what a number is, and remembering it. |
 | [`BarcodeLookup`](barcode.md#barcodelookup) | barcode | record | The answer to "what is this barcode?". |
@@ -115,8 +115,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`CreatedAccount`](auth.md#createdaccount) | auth | record | Result of AccountService.createUser: the new user, the household they were added to, and whether that household was created for them (true for the very first user). |
 | [`CreateMealPlanRequest`](api.md#createmealplanrequest) | api | record | Body of POST /api/meal-plans, e.g. |
 | [`CreatePurchaseRequest`](api.md#createpurchaserequest) | api | record | Body of POST /api/purchases: a purchase of a known store_item. |
-| [`CsrfTokenDto`](api.md#csrftokendto) | api | record | A CSRF token and where to put it: in the headerName header (or the parameterName form field). |
-| [`CurrentUserDto`](api.md#currentuserdto) | api | record | Answer of GET /api/auth/me. |
+| [`CurrentUserDto`](api.md#currentuserdto) | api | record | Answer of POST /api/auth/verify. |
 | [`CurrentUserDto.HouseholdDto`](api.md#currentuserdtohouseholddto) | api | record |  |
 | [`DahaemApplication`](api.md#dahaemapplication) | api | class | Entry point for the REST API. |
 | [`Database`](shared.md#database) | shared | class | Single place that knows how to open a database connection. |
@@ -180,7 +179,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ListCompletedException`](shopping.md#listcompletedexception) | shopping | class | A completed shopping list cannot be changed (reopen it first). |
 | [`LoginService`](auth.md#loginservice) | auth | class | Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the answer says who the user is. |
 | [`LoginService.Verified`](auth.md#loginserviceverified) | auth | record | The user and their household membership (null if in no household). |
-| [`LoginThrottle`](auth.md#loginthrottle) | auth | class | A delay that grows with failed logins, not a lockout. |
+| [`LoginThrottle`](auth.md#loginthrottle) | auth | class | A delay that grows with login attempts from one client address, not a lockout. |
 | [`LoginThrottle.Entry`](auth.md#loginthrottleentry) | auth | class |  |
 | [`MatchGate`](stores.md#matchgate) | stores | class | Plausibility gate between "the name matched an inventory_item" and "create a store_item + discount". |
 | [`MatchGate.References`](stores.md#matchgatereferences) | stores | class | Reference prices per base unit, by inventory_item id and unit family. |
@@ -320,7 +319,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`ReviewReports`](stores.md#reviewreports) | stores | class | Row builders for the review reports (unmatched_offers.tsv, review_matches.tsv, review_prices.tsv). |
 | [`ScheduledMealServings`](api.md#scheduledmealservings) | api | class | The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day that still follows the default (see MealPlanService.freezePastServings), so history no longer changes when the household number |
 | [`ScheduledRefresh`](stores.md#scheduledrefresh) | stores | class | Runs the weekly / monthly refresh on a cron schedule inside the long-running API process. |
-| [`SecurityConfig`](api.md#securityconfig) | api | class | Who may call the API. |
+| [`SecurityConfig`](api.md#securityconfig) | api | class | Who may call the API: only the PHP front end, which proves it with the shared secret in the X-Internal-Token header on EVERY request (see InternalTokenFilter). |
 | [`SelectStoreItemRequest`](api.md#selectstoreitemrequest) | api | record | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](api.md#serviceconfig) | api | class | Wires the existing plain-Java repositories and services as Spring beans. |
 | [`SetHouseholdPeopleRequest`](api.md#sethouseholdpeoplerequest) | api | record | Body of PUT /api/households/{id}/people. |

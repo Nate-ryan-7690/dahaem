@@ -11,38 +11,28 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.csrf.CsrfFilter;
-import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 
 import java.io.IOException;
 
 /**
- * Who may call the API. Session-based form login, meant for the same-origin PWA:
+ * Who may call the API: only the PHP front end, which proves it with the shared secret in the {@code X-Internal-Token}
+ * header on EVERY request (see {@link InternalTokenFilter}). The PHP front end owns the user login and the user session
+ * ({@code POST /api/auth/verify} checks a password); the API has no login page, no session login and no static pages.
  *
  * <ul>
- *   <li>{@code POST /api/auth/login} (form fields {@code email}, {@code password}) checks the password
- *       against the BCrypt hash in app_user and starts an HTTP session (JSESSIONID cookie).
- *       204 on success, 401 on a wrong email or password.</li>
- *   <li>{@code POST /api/auth/logout} ends the session. 204.</li>
- *   <li>Every other {@code /api/**} request needs a logged-in session, else 401 (JSON, never a redirect,
- *       so the frontend can react by showing its login screen).</li>
- *   <li>Everything outside {@code /api/**} is the static PWA shell and stays public, so the login
- *       screen itself can load.</li>
+ *   <li>{@code /api/**} needs the token (or, in tests, a mock user), else 401 as JSON, never a redirect.</li>
+ *   <li>Everything else is denied (the API serves no pages). {@code /error} stays open only so that error responses can
+ *       be rendered.</li>
  * </ul>
  *
- * <p>When {@code INTERNAL_API_TOKEN} is set, {@link InternalTokenFilter} additionally requires it on
- * every {@code /api/**} request and lets such requests through without a session or CSRF token.
- *
- * <p>CSRF protection is on for every state-changing request, the login and logout included. The
- * token lives in the session; the frontend fetches it from {@code GET /api/auth/csrf} and sends it
- * back in the header that endpoint names. Logging in rotates both the session id and the token.
+ * <p>CSRF protection stays on for state-changing requests that do not carry the token; with the token required on every
+ * path none can reach a controller in production. The PHP front end has its own CSRF tokens on its forms.
  */
 @Configuration
 @EnableWebSecurity
@@ -63,17 +53,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder(strength);
     }
 
-    /** Looks users up by email (the login name) through the account service; roles are not used yet. */
-    @Bean
-    public UserDetailsService userDetailsService(AccountService accountService) {
-        return email -> accountService.findByEmail(email)
-                .map(user -> User.withUsername(user.getEmail())
-                        .password(user.getPasswordHash())
-                        .roles("USER")
-                        .build())
-                .orElseThrow(() -> new UsernameNotFoundException("No such user"));
-    }
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, ObjectMapper objectMapper,
                                                    InternalTokenFilter internalToken) throws Exception {
@@ -83,38 +62,19 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.ignoringRequestMatchers(internalToken::hasValidToken))
                 .addFilterBefore(internalToken, CsrfFilter.class)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/csrf").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().permitAll())
-                .formLogin(form -> form
-                        // The PWA draws its own login screen; naming a page here only stops Spring
-                        // from generating one at /login. Unauthenticated requests get a 401, not a redirect.
-                        .loginPage("/")
-                        .loginProcessingUrl("/api/auth/login")
-                        .usernameParameter("email")
-                        .passwordParameter("password")
-                        .successHandler((request, response, authentication) -> {
-                            AuditLog.login(true, authentication.getName(),
-                                    AuditFilter.ipOf(request, internalToken.hasValidToken(request)));
-                            response.setStatus(HttpStatus.NO_CONTENT.value());
-                        })
-                        .failureHandler((request, response, exception) -> {
-                            AuditLog.login(false, request.getParameter("email"),
-                                    AuditFilter.ipOf(request, internalToken.hasValidToken(request)));
-                            writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Wrong email or password");
-                        }))
-                .logout(logout -> logout
-                        .logoutUrl("/api/auth/logout")
-                        .deleteCookies("JSESSIONID")
-                        .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
+                        .anyRequest().denyAll())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, exception) ->
-                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "Login required"))
-                        // Reached for a missing/stale CSRF token: the frontend refetches it and retries.
-                        .accessDeniedHandler((request, response, exception) ->
-                                writeError(response, objectMapper, HttpStatus.FORBIDDEN, "CSRF_INVALID", "Forbidden (missing or expired CSRF token)")))
-                // An API client that hits a 401 does not want to be sent back to that URL after
-                // logging in, and remembering it would open a session for every anonymous request.
+                                writeError(response, objectMapper, HttpStatus.UNAUTHORIZED, "LOGIN_REQUIRED", "Authentication required"))
+                        .accessDeniedHandler((request, response, exception) -> {
+                            if (exception instanceof CsrfException) {
+                                writeError(response, objectMapper, HttpStatus.FORBIDDEN, "CSRF_INVALID", "Forbidden (missing or expired CSRF token)");
+                            } else {
+                                writeError(response, objectMapper, HttpStatus.FORBIDDEN, "FORBIDDEN", "Forbidden");
+                            }
+                        }))
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()));
         return http.build();
     }

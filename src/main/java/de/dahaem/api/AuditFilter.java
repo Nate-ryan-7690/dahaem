@@ -13,9 +13,9 @@ import java.io.IOException;
 import java.util.Set;
 
 /**
- * Writes the audit line (see {@link AuditLog}) for every /api request that is a write or was refused with 401 / 403.
- * It runs before Spring Security, so refused requests (a wrong token, a missing login) are seen too. Logins are logged
- * by the login handlers and the verify endpoint with the typed email, so those paths are skipped here.
+ * Writes the audit line (see {@link AuditLog}) for every request, on any path, that is a write or was refused with 401 /
+ * 403. It runs before Spring Security, so refused requests (a wrong token) are seen too. The verify endpoint logs its own
+ * line with the typed email. The path is not used to decide what to log (the raw path can be percent-encoded).
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
@@ -29,10 +29,10 @@ public class AuditFilter extends OncePerRequestFilter {
         this.token = token;
     }
 
+    /** The verify endpoint writes its own audit line (with the typed email); decided on the decoded path. */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return !path.startsWith("/api/") || path.equals("/api/auth/login") || path.equals("/api/auth/verify");
+        return "/api/auth/verify".equals(request.getServletPath());
     }
 
     @Override

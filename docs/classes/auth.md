@@ -68,7 +68,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`InvalidCredentialsException`](#invalidcredentialsexception) | class |  | The email or the password is wrong. |
 | [`LoginService`](#loginservice) | class |  | Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the answer says who the user is. |
 | [`LoginService.Verified`](#loginserviceverified) | record |  | The user and their household membership (null if in no household). |
-| [`LoginThrottle`](#loginthrottle) | class |  | A delay that grows with failed logins, not a lockout. |
+| [`LoginThrottle`](#loginthrottle) | class |  | A delay that grows with login attempts from one client address, not a lockout. |
 | [`LoginThrottle.Entry`](#loginthrottleentry) | class |  |  |
 | [`TooManyAttemptsException`](#toomanyattemptsexception) | class |  | Too many failed logins from this address or for this email: try again after retryAfterSeconds. |
 | [`UserAdminRunner`](#useradminrunner) | class | command-line tool | Command-line entry point for managing logins. |
@@ -171,9 +171,6 @@ classDiagram
         +setHouseholdPeople(int householdId, int people) Household
     }
     class auth_AccountRepository["AccountRepository"]
-    class api_AuthController["AuthController"] {
-        <<controller>>
-    }
     class api_HouseholdController["HouseholdController"] {
         <<controller>>
     }
@@ -196,9 +193,6 @@ classDiagram
     class api_MealServingsScheduleConfig["MealServingsScheduleConfig"] {
         <<spring>>
     }
-    class api_SecurityConfig["SecurityConfig"] {
-        <<spring>>
-    }
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
@@ -207,13 +201,11 @@ classDiagram
     auth_AccountService ..> auth_AppUser
     auth_AccountService ..> auth_HouseholdMembership
     auth_AccountService ..> auth_Household
-    api_AuthController --> auth_AccountService
     api_HouseholdController --> auth_AccountService
     api_MealPlanController --> auth_AccountService
     api_MealServingsScheduleConfig ..> auth_AccountService
     api_PlannedMealController --> auth_AccountService
     api_ScheduledMealServings --> auth_AccountService
-    api_SecurityConfig ..> auth_AccountService
     api_ServiceConfig ..> auth_AccountService
     auth_LoginService --> auth_AccountService
 ```
@@ -242,7 +234,7 @@ classDiagram
 | `Optional<Household> findHousehold(int householdId)` | public |  |
 | `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
 
-**Referenced by:** `AuthController`, `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `SecurityConfig`, `ServiceConfig`
+**Referenced by:** `HouseholdController`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
 
 ## AppUser
 
@@ -500,7 +492,8 @@ classDiagram
 *class*
 
 Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the
-answer says who the user is. Failed attempts slow the caller down (LoginThrottle). No SQL here, no UI here.
+answer says who the user is. Attempts from one client address slow that address down (LoginThrottle). No SQL
+here, no UI here.
 
 ```mermaid
 classDiagram
@@ -576,33 +569,30 @@ classDiagram
 
 *class*
 
-A delay that grows with failed logins, not a lockout. After #IP_THRESHOLD failures from one client address
-(or #EMAIL_THRESHOLD for one email) further attempts are refused for 30 seconds, then 60, 120 ... up to 15
-minutes for an address and 5 minutes for an email. The address limit is strict; the email limit is generous and short,
-so somebody guessing wrong passwords for the real user's email from elsewhere can slow the real user down by at most
-a few minutes and never lock them out. Failures are forgotten after an hour without one. A correct login clears the
-email's count but not the address's (otherwise a login to one's own account would reset the guessing against another).
-In memory: a restart clears it. Thread-safe.
+A delay that grows with login attempts from one client address, not a lockout. The attempt is counted BEFORE the
+password is looked at (so many attempts sent at the same moment cannot all slip through while the first is still being
+checked): the first #THRESHOLD attempts are allowed, the next ones are refused for 30 seconds, then 60, 120 ...
+up to 15 minutes. A correct password gives its own attempt back. Attempts are forgotten after an hour without one.
+
+There is deliberately no limit per email: such a limit lets anybody who knows an email address keep the real user
+out by guessing wrong once in a while. Guessing spread over many addresses is for the edge (Cloudflare) to stop.
+In memory: a restart clears it. Thread-safe (one lock; the work under it is tiny, the password check is outside).
 
 ```mermaid
 classDiagram
     direction LR
     class auth_LoginThrottle["LoginThrottle"] {
-        +int IP_THRESHOLD$
-        +int EMAIL_THRESHOLD$
+        +int THRESHOLD$
         -long SECOND$
         -long BASE_COOLDOWN$
-        -long IP_MAX_COOLDOWN$
-        -long EMAIL_MAX_COOLDOWN$
+        -long MAX_COOLDOWN$
         -long FORGET_AFTER$
         -int MAX_ENTRIES$
         -Map~String, Entry~ byIp
-        -Map~String, Entry~ byEmail
         -LongSupplier nanoClock
         +LoginThrottle(LongSupplier nanoClock)
-        +retryAfterSeconds(String ip, String email) OptionalLong
-        +failure(String ip, String email) void
-        +success(String email) void
+        +begin(String ip) OptionalLong
+        +succeeded(String ip) void
     }
     class auth_LoginThrottle_Entry["LoginThrottle.Entry"]
     class auth_LoginService["LoginService"]
@@ -616,24 +606,20 @@ classDiagram
 
 | Field | Type |
 |---|---|
-| `IP_THRESHOLD` | `int` |
-| `EMAIL_THRESHOLD` | `int` |
+| `THRESHOLD` | `int` |
 | `SECOND` | `long` |
 | `BASE_COOLDOWN` | `long` |
-| `IP_MAX_COOLDOWN` | `long` |
-| `EMAIL_MAX_COOLDOWN` | `long` |
+| `MAX_COOLDOWN` | `long` |
 | `FORGET_AFTER` | `long` |
 | `MAX_ENTRIES` | `int` |
 | `byIp` | `Map<String, Entry>` |
-| `byEmail` | `Map<String, Entry>` |
 | `nanoClock` | `LongSupplier` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `LoginThrottle(LongSupplier nanoClock)` | public |  |
-| `OptionalLong retryAfterSeconds(String ip, String email)` | public | Seconds to wait before this address / email may try again, or empty if it may try now. |
-| `void failure(String ip, String email)` | public |  |
-| `void success(String email)` | public | A correct login: forget the failures for this email (not for the address). |
+| `OptionalLong begin(String ip)` | public | Asks to make an attempt. |
+| `void succeeded(String ip)` | public | The password was right: the attempt does not count (and does not leave a block behind that only it caused). |
 
 **Referenced by:** `LoginService`, `ServiceConfig`
 
@@ -645,8 +631,8 @@ classDiagram
 classDiagram
     direction LR
     class auth_LoginThrottle_Entry["LoginThrottle.Entry"] {
-        ~int failures
-        ~long lastFailure
+        ~int attempts
+        ~long lastAttempt
         ~long blockedUntil
     }
     class auth_LoginThrottle["LoginThrottle"]
@@ -655,8 +641,8 @@ classDiagram
 
 | Field | Type |
 |---|---|
-| `failures` | `int` |
-| `lastFailure` | `long` |
+| `attempts` | `int` |
+| `lastAttempt` | `long` |
 | `blockedUntil` | `long` |
 
 **Referenced by:** `LoginThrottle`
