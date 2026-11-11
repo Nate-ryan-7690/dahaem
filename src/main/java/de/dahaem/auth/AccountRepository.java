@@ -132,6 +132,22 @@ public class AccountRepository {
         }
     }
 
+    /** Every household, oldest first. */
+    public java.util.List<Household> findAllHouseholds() {
+        String sql = "SELECT household_id, household_name, household_people, created_date FROM household ORDER BY household_id";
+        java.util.List<Household> out = new java.util.ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(mapHousehold(rs));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not list the households", e);
+        }
+        return out;
+    }
+
     /** The oldest household, i.e. the one the first user created. Empty on a fresh database. */
     public Optional<Household> findFirstHousehold() {
         String sql = "SELECT household_id, household_name, household_people, created_date FROM household "

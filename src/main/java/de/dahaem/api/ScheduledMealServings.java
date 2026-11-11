@@ -11,7 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * The nightly job (default 00:01, household time zone): writes the resolved servings onto every meal of a past day
  * that still follows the default (see {@link MealPlanService#freezePastServings}), so history no longer changes when
  * the household number or a recipe's preference does. It also catches up on any night the API was not running.
- * The head count is the shared household's. The scheduled method never throws, so a failure cannot stop later runs.
+ * Each household is frozen with its own head count. The scheduled method never throws, so a failure cannot stop later runs.
  */
 public class ScheduledMealServings {
 
@@ -35,9 +35,15 @@ public class ScheduledMealServings {
         }
     }
 
-    /** One run; public so an operator or a test can call it directly. Returns how many meals were frozen. */
+    /**
+     * One run; public so an operator or a test can call it directly. Every household is frozen with its own head count.
+     * Returns how many meals were frozen.
+     */
     public int run() {
-        Integer people = accountService.findFirstHousehold().map(Household::getPeople).orElse(null);
-        return mealPlanService.freezePastServings(people);
+        int frozen = 0;
+        for (Household household : accountService.allHouseholds()) {
+            frozen += mealPlanService.forHousehold(household.getId()).freezePastServings(household.getPeople());
+        }
+        return frozen;
     }
 }

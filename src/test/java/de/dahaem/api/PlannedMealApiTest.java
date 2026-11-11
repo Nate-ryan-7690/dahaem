@@ -2,7 +2,9 @@ package de.dahaem.api;
 
 import de.dahaem.shared.Database;
 import de.dahaem.tags.TagFixtures;
+import de.dahaem.testsupport.ActingUserTestConfig;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @WithMockUser
+@Import(ActingUserTestConfig.class)
 class PlannedMealApiTest {
 
     private static int soup;
@@ -53,6 +57,7 @@ class PlannedMealApiTest {
         exec("UPDATE recipe SET recipe_thumbnail_url = 'https://example.test/suppe.jpg' WHERE recipe_id = " + soup);
         exec("INSERT INTO household (household_name, household_people, created_date) VALUES ('Zuhause', 3, '2026-11-06')");
         household = id("SELECT household_id FROM household");
+        TestHousehold.actAs(TestHousehold.createUser(household, "planner@example.test", "ADMIN"));
     }
 
     @BeforeEach
@@ -63,6 +68,7 @@ class PlannedMealApiTest {
         exec("DELETE FROM meal_plan_recipe");
         exec("DELETE FROM meal_plan");
         exec("UPDATE recipe SET recipe_preferred_servings = NULL");
+        exec("UPDATE household SET household_people = 3");
     }
 
     @AfterAll
@@ -102,15 +108,17 @@ class PlannedMealApiTest {
 
     @Test
     void servingsResolveFromMealThenRecipeThenHouseholdThenDefault() throws Exception {
-        // no household named: default 2
+        // a household without a head count: default 2
+        exec("UPDATE household SET household_people = NULL");
         int entry = addMeal("2031-01-08", null);
         mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(jsonPath("$.householdPeople").value(nullValue()))
                 .andExpect(jsonPath("$.days[2].meals[0].servings").value(2))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("default"));
 
-        // household named (3 people)
-        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08").param("householdId", "" + household))
+        // the household's head count (3 people)
+        exec("UPDATE household SET household_people = 3");
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(jsonPath("$.householdPeople").value(3))
                 .andExpect(jsonPath("$.days[2].meals[0].servings").value(3))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("household"));
@@ -121,7 +129,7 @@ class PlannedMealApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recipeId").value(soup))
                 .andExpect(jsonPath("$.preferredServings").value(4));
-        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08").param("householdId", "" + household))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(jsonPath("$.days[2].meals[0].servings").value(4))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("recipe"))
                 .andExpect(jsonPath("$.days[2].meals[0].recipePreferredServings").value(4));
@@ -129,14 +137,14 @@ class PlannedMealApiTest {
         // the meal's own number beats both, and null puts it back
         mvc.perform(patch("/api/meal-plans/meals/{id}", entry).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"servings\": 6}")
-                        .param("householdId", "" + household))
+                        )
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.servings").value(6))
                 .andExpect(jsonPath("$.servingsSource").value("meal"))
                 .andExpect(jsonPath("$.ownServings").value(6));
         mvc.perform(patch("/api/meal-plans/meals/{id}", entry).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"servings\": null}")
-                        .param("householdId", "" + household))
+                        )
                 .andExpect(jsonPath("$.servings").value(4))
                 .andExpect(jsonPath("$.servingsSource").value("recipe"))
                 .andExpect(jsonPath("$.ownServings").value(nullValue()));
@@ -146,7 +154,7 @@ class PlannedMealApiTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"servings\": null}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.preferredServings").value(nullValue()));
-        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08").param("householdId", "" + household))
+        mvc.perform(get("/api/meal-plans/week").param("date", "2031-01-08"))
                 .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("household"));
     }
 
@@ -191,8 +199,6 @@ class PlannedMealApiTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/meal-plans/week").param("date", "not-a-date"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(get("/api/meal-plans/week").param("householdId", "999999"))
-                .andExpect(status().isNotFound());
 
         int entry = addMeal("2031-01-08", null);
         mvc.perform(patch("/api/meal-plans/meals/{id}", entry).with(csrf()).contentType(MediaType.APPLICATION_JSON)
@@ -220,16 +226,14 @@ class PlannedMealApiTest {
     }
 
     @Test
-    void theShoppingListEndpointTakesAHouseholdAndStillValidatesPeople() throws Exception {
+    void theShoppingListEndpointUsesTheCallersHouseholdAndStillValidatesPeople() throws Exception {
         addMeal("2031-01-08", null);
         int planId = id("SELECT MAX(meal_plan_id) FROM meal_plan");
 
         mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf())
-                        .param("householdId", "" + household))
+                        )
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.shoppingListId").isNumber());
-        mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()).param("householdId", "999999"))
-                .andExpect(status().isNotFound());
         mvc.perform(post("/api/meal-plans/{id}/shopping-list", planId).with(csrf()).param("people", "0"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/meal-plans/{id}/shopping-list", 999999).with(csrf()))

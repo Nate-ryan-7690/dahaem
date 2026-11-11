@@ -20,12 +20,14 @@ import java.util.Optional;
 
 public class MealPlanRepository {
 
-    // Creates a new meal plan for the given week and returns its generated id.
-    public int create(LocalDate weekStartDate) {
-        String sql = "INSERT INTO meal_plan (meal_plan_week_start_date) VALUES (?)";
+    // Creates a new meal plan of a household for the given week and returns its generated id. A household has one plan
+    // per week (UNIQUE), so a second one is a constraint violation.
+    public int create(int householdId, LocalDate weekStartDate) {
+        String sql = "INSERT INTO meal_plan (meal_plan_household_id, meal_plan_week_start_date) VALUES (?, ?)";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setObject(1, weekStartDate);
+            ps.setInt(1, householdId);
+            ps.setObject(2, weekStartDate);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -65,22 +67,40 @@ public class MealPlanRepository {
         }
     }
 
-    // Finds all meal plans, sorted by week start date.
-    public List<MealPlan> findAll() {
+    // Finds all meal plans of a household, sorted by week start date.
+    public List<MealPlan> findAll(int householdId) {
         String sql = "SELECT meal_plan_id, meal_plan_week_start_date FROM meal_plan " +
-                "ORDER BY meal_plan_week_start_date";
+                "WHERE meal_plan_household_id = ? ORDER BY meal_plan_week_start_date";
 
         List<MealPlan> plans = new ArrayList<>();
         try (Connection con = Database.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-                plans.add(mapRow(rs));
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, householdId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    plans.add(mapRow(rs));
+                }
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not load meal plans", e);
         }
         return plans;
+    }
+
+    /** The plan with this id if it belongs to the household (empty for another household's plan). */
+    public Optional<MealPlan> findPlan(int householdId, int planId) {
+        String sql = "SELECT meal_plan_id, meal_plan_week_start_date FROM meal_plan " +
+                "WHERE meal_plan_id = ? AND meal_plan_household_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, planId);
+            ps.setInt(2, householdId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not load meal plan " + planId, e);
+        }
     }
 
     // Finds all recipes on a plan, joined to the recipe's name.
@@ -119,13 +139,14 @@ public class MealPlanRepository {
             "INNER JOIN recipe r ON mpr.meal_plan_recipe_id = r.recipe_id " +
             "INNER JOIN meal_plan mp ON mpr.meal_plan_recipe_plan_id = mp.meal_plan_id ";
 
-    /** The plan of the week that starts on this Monday, if there is one. */
-    public Optional<MealPlan> findPlanByWeekStart(LocalDate weekStart) {
+    /** The plan of the household for the week that starts on this Monday, if there is one. */
+    public Optional<MealPlan> findPlanByWeekStart(int householdId, LocalDate weekStart) {
         String sql = "SELECT meal_plan_id, meal_plan_week_start_date FROM meal_plan " +
-                "WHERE meal_plan_week_start_date = ?";
+                "WHERE meal_plan_household_id = ? AND meal_plan_week_start_date = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setObject(1, weekStart);
+            ps.setInt(1, householdId);
+            ps.setObject(2, weekStart);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
             }
@@ -153,11 +174,13 @@ public class MealPlanRepository {
         return meals;
     }
 
-    public Optional<PlannedMeal> findMeal(int entryId) {
-        String sql = MEAL_SELECT + "WHERE mpr.meal_plan_recipe_entry_id = ?";
+    /** One planned meal if it is on a plan of the household (empty for another household's meal). */
+    public Optional<PlannedMeal> findMeal(int householdId, int entryId) {
+        String sql = MEAL_SELECT + "WHERE mpr.meal_plan_recipe_entry_id = ? AND mp.meal_plan_household_id = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, entryId);
+            ps.setInt(2, householdId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? Optional.of(mapMeal(rs)) : Optional.empty();
             }
@@ -167,17 +190,18 @@ public class MealPlanRepository {
     }
 
     /**
-     * Meals on a day before {@code today} that still have no number of their own (they follow the default), oldest
-     * entry first. These are the ones the nightly job freezes.
+     * Meals of a household on a day before {@code today} that still have no number of their own (they follow the
+     * default), oldest entry first. These are the ones the nightly job freezes.
      */
-    public List<PlannedMeal> findUnfrozenMealsBefore(LocalDate today) {
-        String sql = MEAL_SELECT + "WHERE mpr.meal_plan_recipe_servings IS NULL "
+    public List<PlannedMeal> findUnfrozenMealsBefore(int householdId, LocalDate today) {
+        String sql = MEAL_SELECT + "WHERE mp.meal_plan_household_id = ? AND mpr.meal_plan_recipe_servings IS NULL "
                 + "AND COALESCE(mpr.meal_plan_recipe_date, mp.meal_plan_week_start_date) < ? "
                 + "ORDER BY mpr.meal_plan_recipe_entry_id";
         List<PlannedMeal> meals = new ArrayList<>();
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setObject(1, today);
+            ps.setInt(1, householdId);
+            ps.setObject(2, today);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     meals.add(mapMeal(rs));
@@ -249,7 +273,7 @@ public class MealPlanRepository {
     }
 
     /** Writes every editable column of one meal. Returns false when there is no such meal. */
-    public boolean updateMeal(int entryId, int planId, int recipeId, LocalDate date, String label,
+    public boolean updateMeal(int householdId, int entryId, int planId, int recipeId, LocalDate date, String label,
                               Integer servings, int position, String note) {
         String sql = "UPDATE meal_plan_recipe SET meal_plan_recipe_plan_id = ?, meal_plan_recipe_id = ?, " +
                 "meal_plan_recipe_date = ?, meal_plan_recipe_meal_time = ?, meal_plan_recipe_servings = ?, " +
@@ -265,7 +289,7 @@ public class MealPlanRepository {
             ps.setString(7, note);
             ps.setInt(8, entryId);
             // Count matched rows, not changed rows: saving the same values again must not look like "not found".
-            return ps.executeUpdate() > 0 || findMeal(entryId).isPresent();
+            return ps.executeUpdate() > 0 || findMeal(householdId, entryId).isPresent();
         } catch (SQLException e) {
             throw new RuntimeException("Could not update planned meal " + entryId, e);
         }
