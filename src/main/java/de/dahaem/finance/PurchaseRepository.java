@@ -190,7 +190,8 @@ public class PurchaseRepository {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int remaining = rs.getInt(2);
-                    batches.add(new Batch(rs.getInt(1), rs.wasNull() ? null : remaining, rs.getInt(3), rs.getInt(4),
+                    boolean untouched = rs.wasNull();   // right after reading the column: NULL = nothing used yet
+                    batches.add(new Batch(rs.getInt(1), untouched ? null : remaining, rs.getInt(3), rs.getInt(4),
                             rs.getString(5)));
                 }
             }
