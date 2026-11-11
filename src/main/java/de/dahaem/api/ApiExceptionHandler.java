@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import de.dahaem.barcode.IntakeConflictException;
 import de.dahaem.barcode.InvalidBarcodeException;
 import de.dahaem.barcode.PackUnitException;
 import de.dahaem.mealplanner.PastDayException;
@@ -58,6 +59,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidBarcodeException.class)
     public ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e) {
         return error(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
+    }
+
+    /** An intake request id that cannot be used again as it is: a conflict with a code of its own. */
+    @ExceptionHandler(IntakeConflictException.class)
+    public ResponseEntity<ErrorResponse> intakeConflict(IntakeConflictException e) {
+        return error(HttpStatus.CONFLICT, e.code(), e.getMessage());
     }
 
     /** A store or brand name that does not exist, where creating one was not asked for: a bad request with its own code. */

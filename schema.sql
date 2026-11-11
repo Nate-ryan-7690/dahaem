@@ -525,3 +525,12 @@ CREATE TABLE product_barcode_store_item (
 	PRIMARY KEY (product_barcode_store_item_code, product_barcode_store_item_store_item_id),
 	FOREIGN KEY (product_barcode_store_item_code) REFERENCES product_barcode(product_barcode_code),
 	FOREIGN KEY (product_barcode_store_item_store_item_id) REFERENCES store_item(store_item_id));
+
+-- Intake requests (migration 0021): what was answered to an intake request id, so a repeated submit is not recorded
+-- twice. The result is NULL while the request is being processed.
+
+CREATE TABLE intake_request (
+	intake_request_id      VARCHAR(64) NOT NULL PRIMARY KEY,
+	intake_request_hash    CHAR(64)    NOT NULL,
+	intake_request_created DATETIME    NOT NULL,
+	intake_request_result  MEDIUMTEXT  NULL);

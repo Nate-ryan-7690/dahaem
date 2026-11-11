@@ -488,8 +488,11 @@ Gaps found 2026-10-13 by reading the current API and schema; agents build these,
   needs `createBrand: true` for a new brand; otherwise 400 `UNKNOWN_STORE` / `UNKNOWN_BRAND`; matching ignores case);
   pickers `GET /api/stores` and `GET /api/brands?q=&page=&pageSize=`; `GET /api/inventory/{id}/batches` (store, brand,
   purchase and expiry date, packs, pack size, what is left in the item's unit, earliest expiry first, `?all=true` includes
-  used-up ones). Next: a client request id on intake so a repeated submit is not recorded twice (needs a table: migration
-  0021). Wanted, lower priority, not built: marking a line as bought on sale (link to the current offer; "surface, don't
+  used-up ones). Request id done (migration 0021, `intake_request`): `POST /api/intake` takes an optional
+  `requestId` (8-64 letters, digits, - _); a repeat with the same body gets the stored answer (`replayed: true`) and
+  records nothing twice, another body with the same id is 409 `REQUEST_ID_REUSED`, a request still being processed 409
+  `REQUEST_IN_PROGRESS`, a request that failed before recording (unknown store) gives its id back. Stored answers are
+  never cleaned up yet (a few KB per submit). Wanted, lower priority, not built: marking a line as bought on sale (link to the current offer; "surface, don't
   decide": an explicit flag, no automatic matching), and pending scans shared between phone and tablet for cart mode (a
   holding table; unpacking mode comes first).
 - **API polish from the frontend agent's list (2026-11-10)** — done: `purchasedLines` (and `mealPlanId`) in the list

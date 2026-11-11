@@ -28,13 +28,17 @@ public class IntakeController {
     /**
      * Body: the store (an existing one, from {@code GET /api/stores}; {@code createStore: true} is needed to add a new
      * one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines.
+     * {@code requestId} (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see {@link #intake}.
      */
     public record IntakeRequest(String storeName, Boolean createStore, LocalDate purchaseDate,
-                                List<IntakeService.Line> lines) {
+                                List<IntakeService.Line> lines, String requestId) {
     }
 
-    /** {@code results} has one entry per line, in order; {@code recorded} / {@code failed} count them. */
-    public record IntakeResult(List<IntakeService.LineResult> results, int recorded, int failed) {
+    /**
+     * {@code results} has one entry per line, in order; {@code recorded} / {@code failed} count them. {@code replayed} is
+     * true when this is the stored answer to a {@code requestId} seen before: nothing was recorded again.
+     */
+    public record IntakeResult(List<IntakeService.LineResult> results, int recorded, int failed, boolean replayed) {
     }
 
     /**
@@ -42,7 +46,10 @@ public class IntakeController {
      * {@code pricePaid} (total for the packs; optional if the store item's price is known), and optionally
      * {@code packSize} + {@code packUnit} for a special package. The barcode must have been assigned
      * ({@code PUT /api/barcodes/{code}}). Stock grows by packs x pack size in the item's own unit and the expiry date is
-     * kept as a batch (the earliest is used first). An unknown store is a 400 with code UNKNOWN_STORE unless {@code createStore} is true. Always answers 200 when the request itself is fine: a line that could
+     * kept as a batch (the earliest is used first). An unknown store is a 400 with code UNKNOWN_STORE unless {@code createStore} is true.
+     * With a {@code requestId}, sending the same request again (same body) returns the stored answer with {@code replayed}
+     * true and records nothing twice; another body with the same id is 409 REQUEST_ID_REUSED, a request still being
+     * processed 409 REQUEST_IN_PROGRESS. Always answers 200 when the request itself is fine: a line that could
      * not be recorded has {@code ok: false} with a {@code code} (INVALID_BARCODE, BARCODE_CHECKSUM, BARCODE_UNKNOWN,
      * EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
      */
@@ -59,9 +66,14 @@ public class IntakeController {
         if (purchaseDate.isAfter(today)) {
             throw new BadRequestException("'purchaseDate' must not be in the future");
         }
-        List<IntakeService.LineResult> results = intakeService.intake(request.storeName(),
-                Boolean.TRUE.equals(request.createStore()), purchaseDate, request.lines());
+        String requestId = request.requestId() == null || request.requestId().isBlank() ? null : request.requestId().trim();
+        if (requestId != null && !requestId.matches("[A-Za-z0-9_-]{8,64}")) {
+            throw new BadRequestException("'requestId' must be 8 to 64 letters, digits, - or _");
+        }
+        IntakeService.Outcome outcome = intakeService.intakeOnce(requestId, request.toString(),
+                request.storeName(), Boolean.TRUE.equals(request.createStore()), purchaseDate, request.lines());
+        List<IntakeService.LineResult> results = outcome.results();
         int recorded = (int) results.stream().filter(IntakeService.LineResult::ok).count();
-        return new IntakeResult(results, recorded, results.size() - recorded);
+        return new IntakeResult(results, recorded, results.size() - recorded, outcome.replayed());
     }
 }

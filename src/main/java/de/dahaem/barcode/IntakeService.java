@@ -5,10 +5,17 @@ import de.dahaem.finance.StockAmounts;
 import de.dahaem.stores.StoreRef;
 import de.dahaem.stores.StoreRepository;
 import de.dahaem.stores.UnknownStoreException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -25,14 +32,87 @@ public class IntakeService {
     static final String NO_BRAND = "Ohne Marke";
     static final int MAX_PACKS = 1000;
 
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     private final ProductBarcodeRepository barcodes;
     private final PurchaseService purchases;
     private final StoreRepository stores;
+    private final IntakeRequestRepository requests;
 
-    public IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores) {
+    public IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores,
+                         IntakeRequestRepository requests) {
         this.barcodes = barcodes;
         this.purchases = purchases;
         this.stores = stores;
+        this.requests = requests;
+    }
+
+    /** The lines' results, and whether they are the stored answer to a request id seen before (nothing was recorded again). */
+    public record Outcome(List<LineResult> results, boolean replayed) {
+    }
+
+    /**
+     * Like {@link #intake} but safe to send twice: a client that is not sure its request arrived repeats it with the same
+     * {@code requestId} and gets the stored answer back ({@code replayed}), and nothing is recorded a second time.
+     * {@code fingerprint} identifies the request body: the same id with another body is an IntakeConflictException
+     * (409 REQUEST_ID_REUSED); an id whose first request is still being processed is 409 REQUEST_IN_PROGRESS. A request
+     * that fails before anything was recorded (an unknown store) gives its id back, so the corrected request can be sent
+     * with the same id. Without a request id this is plain {@link #intake}.
+     */
+    public Outcome intakeOnce(String requestId, String fingerprint, String storeName, boolean createStore,
+                              LocalDate purchaseDate, List<Line> lines) {
+        if (requestId == null) {
+            return new Outcome(intake(storeName, createStore, purchaseDate, lines), false);
+        }
+        String hash = sha256(fingerprint);
+        if (!requests.claim(requestId, hash)) {
+            IntakeRequestRepository.Stored stored = requests.find(requestId)
+                    .orElseThrow(() -> new IntakeConflictException("REQUEST_IN_PROGRESS",
+                            "This request id was just given back: send the request again"));
+            if (!stored.hash().equals(hash)) {
+                throw new IntakeConflictException("REQUEST_ID_REUSED",
+                        "This request id was already used for a different request: use a new one");
+            }
+            if (stored.resultJson() == null) {
+                throw new IntakeConflictException("REQUEST_IN_PROGRESS",
+                        "This request is still being processed: wait, and check the stock before sending it again");
+            }
+            return new Outcome(fromJson(stored.resultJson()), true);
+        }
+        try {
+            List<LineResult> results = intake(storeName, createStore, purchaseDate, lines);
+            requests.complete(requestId, toJson(results));
+            return new Outcome(results, false);
+        } catch (RuntimeException e) {
+            requests.release(requestId);   // every line is handled on its own; only the store check can fail before any is recorded
+            throw e;
+        }
+    }
+
+    private static String toJson(List<LineResult> results) {
+        try {
+            return JSON.writeValueAsString(results);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not store the intake answer", e);
+        }
+    }
+
+    private static List<LineResult> fromJson(String json) {
+        try {
+            return JSON.readValue(json, new TypeReference<List<LineResult>>() {
+            });
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Could not read the stored intake answer", e);
+        }
+    }
+
+    private static String sha256(String text) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /**

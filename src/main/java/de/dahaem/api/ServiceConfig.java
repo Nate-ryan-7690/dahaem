@@ -6,6 +6,7 @@ import de.dahaem.diet.DietFilterRepository;
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietPresets;
 import de.dahaem.barcode.BarcodeService;
+import de.dahaem.barcode.IntakeRequestRepository;
 import de.dahaem.barcode.IntakeService;
 import de.dahaem.barcode.OpenFoodFactsSource;
 import de.dahaem.barcode.ProductBarcodeRepository;
@@ -140,9 +141,15 @@ public class ServiceConfig {
     }
 
     @Bean
+    public IntakeRequestRepository intakeRequestRepository() {
+        return new IntakeRequestRepository();
+    }
+
+    @Bean
     public IntakeService intakeService(ProductBarcodeRepository productBarcodeRepository,
-                                       PurchaseService purchaseService, StoreRepository storeRepository) {
-        return new IntakeService(productBarcodeRepository, purchaseService, storeRepository);
+                                       PurchaseService purchaseService, StoreRepository storeRepository,
+                                       IntakeRequestRepository intakeRequestRepository) {
+        return new IntakeService(productBarcodeRepository, purchaseService, storeRepository, intakeRequestRepository);
     }
 
     @Bean

@@ -10,7 +10,7 @@ Every class, record, interface and enum of the Java backend, one page per packag
 flowchart TD
     api["api (89)"]
     auth["auth (8)"]
-    barcode["barcode (16)"]
+    barcode["barcode (20)"]
     diet["diet (14)"]
     finance["finance (9)"]
     inventory["inventory (4)"]
@@ -22,7 +22,7 @@ flowchart TD
     suggestions["suggestions (12)"]
     tags["tags (29)"]
     api -->|14| auth
-    api -->|10| barcode
+    api -->|12| barcode
     api -->|12| diet
     api -->|7| finance
     api -->|5| inventory
@@ -55,7 +55,7 @@ Arrows point from the importing package to the imported one; the number is how m
 |---|---|---|
 | [`api`](api.md) | 89 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
 | [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
-| [`barcode`](barcode.md) | 16 |  |
+| [`barcode`](barcode.md) | 20 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
 | [`inventory`](inventory.md) | 4 | The item catalogue and the pantry. |
@@ -136,7 +136,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`DietVerdict.Hint`](diet.md#dietverdicthint) | diet | record | An item with possible animals of which at least one is excluded; allowedAnimals is what remains. |
 | [`DietVerdict.Item`](diet.md#dietverdictitem) | diet | record | A matched item (id and name). |
 | [`DietVerdict.SoftHits`](diet.md#dietverdictsofthits) | diet | record | Soft-rule hits: tags the recipe has, ingredient items it has, and items that MAY be an avoided animal (for an avoided animal tag). |
-| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, PAST_SHOPPING_DAY, INVALID_BARCODE, BARCODE_CHECKSUM, PAC |
+| [`ErrorResponse`](api.md#errorresponse) | api | record | JSON body for every error response: the HTTP status, its reason phrase, a readable (English) message and a stable machine-readable code (for example NOT_FOUND, BAD_REQUEST, PAST_DAY, REQUEST_IN_PROGRESS, REQUEST_ID_REUSED, PAST_SHOPPING_DAY |
 | [`GeneratedShoppingListDto`](api.md#generatedshoppinglistdto) | api | record | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`Gtin`](barcode.md#gtin) | barcode | class | Barcode numbers (GTIN: EAN-8, UPC-A, EAN-13, GTIN-14). |
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
@@ -146,13 +146,17 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`HouseholdRole`](auth.md#householdrole) | auth | enum | What a user may do in their household. |
 | [`HttpFetcher`](stores.md#httpfetcher) | stores | class | Fetches public web pages / JSON politely: a normal browser User-Agent, timeouts, a few retries with growing backoff, and a pause after every successful request. |
 | [`ImportSummary`](stores.md#importsummary) | stores | record | What one import run did; printed by StoreImportRunner. |
+| [`IntakeConflictException`](barcode.md#intakeconflictexception) | barcode | class | An intake request id that cannot be used again as it is: it is still being processed (REQUEST_IN_PROGRESS) or it was used before for a different request (REQUEST_ID_REUSED). |
 | [`IntakeController`](api.md#intakecontroller) | api | class | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
 | [`IntakeController.IntakeRequest`](api.md#intakecontrollerintakerequest) | api | record | Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines. |
 | [`IntakeController.IntakeResult`](api.md#intakecontrollerintakeresult) | api | record | results has one entry per line, in order; recorded / failed count them. |
+| [`IntakeRequestRepository`](barcode.md#intakerequestrepository) | barcode | class | All SQL for intake_request lives here and nowhere else. |
+| [`IntakeRequestRepository.Stored`](barcode.md#intakerequestrepositorystored) | barcode | record | A request id that was seen before: the fingerprint of its body and its answer (null while it is being processed). |
 | [`IntakeService`](barcode.md#intakeservice) | barcode | class | Puts groceries away by barcode: for each line (barcode, packs, expiry date, price) the store item for (store, brand, catalogue item, pack) is found or created, linked to the barcode, and the purchase recorded, which adds packs x pack size t |
 | [`IntakeService.Line`](barcode.md#intakeserviceline) | barcode | record | One line to put away. |
 | [`IntakeService.LineException`](barcode.md#intakeservicelineexception) | barcode | class |  |
 | [`IntakeService.LineResult`](barcode.md#intakeservicelineresult) | barcode | record | What happened to one line: recorded (purchase, store item, how much stock was added in which unit) or why not. |
+| [`IntakeService.Outcome`](barcode.md#intakeserviceoutcome) | barcode | record | The lines' results, and whether they are the stored answer to a request id seen before (nothing was recorded again). |
 | [`InternalTokenFilter`](api.md#internaltokenfilter) | api | class | Shared-secret gate for the internal API. |
 | [`InvalidBarcodeException`](barcode.md#invalidbarcodeexception) | barcode | class | A barcode number that cannot be right: not digits, a length no barcode has (INVALID_BARCODE), or a check digit that does not fit the other digits, which is what a typing error looks like (BARCODE_CHECKSUM). |
 | [`InventoryController`](api.md#inventorycontroller) | api | class |  |

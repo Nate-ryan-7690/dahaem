@@ -46,7 +46,7 @@ class IntakeServiceTest {
         InventoryRepository inventory = new InventoryRepository();
         ProductBarcodeRepository barcodes = new ProductBarcodeRepository();
         PurchaseService purchases = new PurchaseService(purchaseRepository, stores, inventory);
-        intake = new IntakeService(barcodes, purchases, stores);
+        intake = new IntakeService(barcodes, purchases, stores, new IntakeRequestRepository());
         stock = new StockService(purchaseRepository, inventory);
         exec("INSERT INTO inventory_item (inventory_item_id, inventory_item_name_english, inventory_item_name_deutsch, "
                 + "inventory_item_quantity, inventory_item_unit, inventory_item_category) VALUES "
@@ -196,7 +196,76 @@ class IntakeServiceTest {
         assertTrue(stock.batches(999, false).isEmpty(), "no such item");
     }
 
+    @Test
+    void aRepeatedRequestIdGetsTheStoredAnswerAndIsNotRecordedTwice() throws SQLException {
+        List<IntakeService.Line> lines = List.of(
+                new IntakeService.Line(SPAGHETTI, 2, LocalDate.of(2026, 12, 1), 2.58, null, null),
+                new IntakeService.Line("4006381333932", 1, LocalDate.of(2026, 12, 1), 1.0, null, null));
+
+        IntakeService.Outcome first = intake.intakeOnce("req-0000001", "body-1", "Aldi", true, TODAY, lines);
+        IntakeService.Outcome again = intake.intakeOnce("req-0000001", "body-1", "Aldi", true, TODAY, lines);
+
+        assertFalse(first.replayed());
+        assertTrue(again.replayed());
+        assertEquals(first.results(), again.results(), "the same answer, including the failed line");
+        assertEquals(1, count("SELECT COUNT(*) FROM purchase_history"), "recorded once");
+        assertEquals(1000, count("SELECT inventory_item_quantity FROM inventory_item WHERE inventory_item_id = 1"));
+    }
+
+    @Test
+    void theSameRequestIdWithAnotherBodyOrWhileProcessingIsAConflict() {
+        List<IntakeService.Line> lines = List.of(
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
+        intake.intakeOnce("req-0000002", "body-1", "Aldi", true, TODAY, lines);
+
+        IntakeConflictException reused = assertThrows(IntakeConflictException.class,
+                () -> intake.intakeOnce("req-0000002", "body-2", "Aldi", true, TODAY, lines));
+        assertEquals("REQUEST_ID_REUSED", reused.code());
+
+        // a claim without an answer yet = a request still being processed
+        new IntakeRequestRepository().claim("req-0000003", sha("body-3"));
+        IntakeConflictException busy = assertThrows(IntakeConflictException.class,
+                () -> intake.intakeOnce("req-0000003", "body-3", "Aldi", true, TODAY, lines));
+        assertEquals("REQUEST_IN_PROGRESS", busy.code());
+    }
+
+    @Test
+    void aRequestThatFailsBeforeRecordingGivesItsIdBackSoTheCorrectedOneCanUseIt() throws SQLException {
+        List<IntakeService.Line> lines = List.of(
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
+        intake.intakeOnce("req-0000004", "body-4", "Aldi", true, TODAY, lines);   // makes the store Aldi exist
+
+        assertThrows(UnknownStoreException.class,
+                () -> intake.intakeOnce("req-0000005", "body-5", "Aldii", false, TODAY, lines));
+        IntakeService.Outcome fixed = intake.intakeOnce("req-0000005", "body-5", "Aldi", false, TODAY, lines);
+
+        assertFalse(fixed.replayed(), "the failed attempt did not keep the id");
+        assertTrue(fixed.results().get(0).ok());
+        assertEquals(2, count("SELECT COUNT(*) FROM purchase_history"));
+    }
+
+    @Test
+    void withoutARequestIdItIsJustAnIntake() throws SQLException {
+        List<IntakeService.Line> lines = List.of(
+                new IntakeService.Line(SPAGHETTI, 1, LocalDate.of(2026, 12, 1), 1.29, null, null));
+
+        intake.intakeOnce(null, "x", "Aldi", true, TODAY, lines);
+        intake.intakeOnce(null, "x", "Aldi", true, TODAY, lines);
+
+        assertEquals(2, count("SELECT COUNT(*) FROM purchase_history"));
+        assertEquals(0, count("SELECT COUNT(*) FROM intake_request"));
+    }
+
     // ---------- helpers ----------
+
+    private static String sha(String text) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     private static int count(String sql) throws SQLException {
         try (Connection con = Database.getConnection();
