@@ -18,6 +18,9 @@ public final class AuditLog {
 
     /** The header the PHP front end sends with the real client address (it sees Cloudflare's, not the client's). */
     public static final String CLIENT_IP_HEADER = "X-Client-Ip";
+    /** The header the PHP front end sends with the id of the logged-in user (believed only together with the token). */
+    public static final String ACTING_USER_HEADER = "X-Acting-User";
+    private static final Pattern USER_ID = Pattern.compile("^[0-9]{1,9}$");
 
     private AuditLog() {
     }
@@ -36,6 +39,14 @@ public final class AuditLog {
         return remoteAddr == null ? "-" : remoteAddr;
     }
 
+    /** The acting user id for the log: the header, but only with the internal token and only a plain number; else "-". */
+    static String actingUser(String headerValue, boolean tokenValid) {
+        if (tokenValid && headerValue != null && USER_ID.matcher(headerValue.trim()).matches()) {
+            return headerValue.trim();
+        }
+        return "-";
+    }
+
     /** Takes anything that could break a log line out of a value and shortens it. */
     static String clean(String value, int max) {
         if (value == null) {
@@ -46,8 +57,9 @@ public final class AuditLog {
     }
 
     /** A request worth keeping: a write, or any request that was refused (401 / 403). */
-    public static void request(String method, String path, int status, String caller, String ip) {
-        LOG.info("request method={} path={} status={} caller={} ip={}", method, clean(path, 200), status, caller, ip);
+    public static void request(String method, String path, int status, String caller, String ip, String user) {
+        LOG.info("request method={} path={} status={} caller={} user={} ip={}", method, clean(path, 200), status, caller,
+                user, ip);
     }
 
     /**

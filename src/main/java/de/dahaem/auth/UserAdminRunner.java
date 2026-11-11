@@ -36,7 +36,8 @@ public class UserAdminRunner {
             System.exit(2);
         }
 
-        AccountService service = new AccountService(new AccountRepository(), new BCryptPasswordEncoder());
+        AccountService service = new AccountService(new AccountRepository(),
+                new BCryptPasswordEncoder(AccountService.DEFAULT_BCRYPT_STRENGTH));
         try {
             String password = readPassword();
             if (createUser) {

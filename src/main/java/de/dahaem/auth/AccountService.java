@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -27,6 +28,8 @@ public class AccountService {
 
     public static final String DEFAULT_HOUSEHOLD_NAME = "DAHÄM";
     public static final int MIN_PASSWORD_LENGTH = 10;
+    /** BCrypt cost of newly made hashes: 12 is about 4 times the work of the old default 10 (a login takes ~0.25 s). */
+    public static final int DEFAULT_BCRYPT_STRENGTH = 12;
     // BCrypt only looks at the first 72 bytes; Spring's encoder rejects anything longer.
     public static final int MAX_PASSWORD_BYTES = 72;
 
@@ -105,6 +108,39 @@ public class AccountService {
         AppUser user = findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("No user with email " + normalizeEmail(email)));
         repository.updatePasswordHash(user.getId(), passwordEncoder.encode(rawPassword));
+    }
+
+    private volatile String dummyHash;
+
+    /** A hash nobody knows the password of, to spend the same time on an unknown email as on a wrong password. */
+    private String dummyHash() {
+        if (dummyHash == null) {
+            dummyHash = passwordEncoder.encode("dummy-" + UUID.randomUUID());
+        }
+        return dummyHash;
+    }
+
+    /**
+     * Checks a password. Empty for a wrong password, an unknown email and a password that could never have been set (empty
+     * or longer than BCrypt's 72 bytes), and the time spent is the same for all of them. A right password whose hash was
+     * made with a lower BCrypt cost than the current one is hashed again with the current cost.
+     */
+    public Optional<AppUser> verifyPassword(String email, String rawPassword) {
+        Optional<AppUser> user = findByEmail(email);
+        boolean possible = rawPassword != null && !rawPassword.isEmpty()
+                && rawPassword.getBytes(StandardCharsets.UTF_8).length <= MAX_PASSWORD_BYTES;
+        if (user.isEmpty() || !possible) {
+            passwordEncoder.matches(possible ? rawPassword : "x", dummyHash());
+            return Optional.empty();
+        }
+        AppUser found = user.get();
+        if (!passwordEncoder.matches(rawPassword, found.getPasswordHash())) {
+            return Optional.empty();
+        }
+        if (passwordEncoder.upgradeEncoding(found.getPasswordHash())) {
+            repository.updatePasswordHash(found.getId(), passwordEncoder.encode(rawPassword));
+        }
+        return user;
     }
 
     public Optional<AppUser> findByEmail(String email) {

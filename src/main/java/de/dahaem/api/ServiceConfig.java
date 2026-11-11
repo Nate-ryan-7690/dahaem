@@ -2,6 +2,8 @@ package de.dahaem.api;
 
 import de.dahaem.auth.AccountRepository;
 import de.dahaem.auth.AccountService;
+import de.dahaem.auth.LoginService;
+import de.dahaem.auth.LoginThrottle;
 import de.dahaem.diet.DietFilterRepository;
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietPresets;
@@ -137,6 +139,16 @@ public class ServiceConfig {
                                          InventoryRepository inventoryRepository, StoreRepository storeRepository,
                                          ProductDataSource productDataSource) {
         return new BarcodeService(productBarcodeRepository, inventoryRepository, storeRepository, productDataSource);
+    }
+
+    @Bean
+    public LoginThrottle loginThrottle() {
+        return new LoginThrottle(System::nanoTime);
+    }
+
+    @Bean
+    public LoginService loginService(AccountService accountService, LoginThrottle loginThrottle) {
+        return new LoginService(accountService, loginThrottle);
     }
 
     @Bean

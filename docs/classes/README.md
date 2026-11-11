@@ -8,8 +8,8 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (92)"]
-    auth["auth (8)"]
+    api["api (93)"]
+    auth["auth (14)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
     finance["finance (9)"]
@@ -21,7 +21,7 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|14| auth
+    api -->|21| auth
     api -->|13| barcode
     api -->|12| diet
     api -->|7| finance
@@ -53,8 +53,8 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 92 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
-| [`auth`](auth.md) | 8 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
+| [`api`](api.md) | 93 | The HTTP layer: thin Spring controllers, DTOs, security (session login, CSRF, internal token) and error handling. |
+| [`auth`](auth.md) | 14 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
@@ -161,6 +161,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`IntakeService.Outcome`](barcode.md#intakeserviceoutcome) | barcode | record | The lines' results, and whether they are the stored answer to a request id seen before (nothing was recorded again). |
 | [`InternalTokenFilter`](api.md#internaltokenfilter) | api | class | Shared-secret gate for the internal API. |
 | [`InvalidBarcodeException`](barcode.md#invalidbarcodeexception) | barcode | class | A barcode number that cannot be right: not digits, a length no barcode has (INVALID_BARCODE), or a check digit that does not fit the other digits, which is what a typing error looks like (BARCODE_CHECKSUM). |
+| [`InvalidCredentialsException`](auth.md#invalidcredentialsexception) | auth | class | The email or the password is wrong. |
 | [`InventoryController`](api.md#inventorycontroller) | api | class |  |
 | [`InventoryRepository`](inventory.md#inventoryrepository) | inventory | class | All SQL for the inventory_item table lives here and nowhere else. |
 | [`InventoryService`](inventory.md#inventoryservice) | inventory | class | Business logic for inventory. |
@@ -177,6 +178,10 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`KnownProduct`](stores.md#knownproduct) | stores | record | What the database already knows about a store product. |
 | [`LikePattern`](shared.md#likepattern) | shared | class | Builds LIKE patterns from user text, so a typed % or _ is searched for literally. |
 | [`ListCompletedException`](shopping.md#listcompletedexception) | shopping | class | A completed shopping list cannot be changed (reopen it first). |
+| [`LoginService`](auth.md#loginservice) | auth | class | Checks an email and a password for the PHP front end, which owns the user's session: no session is started here, the answer says who the user is. |
+| [`LoginService.Verified`](auth.md#loginserviceverified) | auth | record | The user and their household membership (null if in no household). |
+| [`LoginThrottle`](auth.md#loginthrottle) | auth | class | A delay that grows with failed logins, not a lockout. |
+| [`LoginThrottle.Entry`](auth.md#loginthrottleentry) | auth | class |  |
 | [`MatchGate`](stores.md#matchgate) | stores | class | Plausibility gate between "the name matched an inventory_item" and "create a store_item + discount". |
 | [`MatchGate.References`](stores.md#matchgatereferences) | stores | class | Reference prices per base unit, by inventory_item id and unit family. |
 | [`MatchGate.Verdict`](stores.md#matchgateverdict) | stores | record |  |
@@ -384,6 +389,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`TagService`](tags.md#tagservice) | tags | class | Business logic for tags. |
 | [`TagSettings`](tags.md#tagsettings) | tags | record | Thresholds for the derived recipe tags, from config/recipe_tags.properties (all per serving). |
 | [`TaxBreakdownEntry`](receipts.md#taxbreakdownentry) | receipts | record | One row of the receipt's own tax table; net/tax/gross are null when the row didn't print all three. |
+| [`TooManyAttemptsException`](auth.md#toomanyattemptsexception) | auth | class | Too many failed logins from this address or for this email: try again after retryAfterSeconds. |
 | [`UnauthorizedException`](api.md#unauthorizedexception) | api | class | Thrown by a controller when the request is not (or no longer) tied to a valid login; mapped to 401. |
 | [`Units`](shared.md#units) | shared | class | Parses a recipe/store unit string into a physical dimension plus a factor to its base unit, so quantities can be compared or converted only when it is actually meaningful. |
 | [`Units.Dimension`](shared.md#unitsdimension) | shared | enum |  |
@@ -393,3 +399,4 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`UserAdminRunner`](auth.md#useradminrunner) | auth | class | Command-line entry point for managing logins. |
 | [`UseStockRequest`](api.md#usestockrequest) | api | record | Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away, it is the same). |
 | [`VariantParser`](stores.md#variantparser) | stores | class | Splits the "Sorten:" block of an ALDI product description into flavour/size variants. |
+| [`VerifyRequest`](api.md#verifyrequest) | api | record | Body of POST /api/auth/verify: the login the PHP front end received from the user. |

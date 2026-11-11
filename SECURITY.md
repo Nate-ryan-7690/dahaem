@@ -25,9 +25,15 @@ DAHÄM is a self-hosted, single/two-user household application. It is not a mult
 
 - All logged-in users share one pool of data: **per-household scoping is not implemented**, so ids in a request are not
   checked against an owner. This is acceptable only while the installation holds one household.
-- There is **no login lockout or rate limit** in the API yet; passwords are BCrypt hashes with a minimum length of 10.
+- **The PHP front end owns the user session.** It checks a login with `POST /api/auth/verify` (internal token required;
+  answers the user, household and role; starts no session and sets no cookie) and sends the id of the logged-in user in
+  `X-Acting-User` on its later calls (for the audit log; believed only with the token). The API's own session login
+  (`/api/auth/login`) is still there and is going to be switched off.
+- Failed logins slow the caller down: after 5 failures from one client address (20 for one email) further attempts are
+  refused (429, `Retry-After`) for 30 seconds, doubling up to 15 minutes (5 for an email). It is a delay, not a lockout. In
+  memory; a restart clears it. The client address is the one the PHP passes in `X-Client-Ip`. Passwords are salted BCrypt
+  (cost 12, older hashes are upgraded at the next login), minimum length 10.
 - There are no self-service sign-up or password reset: accounts are created and reset by the operator.
-- Which side owns the user session (PHP or the API) is still to be decided.
 
 ## Supported versions
 

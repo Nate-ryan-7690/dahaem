@@ -1,5 +1,7 @@
 package de.dahaem.api;
 
+import de.dahaem.auth.InvalidCredentialsException;
+import de.dahaem.auth.TooManyAttemptsException;
 import de.dahaem.barcode.IntakeConflictException;
 import de.dahaem.barcode.InvalidBarcodeException;
 import de.dahaem.barcode.PackUnitException;
@@ -59,6 +61,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidBarcodeException.class)
     public ResponseEntity<ErrorResponse> invalidBarcode(InvalidBarcodeException e) {
         return error(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
+    }
+
+    /** A wrong email or password (the same answer for both). */
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e) {
+        return error(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", e.getMessage());
+    }
+
+    /** Too many failed logins: the caller is slowed down; Retry-After says for how long. */
+    @ExceptionHandler(TooManyAttemptsException.class)
+    public ResponseEntity<ErrorResponse> tooManyAttempts(TooManyAttemptsException e) {
+        HttpStatus status = HttpStatus.TOO_MANY_REQUESTS;
+        return ResponseEntity.status(status)
+                .header("Retry-After", String.valueOf(e.retryAfterSeconds()))
+                .body(new ErrorResponse(status.value(), status.getReasonPhrase(), e.getMessage(), "TOO_MANY_ATTEMPTS"));
     }
 
     /** An intake request id that cannot be used again as it is: a conflict with a code of its own. */

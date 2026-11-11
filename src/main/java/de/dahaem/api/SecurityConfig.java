@@ -3,6 +3,7 @@ package de.dahaem.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.dahaem.auth.AccountService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -55,9 +56,11 @@ public class SecurityConfig {
         return registration;
     }
 
+    /** BCrypt (salted per hash). The cost is a setting so tests can use a cheap one; 12 in production. */
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+    public PasswordEncoder passwordEncoder(
+            @Value("${dahaem.auth.bcrypt-strength:" + AccountService.DEFAULT_BCRYPT_STRENGTH + "}") int strength) {
+        return new BCryptPasswordEncoder(strength);
     }
 
     /** Looks users up by email (the login name) through the account service; roles are not used yet. */

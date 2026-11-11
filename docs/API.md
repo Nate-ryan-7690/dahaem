@@ -32,7 +32,7 @@ Every error has the same shape:
 
 `message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
 `BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH`, `UNKNOWN_STORE`, `UNKNOWN_BRAND` (400); `UNAUTHORIZED`,
-`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `TOO_MANY_ATTEMPTS` (429); `PAST_DAY`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
 `CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
@@ -53,6 +53,7 @@ Every error has the same shape:
 | POST | `/api/auth/login` | Log in (form fields `email`, `password`). 204 on success, 401 on a wrong email or password. Handled by Spring Security, not by a controller. |
 | POST | `/api/auth/logout` | End the session and delete the `JSESSIONID` cookie. 204. |
 | GET | [`/api/auth/me`](#get-apiauthme) | The logged-in user and their household. |
+| POST | [`/api/auth/verify`](#post-apiauthverify) | Checks an email and a password for the PHP front end, which owns the user's session. |
 | GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
 | PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
 | GET | [`/api/brands`](#get-apibrands) | Brands, by name, one page: q matches the name as a case-insensitive substring (optional); page (from 1, default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. |
@@ -201,6 +202,38 @@ The CSRF token to send with the next POST/PUT/DELETE. Public, because the login 
 #### GET /api/auth/me
 
 The logged-in user and their household.
+
+**Answer** 200 `CurrentUserDto`
+
+```json
+{
+  "id": 0,
+  "email": "…",
+  "displayName": "…",
+  "household": {
+    "id": 0,
+    "name": "…",
+    "role": "…"
+  }
+}
+```
+
+#### POST /api/auth/verify
+
+Checks an email and a password for the PHP front end, which owns the user's session. Answers 200 with the user and
+their household and role (CurrentUserDto); starts NO session and sets NO cookie. A wrong password and an
+unknown email give the same 401 (code BAD_CREDENTIALS). After repeated failures from one client address (or for one
+email) the answer is 429 (code TOO_MANY_ATTEMPTS) with a Retry-After header, without looking at the password.
+The client address comes from the X-Client-Ip header the PHP sends; the attempt is written to the audit log.
+
+**Request body** `VerifyRequest`
+
+```json
+{
+  "email": "…",
+  "password": "…"
+}
+```
 
 **Answer** 200 `CurrentUserDto`
 
@@ -2935,6 +2968,19 @@ Body of POST /api/inventory/{id}/use: how much leaves stock (used or thrown away
 | Property | Type |
 |---|---|
 | `quantity` | `Integer` |
+
+```json
+{ … }
+```
+
+### VerifyRequest
+
+Body of POST /api/auth/verify: the login the PHP front end received from the user.
+
+| Property | Type |
+|---|---|
+| `email` | `String` |
+| `password` | `String` |
 
 ```json
 { … }
