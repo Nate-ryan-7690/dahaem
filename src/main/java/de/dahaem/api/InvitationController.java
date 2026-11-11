@@ -51,7 +51,7 @@ public class InvitationController {
     /**
      * Makes an invitation into the caller's household (admins only; 403 {@code NOT_ADMIN} otherwise). Optional body
      * {@code {"note": "Anna"}} (at most 100 characters) to tell invitations apart. 201 with the code, shown only now; it is
-     * valid for 7 days and works once. At most 20 invitations can be open at a time (400).
+     * valid for 7 days and works once. At most 20 invitations can be open at a time (409 {@code INVITATION_LIMIT}: revoke one first).
      */
     @PostMapping("/api/household/invitations")
     @ResponseStatus(HttpStatus.CREATED)

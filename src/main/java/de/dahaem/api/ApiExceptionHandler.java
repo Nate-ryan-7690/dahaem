@@ -3,6 +3,7 @@ package de.dahaem.api;
 import de.dahaem.auth.EmailTakenException;
 import de.dahaem.auth.InvalidCredentialsException;
 import de.dahaem.auth.InvalidInvitationException;
+import de.dahaem.auth.InvitationLimitException;
 import de.dahaem.auth.TooManyAttemptsException;
 import de.dahaem.barcode.IntakeConflictException;
 import de.dahaem.barcode.InvalidBarcodeException;
@@ -81,6 +82,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidInvitationException.class)
     public ResponseEntity<ErrorResponse> invalidInvitation(InvalidInvitationException e) {
         return error(HttpStatus.BAD_REQUEST, "INVALID_INVITATION", e.getMessage());
+    }
+
+    /** The household has too many open invitations: a conflict with its own code, INVITATION_LIMIT. */
+    @ExceptionHandler(InvitationLimitException.class)
+    public ResponseEntity<ErrorResponse> invitationLimit(InvitationLimitException e) {
+        return error(HttpStatus.CONFLICT, "INVITATION_LIMIT", e.getMessage());
     }
 
     /** The email address belongs to another account. */

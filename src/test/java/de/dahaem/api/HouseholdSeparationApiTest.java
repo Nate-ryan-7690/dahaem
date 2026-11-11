@@ -267,6 +267,41 @@ class HouseholdSeparationApiTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.people").value(5));
     }
 
+    @Test
+    void theMembersOfTheOwnHouseholdOnlyAndEmailsOnlyForAdminsAndYourself() throws Exception {
+        int member = TestHousehold.createUser(householdA, "member@example.test", "MEMBER");
+
+        mvc.perform(as(get("/api/household/members"), userA))
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].role").value("ADMIN"))
+                .andExpect(jsonPath("$[0].you").value(true))
+                .andExpect(jsonPath("$[0].email").value("a@example.test"))
+                .andExpect(jsonPath("$[1].role").value("MEMBER"))
+                .andExpect(jsonPath("$[1].email").value("member@example.test"));
+        // the member sees the same people, but only their own address
+        mvc.perform(as(get("/api/household/members"), member))
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].email").value(nullValue()))
+                .andExpect(jsonPath("$[1].email").value("member@example.test"))
+                .andExpect(jsonPath("$[1].you").value(true));
+        // the other household sees only itself
+        mvc.perform(as(get("/api/household/members"), userB))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].email").value("b@example.test"));
+    }
+
+    @Test
+    void theTwentyFirstOpenInvitationAnswers409WithItsOwnCode() throws Exception {
+        for (int i = 0; i < 20; i++) {
+            inviteCode(userA, null);
+        }
+        mvc.perform(as(post("/api/household/invitations"), userA).content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVITATION_LIMIT"));
+        // the other household has its own limit
+        inviteCode(userB, null);
+    }
+
     private String inviteCode(int user, String note) throws Exception {
         String body = mvc.perform(as(post("/api/household/invitations"), user)
                         .content(note == null ? "{}" : "{\"note\": \"" + note + "\"}"))

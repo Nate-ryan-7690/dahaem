@@ -219,6 +219,31 @@ public class AccountRepository {
         }
     }
 
+    /** One member of a household with the account's name and email. */
+    public record Member(int userId, String displayName, String email, HouseholdRole role) {
+    }
+
+    /** The members of a household, the oldest membership first. */
+    public java.util.List<Member> findMembers(int householdId) {
+        String sql = "SELECT u.user_id, u.user_display_name, u.user_email, m.role "
+                + "FROM household_member m INNER JOIN app_user u ON u.user_id = m.user_id "
+                + "WHERE m.household_id = ? ORDER BY m.household_member_id";
+        java.util.List<Member> out = new java.util.ArrayList<>();
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, householdId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new Member(rs.getInt("user_id"), rs.getString("user_display_name"),
+                            rs.getString("user_email"), HouseholdRole.valueOf(rs.getString("role"))));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not list the members of household " + householdId, e);
+        }
+        return out;
+    }
+
     private static int generatedId(PreparedStatement ps) throws SQLException {
         try (ResultSet keys = ps.getGeneratedKeys()) {
             keys.next();

@@ -248,6 +248,11 @@ public class AccountService {
         return repository.findAllHouseholds();
     }
 
+    /** The members of a household, the oldest membership first. */
+    public java.util.List<AccountRepository.Member> members(int householdId) {
+        return repository.findMembers(householdId);
+    }
+
     public Optional<Household> findHousehold(int householdId) {
         return repository.findHousehold(householdId);
     }
