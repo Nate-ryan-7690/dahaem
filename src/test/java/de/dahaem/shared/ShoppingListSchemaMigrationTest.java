@@ -79,6 +79,8 @@ class ShoppingListSchemaMigrationTest {
                      + "IS_NULLABLE, ' default=', IFNULL(COLUMN_DEFAULT, 'NULL')) FROM information_schema.COLUMNS "
                      + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN "
                      + "('shopping_list', 'shopping_list_item', 'shopping_list_item_recipe') "
+                     // shopping_list_household_id comes from migration 0023, which has its own test
+                     + "AND COLUMN_NAME <> 'shopping_list_household_id' "
                      + "ORDER BY TABLE_NAME, COLUMN_NAME")) {
             while (rs.next()) {
                 out.add(rs.getString(1));

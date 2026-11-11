@@ -181,7 +181,8 @@ public class ShoppingListService {
                                      ShoppingList list) {
         Connection con = repository.openTransaction();
         try {
-            int shoppingListId = repository.insertShoppingList(con, mealPlanId, today, shoppingDate, from, false);
+            int shoppingListId = repository.insertShoppingList(con,
+                    mealPlanRepository.findHouseholdIdOfPlan(mealPlanId).orElse(null), mealPlanId, today, shoppingDate, from, false);
 
             for (ShoppingListItem item : list.items()) {
                 Item stock = inventoryRepository.findById(item.inventoryItemId()).orElse(null);
@@ -373,8 +374,13 @@ public class ShoppingListService {
     }
 
     /** Every saved list, newest first, including the ones that belong to no meal plan: the archived ones or the others. */
-    public List<ShoppingListSummary> allLists(boolean archived) {
-        return repository.findAllLists(archived);
+    public List<ShoppingListSummary> allLists(int householdId, boolean archived) {
+        return repository.findAllLists(householdId, archived);
+    }
+
+    /** True when the list exists and belongs to this household (a foreign or unknown list is not one's own). */
+    public boolean isOwnedBy(int shoppingListId, int householdId) {
+        return repository.findHouseholdIdOfList(shoppingListId).filter(h -> h == householdId).isPresent();
     }
 
     /** Archives a list (hidden from the overview, nothing is deleted) or brings it back. */
@@ -386,11 +392,11 @@ public class ShoppingListService {
      * Makes an empty list that belongs to no meal plan, for a trip without planned meals (the user adds the lines by
      * hand). {@code shoppingDate} is the day of the trip, not in the past. Returns the new list's id.
      */
-    public int createEmptyList(LocalDate today, LocalDate shoppingDate) {
+    public int createEmptyList(int householdId, LocalDate today, LocalDate shoppingDate) {
         requireNotPast(shoppingDate, today);
         Connection con = repository.openTransaction();
         try {
-            int id = repository.insertShoppingList(con, null, today, shoppingDate, null, false);
+            int id = repository.insertShoppingList(con, householdId, null, today, shoppingDate, null, false);
             con.commit();
             return id;
         } catch (SQLException e) {
