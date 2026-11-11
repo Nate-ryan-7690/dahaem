@@ -4,7 +4,7 @@
 
 
 
-20 types in 13 source files (`src/main/java/de/dahaem/barcode`). Back to the [class index](README.md).
+16 types in 11 source files (`src/main/java/de/dahaem/barcode`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -25,15 +25,7 @@ classDiagram
         <<record>>
     }
     class barcode_Gtin["Gtin"]
-    class barcode_IntakeConflictException["IntakeConflictException"]
-    class barcode_IntakeRequestRepository["IntakeRequestRepository"]
-    class barcode_IntakeRequestRepository_Stored["IntakeRequestRepository.Stored"] {
-        <<record>>
-    }
     class barcode_IntakeService["IntakeService"]
-    class barcode_IntakeService_Outcome["IntakeService.Outcome"] {
-        <<record>>
-    }
     class barcode_IntakeService_Line["IntakeService.Line"] {
         <<record>>
     }
@@ -58,14 +50,10 @@ classDiagram
     barcode_BarcodeService --> barcode_ProductBarcodeRepository
     barcode_BarcodeService --> barcode_ProductDataSource
     barcode_BarcodeService ..> barcode_BarcodeLookup
-    barcode_IntakeRequestRepository *-- barcode_IntakeRequestRepository_Stored
-    barcode_IntakeService *-- barcode_IntakeService_Outcome
     barcode_IntakeService *-- barcode_IntakeService_Line
     barcode_IntakeService *-- barcode_IntakeService_LineResult
     barcode_IntakeService *-- barcode_IntakeService_LineException
     barcode_IntakeService --> barcode_ProductBarcodeRepository
-    barcode_IntakeService --> barcode_IntakeRequestRepository
-    barcode_IntakeService_Outcome --> barcode_IntakeService_LineResult
     barcode_ProductDataSource <|.. barcode_OpenFoodFactsSource
     barcode_OpenFoodFactsSource ..> barcode_ProductSuggestion
     barcode_ProductBarcodeRepository ..> barcode_BarcodeProduct
@@ -82,11 +70,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`BarcodeService`](#barcodeservice) | class |  | Barcodes: what a number is, and remembering it. |
 | [`BarcodeService.Pack`](#barcodeservicepack) | record |  | A pack as it is stored: the same units a store item and the shopping list use. |
 | [`Gtin`](#gtin) | class |  | Barcode numbers (GTIN: EAN-8, UPC-A, EAN-13, GTIN-14). |
-| [`IntakeConflictException`](#intakeconflictexception) | class |  | An intake request id that cannot be used again as it is: it is still being processed (REQUEST_IN_PROGRESS) or it was used before for a different request (REQUEST_ID_REUSED). |
-| [`IntakeRequestRepository`](#intakerequestrepository) | class |  | All SQL for intake_request lives here and nowhere else. |
-| [`IntakeRequestRepository.Stored`](#intakerequestrepositorystored) | record |  | A request id that was seen before: the fingerprint of its body and its answer (null while it is being processed). |
 | [`IntakeService`](#intakeservice) | class |  | Puts groceries away by barcode: for each line (barcode, packs, expiry date, price) the store item for (store, brand, catalogue item, pack) is found or created, linked to the barcode, and the purchase recorded, which adds packs x pack size t |
-| [`IntakeService.Outcome`](#intakeserviceoutcome) | record |  | The lines' results, and whether they are the stored answer to a request id seen before (nothing was recorded again). |
 | [`IntakeService.Line`](#intakeserviceline) | record |  | One line to put away. |
 | [`IntakeService.LineResult`](#intakeservicelineresult) | record |  | What happened to one line: recorded (purchase, store item, how much stock was added in which unit) or why not. |
 | [`IntakeService.LineException`](#intakeservicelineexception) | class |  |  |
@@ -333,97 +317,6 @@ classDiagram
 | `String normalize(String raw)` | public static |  |
 | `boolean checkDigitFits(String digits)` | package static | The last digit must make the weighted sum (weights 3, 1, 3, 1 ... |
 
-## IntakeConflictException
-
-*class · extends RuntimeException*
-
-An intake request id that cannot be used again as it is: it is still being processed (REQUEST_IN_PROGRESS) or it was
-used before for a different request (REQUEST_ID_REUSED). A conflict (409) that carries its own code.
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeConflictException["IntakeConflictException"] {
-        -String code
-        +IntakeConflictException(String code, String message)
-        +code() String
-    }
-    class api_ApiExceptionHandler["ApiExceptionHandler"]
-    api_ApiExceptionHandler ..> barcode_IntakeConflictException
-```
-
-| Field | Type |
-|---|---|
-| `code` | `String` |
-
-| Member | Visibility | What it does |
-|---|---|---|
-| `IntakeConflictException(String code, String message)` | public |  |
-| `String code()` | public |  |
-
-**Referenced by:** `ApiExceptionHandler`
-
-## IntakeRequestRepository
-
-*class*
-
-All SQL for intake_request lives here and nowhere else.
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeRequestRepository["IntakeRequestRepository"] {
-        +claim(String requestId, String hash) boolean
-        +find(String requestId) Optional~Stored~
-        +complete(String requestId, String resultJson) void
-        +release(String requestId) void
-    }
-    class barcode_IntakeRequestRepository_Stored["IntakeRequestRepository.Stored"] {
-        <<record>>
-    }
-    class barcode_IntakeService["IntakeService"]
-    class api_ServiceConfig["ServiceConfig"] {
-        <<spring>>
-    }
-    barcode_IntakeRequestRepository *-- barcode_IntakeRequestRepository_Stored
-    api_ServiceConfig ..> barcode_IntakeRequestRepository
-    barcode_IntakeService --> barcode_IntakeRequestRepository
-```
-
-| Member | Visibility | What it does |
-|---|---|---|
-| `boolean claim(String requestId, String hash)` | public | Claims a request id for this caller. |
-| `Optional<Stored> find(String requestId)` | public |  |
-| `void complete(String requestId, String resultJson)` | public | Remembers the answer of a claimed request. |
-| `void release(String requestId)` | public | Gives a claim back (nothing was recorded for it), so the client can send the request again. |
-
-**Referenced by:** `IntakeService`, `ServiceConfig`
-
-## IntakeRequestRepository.Stored
-
-*record*
-
-A request id that was seen before: the fingerprint of its body and its answer (null while it is being processed).
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeRequestRepository_Stored["IntakeRequestRepository.Stored"] {
-        <<record>>
-        +String hash
-        +String resultJson
-    }
-    class barcode_IntakeRequestRepository["IntakeRequestRepository"]
-    barcode_IntakeRequestRepository *-- barcode_IntakeRequestRepository_Stored
-```
-
-| Component | Type |
-|---|---|
-| `hash` | `String` |
-| `resultJson` | `String` |
-
-**Referenced by:** `IntakeRequestRepository`
-
 ## IntakeService
 
 *class*
@@ -440,17 +333,11 @@ classDiagram
         -Logger log$
         ~String NO_BRAND$
         ~int MAX_PACKS$
-        -ObjectMapper JSON$
         -ProductBarcodeRepository barcodes
         -PurchaseService purchases
         -StoreRepository stores
-        -IntakeRequestRepository requests
-        +IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores, IntakeRequestRepository requests)
-        +intakeOnce(String requestId, String fingerprint, String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) Outcome
+        +IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores)
         +intake(String storeName, boolean createStore, LocalDate purchaseDate, List~Line~ lines) List~LineResult~
-    }
-    class barcode_IntakeService_Outcome["IntakeService.Outcome"] {
-        <<record>>
     }
     class barcode_IntakeService_Line["IntakeService.Line"] {
         <<record>>
@@ -462,7 +349,6 @@ classDiagram
     class barcode_ProductBarcodeRepository["ProductBarcodeRepository"]
     class finance_PurchaseService["PurchaseService"]
     class stores_StoreRepository["StoreRepository"]
-    class barcode_IntakeRequestRepository["IntakeRequestRepository"]
     class api_IntakeController["IntakeController"] {
         <<controller>>
     }
@@ -475,14 +361,12 @@ classDiagram
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
-    barcode_IntakeService *-- barcode_IntakeService_Outcome
     barcode_IntakeService *-- barcode_IntakeService_Line
     barcode_IntakeService *-- barcode_IntakeService_LineResult
     barcode_IntakeService *-- barcode_IntakeService_LineException
     barcode_IntakeService --> barcode_ProductBarcodeRepository
     barcode_IntakeService --> finance_PurchaseService
     barcode_IntakeService --> stores_StoreRepository
-    barcode_IntakeService --> barcode_IntakeRequestRepository
     api_IntakeController --> barcode_IntakeService
     api_IntakeController_IntakeRequest --> barcode_IntakeService
     api_IntakeController_IntakeResult --> barcode_IntakeService
@@ -494,48 +378,16 @@ classDiagram
 | `log` | `Logger` |
 | `NO_BRAND` | `String` |
 | `MAX_PACKS` | `int` |
-| `JSON` | `ObjectMapper` |
 | `barcodes` | `ProductBarcodeRepository` |
 | `purchases` | `PurchaseService` |
 | `stores` | `StoreRepository` |
-| `requests` | `IntakeRequestRepository` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores, IntakeRequestRepository requests)` | public |  |
-| `Outcome intakeOnce(String requestId, String fingerprint, String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Like .intake but safe to send twice: a client that is not sure its request arrived repeats it with the same requestId and gets the stored answer back (replayed), and nothing is recorded a second time. |
+| `IntakeService(ProductBarcodeRepository barcodes, PurchaseService purchases, StoreRepository stores)` | public |  |
 | `List<LineResult> intake(String storeName, boolean createStore, LocalDate purchaseDate, List<Line> lines)` | public | Puts the lines away at the store. |
 
 **Referenced by:** `IntakeController`, `IntakeController.IntakeRequest`, `IntakeController.IntakeResult`, `ServiceConfig`
-
-## IntakeService.Outcome
-
-*record*
-
-The lines' results, and whether they are the stored answer to a request id seen before (nothing was recorded again).
-
-```mermaid
-classDiagram
-    direction LR
-    class barcode_IntakeService_Outcome["IntakeService.Outcome"] {
-        <<record>>
-        +List~LineResult~ results
-        +boolean replayed
-    }
-    class barcode_IntakeService["IntakeService"]
-    class barcode_IntakeService_LineResult["IntakeService.LineResult"] {
-        <<record>>
-    }
-    barcode_IntakeService_Outcome --> barcode_IntakeService_LineResult
-    barcode_IntakeService *-- barcode_IntakeService_Outcome
-```
-
-| Component | Type |
-|---|---|
-| `results` | `List<LineResult>` |
-| `replayed` | `boolean` |
-
-**Referenced by:** `IntakeService`
 
 ## IntakeService.Line
 
@@ -595,11 +447,7 @@ classDiagram
         +String message
     }
     class barcode_IntakeService["IntakeService"]
-    class barcode_IntakeService_Outcome["IntakeService.Outcome"] {
-        <<record>>
-    }
     barcode_IntakeService *-- barcode_IntakeService_LineResult
-    barcode_IntakeService_Outcome --> barcode_IntakeService_LineResult
 ```
 
 | Component | Type |

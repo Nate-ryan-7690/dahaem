@@ -32,7 +32,7 @@ Every error has the same shape:
 
 `message` is English and meant for logs; a client shows its own text chosen by `code`. Codes: `NOT_FOUND`,
 `BAD_REQUEST`, `MISSING_PARAMETER`, `INVALID_VALUE`, `INVALID_BODY`, `PAST_SHOPPING_DAY`, `INVALID_BARCODE`, `BARCODE_CHECKSUM`, `PACK_UNIT_MISMATCH`, `UNKNOWN_STORE`, `UNKNOWN_BRAND` (400); `UNAUTHORIZED`,
-`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`, `REQUEST_IN_PROGRESS`, `REQUEST_ID_REUSED`,
+`LOGIN_REQUIRED`, `BAD_CREDENTIALS`, `INVALID_TOKEN` (401); `CSRF_INVALID` (403); `PAST_DAY`, `LIST_COMPLETED`,
 `CONFLICT` (409); `INTERNAL_ERROR` (500).
 
 | Status | When |
@@ -452,10 +452,7 @@ Puts the lines away. Each line: barcode, expirationDate (required), packs (defau
 pricePaid (total for the packs; optional if the store item's price is known), and optionally
 packSize + packUnit for a special package. The barcode must have been assigned
 (PUT /api/barcodes/{code}). Stock grows by packs x pack size in the item's own unit and the expiry date is
-kept as a batch (the earliest is used first). An unknown store is a 400 with code UNKNOWN_STORE unless createStore is true.
-With a requestId, sending the same request again (same body) returns the stored answer with replayed
-true and records nothing twice; another body with the same id is 409 REQUEST_ID_REUSED, a request still being
-processed 409 REQUEST_IN_PROGRESS. Always answers 200 when the request itself is fine: a line that could
+kept as a batch (the earliest is used first). An unknown store is a 400 with code UNKNOWN_STORE unless createStore is true. Always answers 200 when the request itself is fine: a line that could
 not be recorded has ok: false with a code (INVALID_BARCODE, BARCODE_CHECKSUM, BARCODE_UNKNOWN,
 EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other lines are still recorded.
 
@@ -466,8 +463,7 @@ EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other 
   "storeName": "…",
   "createStore": false,
   "purchaseDate": "2026-10-14",
-  "lines": ["…"],
-  "requestId": "…"
+  "lines": ["…"]
 }
 ```
 
@@ -477,8 +473,7 @@ EXPIRY_REQUIRED, PRICE_REQUIRED, PACK_UNIT_MISMATCH, BAD_REQUEST) and the other 
 {
   "results": ["…"],
   "recorded": 0,
-  "failed": 0,
-  "replayed": false
+  "failed": 0
 }
 ```
 
@@ -2154,7 +2149,6 @@ A household as the API shows it. people is the head count and null until someone
 
 Body: the store (an existing one, from GET /api/stores; createStore: true is needed to add a new
 one, so a typo cannot create a bogus store), the purchase day (default today, not in the future) and the lines.
-requestId (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see .intake.
 
 | Property | Type |
 |---|---|
@@ -2162,7 +2156,6 @@ requestId (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see .
 | `createStore` | `Boolean` |
 | `purchaseDate` | `LocalDate` |
 | `lines` | `List<IntakeService.Line>` |
-| `requestId` | `String` |
 
 ```json
 { … }
@@ -2170,15 +2163,13 @@ requestId (optional, 8 to 64 letters, digits, - or _) makes a repeat safe: see .
 
 ### IntakeController.IntakeResult
 
-results has one entry per line, in order; recorded / failed count them. replayed is
-true when this is the stored answer to a requestId seen before: nothing was recorded again.
+results has one entry per line, in order; recorded / failed count them.
 
 | Property | Type |
 |---|---|
 | `results` | `List<IntakeService.LineResult>` |
 | `recorded` | `int` |
 | `failed` | `int` |
-| `replayed` | `boolean` |
 
 ```json
 { … }
