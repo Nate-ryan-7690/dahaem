@@ -302,7 +302,7 @@ class HouseholdSeparationApiTest {
                                 + "\"displayName\": \"X\", \"password\": \"short\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
         mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
-                        .contentType(MediaType.APPLICATION_JSON).content(acceptBody(code, "a@example.test")))
+                        .contentType(MediaType.APPLICATION_JSON).content(acceptBody(code, "newbie@example.test")))
                 .andExpect(status().isCreated());
         mvc.perform(post("/api/invitations/accept").header("X-Internal-Token", TOKEN)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"code\": \"" + code + "\"}"))
