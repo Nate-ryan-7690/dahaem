@@ -327,6 +327,7 @@ classDiagram
     api_DietDto *-- api_DietDto_Unmatched
     api_DietDto_SoftHits --> api_DietDto_Item
     api_DietDto_SoftHits --> api_DietDto_Hint
+    api_HouseholdController ..> api_Caller
     api_HouseholdController ..> api_HouseholdDto
     api_HouseholdController ..> api_SetHouseholdPeopleRequest
     api_IntakeController *-- api_IntakeController_IntakeRequest
@@ -1076,6 +1077,9 @@ classDiagram
     class auth_HouseholdRole["HouseholdRole"] {
         <<enumeration>>
     }
+    class api_HouseholdController["HouseholdController"] {
+        <<controller>>
+    }
     class api_IntakeController["IntakeController"] {
         <<controller>>
     }
@@ -1101,6 +1105,7 @@ classDiagram
         <<controller>>
     }
     api_Caller --> auth_HouseholdRole
+    api_HouseholdController ..> api_Caller
     api_IntakeController ..> api_Caller
     api_InventoryController ..> api_Caller
     api_InvitationController ..> api_Caller
@@ -1117,7 +1122,7 @@ classDiagram
 | `householdId` | `int` |
 | `role` | `HouseholdRole` |
 
-**Referenced by:** `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
+**Referenced by:** `HouseholdController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
 
 ## CallerArgumentResolver
 
@@ -1666,9 +1671,8 @@ classDiagram
 
 *class · REST controller*
 
-The household's head count, so the app can scale portions to the people it feeds. The PHP decides
-which logged-in account may call this; the household is named in the URL so the API can check
-membership later without a contract change.
+The household's head count, so the app can scale portions to the people it feeds. The household is named in the URL
+and must be the acting user's own (anything else is a 404); any member of it may read and set the head count.
 
 ```mermaid
 classDiagram
@@ -1677,10 +1681,13 @@ classDiagram
         <<controller>>
         -AccountService accountService
         +HouseholdController(AccountService accountService)
-        +get(int id) HouseholdDto
-        +setPeople(int id, SetHouseholdPeopleRequest request) HouseholdDto
+        +get(int id, Caller caller) HouseholdDto
+        +setPeople(int id, SetHouseholdPeopleRequest request, Caller caller) HouseholdDto
     }
     class auth_AccountService["AccountService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_HouseholdDto["HouseholdDto"] {
         <<record>>
     }
@@ -1688,6 +1695,7 @@ classDiagram
         <<record>>
     }
     api_HouseholdController --> auth_AccountService
+    api_HouseholdController ..> api_Caller
     api_HouseholdController ..> api_HouseholdDto
     api_HouseholdController ..> api_SetHouseholdPeopleRequest
 ```
@@ -1699,8 +1707,8 @@ classDiagram
 | Member | Visibility | What it does |
 |---|---|---|
 | `HouseholdController(AccountService accountService)` | public |  |
-| `HouseholdDto get(int id)` | public |  |
-| `HouseholdDto setPeople(int id, SetHouseholdPeopleRequest request)` | public | Sets the head count and returns the household. |
+| `HouseholdDto get(int id, Caller caller)` | public |  |
+| `HouseholdDto setPeople(int id, SetHouseholdPeopleRequest request, Caller caller)` | public | Sets the head count and returns the household. |
 
 ## HouseholdDto
 
@@ -3036,7 +3044,7 @@ classDiagram
         +addMeal(AddMealRequest request, Caller caller) PlannedMealDto
         +editMeal(int entryId, JsonNode body, Caller caller) PlannedMealDto
         +removeMeal(int entryId, Caller caller) void
-        +setPreferredServings(int id, JsonNode body) PreferredServingsDto
+        +setPreferredServings(int id, JsonNode body, Caller caller) PreferredServingsDto
     }
     class mealplanner_MealPlanService["MealPlanService"]
     class mealplanner_RecipeService["RecipeService"]
@@ -3079,7 +3087,7 @@ classDiagram
 | `PlannedMealDto addMeal(AddMealRequest request, Caller caller)` | public | Plans a recipe on a day and returns the meal. |
 | `PlannedMealDto editMeal(int entryId, JsonNode body, Caller caller)` | public | Edits or moves a meal. |
 | `void removeMeal(int entryId, Caller caller)` | public | Removes one planned meal by its own id. |
-| `PreferredServingsDto setPreferredServings(int id, JsonNode body)` | public | Sets how many people this recipe is always cooked for, e.g. |
+| `PreferredServingsDto setPreferredServings(int id, JsonNode body, Caller caller)` | public | Sets how many people this recipe is always cooked for, e.g. |
 
 ## PlannedMealDto
 

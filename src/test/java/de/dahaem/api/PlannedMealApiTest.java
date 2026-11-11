@@ -67,7 +67,7 @@ class PlannedMealApiTest {
         exec("DELETE FROM shopping_list");
         exec("DELETE FROM meal_plan_recipe");
         exec("DELETE FROM meal_plan");
-        exec("UPDATE recipe SET recipe_preferred_servings = NULL");
+        exec("DELETE FROM household_recipe_servings");
         exec("UPDATE household SET household_people = 3");
     }
 

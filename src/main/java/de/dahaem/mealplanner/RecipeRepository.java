@@ -321,22 +321,29 @@ public class RecipeRepository {
     }
 
     /**
-     * Sets the recipe's permanent preferred servings ("this meal is always for X people"); null clears it.
-     * It never touches recipe_servings, the number the stored amounts are written for. Returns false when
-     * there is no such recipe.
+     * Sets this household's permanent preferred servings of a recipe ("this meal is always for X people"); null clears
+     * it. The other households' preferences are not touched, and neither is recipe_servings, the number the stored
+     * amounts are written for. Returns false when there is no such recipe.
      */
-    public boolean setPreferredServings(int recipeId, Integer servings) {
-        String sql = "UPDATE recipe SET recipe_preferred_servings = ? WHERE recipe_id = ?";
+    public boolean setPreferredServings(int householdId, int recipeId, Integer servings) {
+        if (findById(recipeId).isEmpty()) {
+            return false;
+        }
+        String sql = servings == null
+                ? "DELETE FROM household_recipe_servings WHERE household_recipe_servings_household_id = ? "
+                        + "AND household_recipe_servings_recipe_id = ?"
+                : "INSERT INTO household_recipe_servings (household_recipe_servings_household_id, "
+                        + "household_recipe_servings_recipe_id, household_recipe_servings_servings) VALUES (?, ?, ?) "
+                        + "ON DUPLICATE KEY UPDATE household_recipe_servings_servings = VALUES(household_recipe_servings_servings)";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            if (servings == null) {
-                ps.setNull(1, java.sql.Types.INTEGER);
-            } else {
-                ps.setInt(1, servings);
-            }
+            ps.setInt(1, householdId);
             ps.setInt(2, recipeId);
-            // Count matched rows, not changed rows: setting the same number again must not look like "not found".
-            return ps.executeUpdate() > 0 || findById(recipeId).isPresent();
+            if (servings != null) {
+                ps.setInt(3, servings);
+            }
+            ps.executeUpdate();
+            return true;
         } catch (SQLException e) {
             throw new RuntimeException("Could not set the preferred servings of recipe " + recipeId, e);
         }

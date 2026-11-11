@@ -541,9 +541,8 @@ client address (X-Client-Ip), like a login.
 
 ### HouseholdController
 
-The household's head count, so the app can scale portions to the people it feeds. The PHP decides
-which logged-in account may call this; the household is named in the URL so the API can check
-membership later without a contract change.
+The household's head count, so the app can scale portions to the people it feeds. The household is named in the URL
+and must be the acting user's own (anything else is a 404); any member of it may read and set the head count.
 
 
 #### GET /api/households/{id}

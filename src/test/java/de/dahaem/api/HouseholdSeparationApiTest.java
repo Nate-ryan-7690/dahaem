@@ -227,6 +227,46 @@ class HouseholdSeparationApiTest {
                 id("SELECT shopping_list_household_id FROM shopping_list WHERE shopping_list_id = " + list));
     }
 
+    @Test
+    void thePreferredServingsOfARecipeAreEachHouseholdsOwn() throws Exception {
+        addMeal(userA);
+        addMeal(userB);
+
+        mvc.perform(as(put("/api/recipes/{id}/preferred-servings", soup), userA).content("{\"servings\": 6}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.preferredServings").value(6));
+        mvc.perform(as(get("/api/meal-plans/week").param("date", DAY), userA))
+                .andExpect(jsonPath("$.days[2].meals[0].servings").value(6))
+                .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("recipe"));
+        mvc.perform(as(get("/api/meal-plans/week").param("date", DAY), userB))
+                .andExpect(jsonPath("$.days[2].meals[0].servings").value(4))
+                .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("household"));
+
+        mvc.perform(as(put("/api/recipes/{id}/preferred-servings", soup), userB).content("{\"servings\": 3}"))
+                .andExpect(status().isOk());
+        mvc.perform(as(put("/api/recipes/{id}/preferred-servings", soup), userB).content("{\"servings\": null}"))
+                .andExpect(status().isOk());
+        mvc.perform(as(get("/api/meal-plans/week").param("date", DAY), userB))
+                .andExpect(jsonPath("$.days[2].meals[0].servingsSource").value("household"));
+        mvc.perform(as(get("/api/meal-plans/week").param("date", DAY), userA))
+                .andExpect(jsonPath("$.days[2].meals[0].servings").value(6));
+        mvc.perform(as(put("/api/recipes/{id}/preferred-servings", 999999), userA).content("{\"servings\": 2}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aHouseholdCanOnlyReadAndChangeItsOwnHeadCount() throws Exception {
+        int householdB = id("SELECT household_id FROM household_member WHERE user_id = " + userB);
+
+        mvc.perform(as(get("/api/households/{id}", householdA), userA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.people").value(2));
+        mvc.perform(as(get("/api/households/{id}", householdA), userB)).andExpect(status().isNotFound());
+        mvc.perform(as(put("/api/households/{id}/people", householdA), userB).content("{\"people\": 9}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(as(get("/api/households/{id}", householdA), userA)).andExpect(jsonPath("$.people").value(2));
+        mvc.perform(as(put("/api/households/{id}/people", householdB), userB).content("{\"people\": 5}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.people").value(5));
+    }
+
     private String inviteCode(int user, String note) throws Exception {
         String body = mvc.perform(as(post("/api/household/invitations"), user)
                         .content(note == null ? "{}" : "{\"note\": \"" + note + "\"}"))

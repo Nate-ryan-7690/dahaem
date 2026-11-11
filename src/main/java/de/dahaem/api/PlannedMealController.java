@@ -108,12 +108,13 @@ public class PlannedMealController {
      * clears it. It never changes the number the stored amounts are written for.
      */
     @PutMapping("/recipes/{id}/preferred-servings")
-    public PreferredServingsDto setPreferredServings(@PathVariable("id") int id, @RequestBody JsonNode body) {
+    public PreferredServingsDto setPreferredServings(@PathVariable("id") int id, @RequestBody JsonNode body,
+                                                     Caller caller) {
         if (!body.isObject() || !body.has("servings")) {
             throw new BadRequestException("'servings' is required (a whole number, at least 1, or null to clear it)");
         }
         Integer servings = nullableInt(body, "servings");
-        if (!recipeService.setPreferredServings(id, servings)) {
+        if (!recipeService.setPreferredServings(caller.householdId(), id, servings)) {
             throw new NotFoundException("No recipe with id " + id);
         }
         return new PreferredServingsDto(id, servings);
