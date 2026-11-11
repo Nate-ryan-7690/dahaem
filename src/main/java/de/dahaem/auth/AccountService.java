@@ -62,6 +62,26 @@ public class AccountService {
      */
     public CreatedAccount createUser(String email, String displayName, String rawPassword,
                                      String householdName, LocalDate today) {
+        return createUser(email, displayName, rawPassword, householdName, today, false);
+    }
+
+    /**
+     * Creates a login in a NEW household (named householdName, which must not be blank), whatever households exist: the
+     * user is its ADMIN. This is how a second household is started; everyone else joins it by invitation.
+     *
+     * @throws IllegalArgumentException for an invalid email, display name or password, or a blank household name
+     * @throws IllegalStateException    if a user with this email already exists
+     */
+    public CreatedAccount createUserInNewHousehold(String email, String displayName, String rawPassword,
+                                                   String householdName, LocalDate today) {
+        if (householdName == null || householdName.isBlank()) {
+            throw new IllegalArgumentException("A household name is required");
+        }
+        return createUser(email, displayName, rawPassword, householdName, today, true);
+    }
+
+    private CreatedAccount createUser(String email, String displayName, String rawPassword,
+                                      String householdName, LocalDate today, boolean newHousehold) {
         String normalizedEmail = normalizeEmail(email);
         if (normalizedEmail == null || !EMAIL.matcher(normalizedEmail).matches()) {
             throw new IllegalArgumentException("Not a valid email address: " + email);
@@ -75,7 +95,7 @@ public class AccountService {
         }
         String passwordHash = passwordEncoder.encode(rawPassword);
 
-        Optional<Household> existing = repository.findFirstHousehold();
+        Optional<Household> existing = newHousehold ? Optional.empty() : repository.findFirstHousehold();
         Connection con = repository.openTransaction();
         try {
             Household household = existing.isPresent()

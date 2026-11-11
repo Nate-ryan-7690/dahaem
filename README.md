@@ -294,7 +294,12 @@ java -cp target/dahaem-1.0-SNAPSHOT.jar \
      de.dahaem.auth.UserAdminRunner create-user anna@example.de Anna "Familie M"
 java -cp target/dahaem-1.0-SNAPSHOT.jar \
      de.dahaem.auth.UserAdminRunner set-password anna@example.de
+# a second, separate household (its first user is its ADMIN; its data is separate from the first household's):
+java -cp target/dahaem-1.0-SNAPSHOT.jar \
+     de.dahaem.auth.UserAdminRunner create-household-user zoe@example.de Zoe "Familie Z"
 ```
+
+More people join a household by invitation: an admin makes one in the app (`POST /api/household/invitations`), the code is shown once and works once for 7 days, and `POST /api/invitations/accept` turns it into a member account.
 
 The password is prompted for twice (at least 10 characters), or read from `DAHAEM_PASSWORD` for scripted setups; it is never a command-line argument. The first user creates the household and becomes its `ADMIN`; everyone after joins that household as `MEMBER`. Passwords are stored only as BCrypt hashes.
 

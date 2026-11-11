@@ -147,6 +147,35 @@ class AccountServiceTest {
     }
 
     @Test
+    void aNewHouseholdCanBeStartedNextToTheFirstOneAndItsUserIsItsAdmin() {
+        CreatedAccount first = service.createUser("anna@example.de", "Anna", PASSWORD, "Familie M", TODAY);
+
+        CreatedAccount other = service.createUserInNewHousehold("zoe@example.de", "Zoe", PASSWORD, "Familie Z", TODAY);
+
+        assertTrue(other.newHousehold());
+        assertEquals("Familie Z", other.membership().household().getName());
+        assertNotEquals(first.membership().household().getId(), other.membership().household().getId());
+        assertEquals(HouseholdRole.ADMIN, other.membership().role());
+        assertEquals(2, service.allHouseholds().size());
+        assertEquals(first.membership().household().getId(),
+                service.membershipFor(first.user().getId()).orElseThrow().household().getId(), "the first household is untouched");
+        // a plain create-user still joins the OLDEST household
+        CreatedAccount later = service.createUser("ben@example.de", "Ben", PASSWORD, "ignored", TODAY);
+        assertEquals(first.membership().household().getId(), later.membership().household().getId());
+    }
+
+    @Test
+    void aNewHouseholdNeedsANameAndAFreeEmail() {
+        service.createUser("anna@example.de", "Anna", PASSWORD, "Familie M", TODAY);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.createUserInNewHousehold("zoe@example.de", "Zoe", PASSWORD, " ", TODAY));
+        assertThrows(IllegalStateException.class,
+                () -> service.createUserInNewHousehold("ANNA@example.de", "Other Anna", PASSWORD, "Familie A", TODAY));
+        assertEquals(1, service.allHouseholds().size(), "nothing was left behind by the refused attempts");
+    }
+
+    @Test
     void householdGetsTheDefaultNameWhenNoneIsGiven() {
         CreatedAccount created = service.createUser("anna@example.de", "Anna", PASSWORD, " ", TODAY);
         assertEquals(AccountService.DEFAULT_HOUSEHOLD_NAME, created.membership().household().getName());
