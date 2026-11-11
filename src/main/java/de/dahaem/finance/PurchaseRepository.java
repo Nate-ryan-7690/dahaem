@@ -126,6 +126,23 @@ public class PurchaseRepository {
         }
     }
 
+    /** What a purchase of a store item adds to stock: the catalogue item, the pack (size + unit) and the item's own unit. */
+    public record StoreItemStock(int inventoryItemId, int packSize, String packUnit, String itemUnit) {
+    }
+
+    /** The stock facts of a store item, or null if there is no such store item. */
+    public StoreItemStock findStoreItemStock(Connection con, int storeItemId) throws SQLException {
+        String sql = "SELECT si.store_item_item_id, si.store_item_package_size, si.store_item_package_unit, "
+                + "ii.inventory_item_unit FROM store_item si "
+                + "JOIN inventory_item ii ON ii.inventory_item_id = si.store_item_item_id WHERE si.store_item_id = ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, storeItemId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? new StoreItemStock(rs.getInt(1), rs.getInt(2), rs.getString(3), rs.getString(4)) : null;
+            }
+        }
+    }
+
     /**
      * Increases inventory_item_quantity by {@code quantityDelta} and pulls inventory_item_earliest_exp_date
      * down to {@code purchaseExpirationDate} if that is earlier than what is already stored (or nothing is
@@ -148,17 +165,21 @@ public class PurchaseRepository {
         }
     }
 
-    /** What is left of one purchase (a batch of one inventory item). */
-    public record Batch(int purchaseId, int left) {
+    /**
+     * One purchase (a batch of one inventory item) with what it needs to tell how much is left: {@code remaining} in the
+     * item's unit (null = nothing used yet, all of it is left), the packs bought and the pack (size + unit).
+     */
+    public record Batch(int purchaseId, Integer remaining, int quantityPurchased, int packSize, String packUnit) {
     }
 
     /**
      * The purchases of an inventory item that still have something left, earliest expiry first (older purchase first on
      * a tie), locked for the caller's transaction. A purchase whose remaining column is NULL has all of it left.
+     * "Left" is counted in the item's own unit (see {@link StockAmounts}).
      */
     public List<Batch> lockBatchesWithStock(Connection con, int inventoryItemId) throws SQLException {
-        String sql = "SELECT ph.purchase_history_purchase_id, " +
-                "COALESCE(ph.purchase_history_quantity_remaining, ph.purchase_history_quantity_purchased) AS amount_left " +
+        String sql = "SELECT ph.purchase_history_purchase_id, ph.purchase_history_quantity_remaining, " +
+                "ph.purchase_history_quantity_purchased, si.store_item_package_size, si.store_item_package_unit " +
                 "FROM purchase_history ph JOIN store_item si ON si.store_item_id = ph.purchase_history_store_item_id " +
                 "WHERE si.store_item_item_id = ? " +
                 "AND COALESCE(ph.purchase_history_quantity_remaining, ph.purchase_history_quantity_purchased) > 0 " +
@@ -168,7 +189,9 @@ public class PurchaseRepository {
             ps.setInt(1, inventoryItemId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    batches.add(new Batch(rs.getInt(1), rs.getInt(2)));
+                    int remaining = rs.getInt(2);
+                    batches.add(new Batch(rs.getInt(1), rs.wasNull() ? null : remaining, rs.getInt(3), rs.getInt(4),
+                            rs.getString(5)));
                 }
             }
         }

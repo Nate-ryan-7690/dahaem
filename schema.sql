@@ -280,7 +280,8 @@ CREATE TABLE purchase_history(purchase_history_purchase_id INTEGER PRIMARY KEY A
 
 	purchase_history_quantity_purchased INTEGER NOT NULL,
 
-	-- migration 0018: how much of this purchase is still in stock; NULL = nothing used yet (all of it)
+	-- migration 0018: how much of this purchase is still in stock, in the catalogue item's own unit (g, ml, Stück);
+	-- NULL = nothing used yet (all of it: packs bought x the pack's size in that unit)
 	purchase_history_quantity_remaining INTEGER NULL,
 
 	purchase_history_price_paid DECIMAL(10,2) NOT NULL,

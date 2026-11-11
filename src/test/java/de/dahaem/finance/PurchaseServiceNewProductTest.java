@@ -57,7 +57,7 @@ class PurchaseServiceNewProductTest {
 
         int inventoryItemId = soleInventoryItemId();
         assertEquals("oat drink", inventoryItemNameEnglish(inventoryItemId));
-        assertEquals(2, inventoryQuantity(inventoryItemId), "the purchased quantity must be applied");
+        assertEquals(2000, inventoryQuantity(inventoryItemId), "2 packs of 1000 ml add 2000 ml (the item is counted in ml)");
         assertEquals("2026-12-01", inventoryEarliestExpDate(inventoryItemId));
 
         int storeItemId = soleStoreItemId();
@@ -79,7 +79,7 @@ class PurchaseServiceNewProductTest {
                 1, 0.99, LocalDate.of(2026, 9, 25), LocalDate.of(2026, 10, 10));
 
         assertEquals(1, countInventoryItems(), "no new generic inventory_item should have been created");
-        assertEquals(1, inventoryQuantity(existingItemId));
+        assertEquals(500, inventoryQuantity(existingItemId), "one 500 g pack adds 500 g");
     }
 
     @Test
@@ -101,7 +101,7 @@ class PurchaseServiceNewProductTest {
         assertEquals(2, purchaseRepository.findAll().size());
 
         int inventoryItemId = soleInventoryItemId();
-        assertEquals(2, inventoryQuantity(inventoryItemId), "both purchases must add to the same inventory_item");
+        assertEquals(2000, inventoryQuantity(inventoryItemId), "both 1000 ml packs must add to the same inventory_item");
     }
 
     // ---------------------------------------------------------------- helpers

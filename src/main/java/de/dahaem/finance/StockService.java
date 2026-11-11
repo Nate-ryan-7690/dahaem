@@ -9,8 +9,8 @@ import java.time.LocalDate;
 import java.util.Optional;
 
 /**
- * Takes food out of stock. Using it and throwing it away are the same action: the amount leaves the batch that expires
- * first, the item's quantity goes down, and its earliest expiry date is worked out again from the batches that are left.
+ * Takes food out of stock, in the item's own unit (g, ml, Stück). Using it and throwing it away are the same action: the
+ * amount leaves the batch that expires first, the item's quantity goes down, and its earliest expiry date is worked out again from the batches that are left.
  * No SQL here. Everything runs in one transaction on the item's locked row.
  */
 public class StockService {
@@ -50,8 +50,10 @@ public class StockService {
                 if (toTake == 0) {
                     break;
                 }
-                int take = Math.min(batch.left(), toTake);
-                purchaseRepository.setRemaining(con, batch.purchaseId(), batch.left() - take);
+                int left = batch.remaining() != null ? batch.remaining()
+                        : batch.quantityPurchased() * StockAmounts.perPack(batch.packSize(), batch.packUnit(), item.getUnit());
+                int take = Math.min(left, toTake);
+                purchaseRepository.setRemaining(con, batch.purchaseId(), left - take);
                 toTake -= take;
             }
 

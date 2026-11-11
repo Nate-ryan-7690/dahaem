@@ -225,6 +225,48 @@ class ApiSmokeTest {
     }
 
     @Test
+    void groceriesCanBePutAwayByBarcodeAndOneBadLineDoesNotStopTheRest() throws Exception {
+        String code = "4012345678901";
+        // item 40 (onion) is counted in g; a 1 kg pack is 1000 g of stock
+        mvc.perform(put("/api/barcodes/{code}", code).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"inventoryItemId\": 40, \"packSize\": 1, \"packUnit\": \"kg\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.product.packSize").value(1000))
+                .andExpect(jsonPath("$.product.packUnit").value("g"))
+                .andExpect(jsonPath("$.product.itemUnit").value("g"));
+
+        mvc.perform(post("/api/intake").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"storeName\": \"Testladen\", \"lines\": ["
+                                + "{\"barcode\": \"" + code + "\", \"packs\": 2, \"expirationDate\": \"2031-05-01\", \"pricePaid\": 1.98},"
+                                + "{\"barcode\": \"12345\", \"expirationDate\": \"2031-05-01\", \"pricePaid\": 1.0}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recorded").value(1))
+                .andExpect(jsonPath("$.failed").value(1))
+                .andExpect(jsonPath("$.results[0].ok").value(true))
+                .andExpect(jsonPath("$.results[0].stockAdded").value(2000))
+                .andExpect(jsonPath("$.results[0].stockUnit").value("g"))
+                .andExpect(jsonPath("$.results[1].ok").value(false))
+                .andExpect(jsonPath("$.results[1].code").value("INVALID_BARCODE"));
+        mvc.perform(get("/api/barcodes/{code}", code))
+                .andExpect(jsonPath("$.product.storeItems[0].storeName").value("Testladen"));
+
+        mvc.perform(post("/api/intake").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"storeName\": \"Testladen\", \"lines\": []}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/intake").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lines\": [{\"barcode\": \"" + code + "\", \"expirationDate\": \"2031-05-01\"}]}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/intake").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"storeName\": \"Testladen\", \"purchaseDate\": \"2099-01-01\", \"lines\": ["
+                                + "{\"barcode\": \"" + code + "\", \"expirationDate\": \"2031-05-01\", \"pricePaid\": 1.0}]}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void inventorySearchFiltersPagesAndValidatesPaging() throws Exception {
         mvc.perform(get("/api/inventory/search").param("pageSize", "2"))
                 .andExpect(status().isOk())
