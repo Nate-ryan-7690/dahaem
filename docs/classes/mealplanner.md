@@ -1443,6 +1443,10 @@ classDiagram
         -Set~String~ NON_AMOUNT_UNITS$
         -Set~String~ RELATIVE_WORDS$
         +render(String step, int servings, Integer servingsMax, Integer people, boolean useMax) String$
+        -Pattern THOUSANDS$
+        ~parseNumber(String raw, String unit) BigDecimal$
+        +cleanEscapes(String text) String$
+        -Pattern STRAY_BACKSLASH$
         ~parseNumber(String raw) BigDecimal$
         ~formatNumber(BigDecimal value, String unit) String$
     }
@@ -1486,10 +1490,14 @@ classDiagram
 | `WHOLE_FROM_100_UNITS` | `Set<String>` |
 | `NON_AMOUNT_UNITS` | `Set<String>` |
 | `RELATIVE_WORDS` | `Set<String>` |
+| `THOUSANDS` | `Pattern` |
+| `STRAY_BACKSLASH` | `Pattern` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `String render(String step, int servings, Integer servingsMax, Integer people, boolean useMax)` | public static | The step text for people (null = as written, brackets resolved for the recipe's own head count). |
+| `BigDecimal parseNumber(String raw, String unit)` | package static | Parses one number that stands before unit. |
+| `String cleanEscapes(String text)` | public static | The text of a step without the marks the import left behind: a backslash straight after a letter and before a space, punctuation or the end ("Salz\ und Pfeffer\", from "Salz\*") is the pantry mark "*" that lost its asterisk. |
 | `BigDecimal parseNumber(String raw)` | package static | Parses one number as HelloFresh writes it; null when it isn't a plain amount. |
 | `String formatNumber(BigDecimal value, String unit)` | package static | German number formatting: decimals with a comma for g / kg / ml / l and non-amount units (grams and millilitres to one decimal, from 100 up as whole numbers), ½ ¼ ¾ ⅛ ⅓ ⅔ for spoons, pinches and counts where they fit, otherwise a decimal. |
 
