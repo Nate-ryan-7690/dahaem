@@ -691,6 +691,10 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
   a NEW household with that user as its ADMIN (plain `create-user` still joins the oldest one). Everyone else joins it with an
   invitation. With this the household work is complete; the open items above (frozen columns, NOT NULL, receipts) stay Nate's call.
 
+## Katalog, Kochbuch und Verwaltung (big task, started 2026-11-12)
+
+Households choose their recipes from a shared catalogue into a cookbook (limit 1,000), everything a household does with recipes uses the cookbook, and a standalone super admin maintains the site. The full design, the data model, the API and the PR series (C0-C13 for the cookbook, A1-A4 for the admin area) are in `docs/COOKBOOK.md`; each PR ticks itself off there when it merges. Link import, paper and photo import, sharing / reporting and the removed-person flow come after real use of the cookbook.
+
 ## Platform
 
 - **Live deployment state (checked 2026-11-06)** — `done` except the schema_migrations idea. **Second rebuild, same
