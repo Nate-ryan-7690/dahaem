@@ -53,6 +53,8 @@ Every error has the same shape:
 | GET | [`/api/barcodes/{code}`](#get-apibarcodescode) | What a barcode is. |
 | PUT | [`/api/barcodes/{code}`](#put-apibarcodescode) | Remembers what the barcode is, or replaces it (AssignBarcodeRequest). |
 | GET | [`/api/brands`](#get-apibrands) | Brands, by name, one page: q matches the name as a case-insensitive substring (optional); page (from 1, default 1) and pageSize (1 - 100, default 24) like GET /api/recipes/search. |
+| GET | [`/api/household/equipment`](#get-apihouseholdequipment) | Every kind of equipment the app knows (code, name) with whether the household has it (has, true until the household says otherwise). |
+| PUT | [`/api/household/equipment/{code}`](#put-apihouseholdequipmentcode) | Says whether the household has this equipment: {"has": false}. |
 | GET | [`/api/household/invitations`](#get-apihouseholdinvitations) | The newest invitations of the caller's household (admins only), newest first, at most 50. |
 | POST | [`/api/household/invitations`](#post-apihouseholdinvitations) | Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). |
 | DELETE | [`/api/household/invitations/{id}`](#delete-apihouseholdinvitationsid) | Revokes an invitation that can still be used (admins only). |
@@ -441,6 +443,47 @@ Every store, by name: [{id, name]}.
     "name": "…"
   }
 ]
+```
+
+### HouseholdEquipmentController
+
+What kitchen equipment the caller's household has. Recipes that need equipment it lacks are left out of its lists.
+
+
+#### GET /api/household/equipment
+
+Every kind of equipment the app knows (code, name) with whether the household has it (has,
+true until the household says otherwise). Today: thermomix.
+
+**Answer** 200 `List<HouseholdEquipmentService.Status>`
+
+```json
+["…"]
+```
+
+#### PUT /api/household/equipment/{code}
+
+Says whether the household has this equipment: {"has": false}. With false the recipe lists, the search
+and the suggestions leave out the recipes that need it (for the Thermomix: the recipes tagged "Thermomix"); with
+true they come back. Any member of the household may do this. 200 with the new state; 404 for an unknown
+code; 400 when has is not true or false.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `code` | `String` |
+
+**Request body** `JsonNode`
+
+```json
+"…"
+```
+
+**Answer** 200 `HouseholdEquipmentService.Status`
+
+```json
+"…"
 ```
 
 ### InvitationController

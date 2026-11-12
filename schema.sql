@@ -555,6 +555,15 @@ CREATE TABLE household_recipe_servings (
 	CONSTRAINT household_recipe_servings_recipe_fk
 		FOREIGN KEY (household_recipe_servings_recipe_id) REFERENCES recipe(recipe_id));
 
+-- Equipment a household does NOT have (migration 0027): one row = it does not have it; recipes that need it are left out
+-- of its lists (a recipe that needs a Thermomix carries the derived tag "Thermomix" of the group "Ausstattung").
+CREATE TABLE household_unavailable_equipment (
+	household_unavailable_equipment_household_id INTEGER     NOT NULL,
+	household_unavailable_equipment_code         VARCHAR(30) NOT NULL,
+	PRIMARY KEY (household_unavailable_equipment_household_id, household_unavailable_equipment_code),
+	CONSTRAINT household_unavailable_equipment_household_fk
+		FOREIGN KEY (household_unavailable_equipment_household_id) REFERENCES household(household_id));
+
 -- Invitations into a household (migration 0025): the code is never stored, only its SHA-256 and its last four characters.
 CREATE TABLE household_invite (
 	household_invite_id           INTEGER PRIMARY KEY AUTO_INCREMENT,

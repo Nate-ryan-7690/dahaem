@@ -532,6 +532,7 @@ classDiagram
         +String NAEHRWERTE$
         +String KUECHE$
         +String INHALT$
+        +String AUSSTATTUNG$
         +String VEGETARISCH$
         +String VEGAN$
         +String UNKLAR$
@@ -540,6 +541,7 @@ classDiagram
         +String SCHNELL$
         +String KALORIENARM$
         +String PROTEINREICH$
+        +String THERMOMIX$
     }
     class tags_RecipeTagger_Derivation["RecipeTagger.Derivation"] {
         <<record>>
@@ -557,6 +559,7 @@ classDiagram
 | `NAEHRWERTE` | `String` |
 | `KUECHE` | `String` |
 | `INHALT` | `String` |
+| `AUSSTATTUNG` | `String` |
 | `VEGETARISCH` | `String` |
 | `VEGAN` | `String` |
 | `UNKLAR` | `String` |
@@ -565,6 +568,7 @@ classDiagram
 | `SCHNELL` | `String` |
 | `KALORIENARM` | `String` |
 | `PROTEINREICH` | `String` |
+| `THERMOMIX` | `String` |
 
 ## ItemAnimalRepository
 
@@ -780,7 +784,8 @@ classDiagram
 What the tagger needs to know about one recipe. Nutrition is per serving, times are minutes;
 cuisine is null when the recipe has none (or the column does not exist yet).
 unmatched are the recipe's rows in recipe_unmatched_ingredient (lines the importer could not match,
-or one 'unchecked' row): any of them makes the recipe "unklar".
+or one 'unchecked' row): any of them makes the recipe "unklar". needsThermomix is true when a step of the
+recipe uses the Thermomix (the words "Mixtopf", "Varoma" or "Thermomix").
 
 ```mermaid
 classDiagram
@@ -796,6 +801,8 @@ classDiagram
         +String cuisine
         +List~Ingredient~ ingredients
         +List~Unmatched~ unmatched
+        +boolean needsThermomix
+        +RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein, String cuisine, List~Ingredient~ ingredients, List~Unmatched~ unmatched)
         +RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein, String cuisine, List~Ingredient~ ingredients)
     }
     class tags_RecipeFacts_Ingredient["RecipeFacts.Ingredient"] {
@@ -831,9 +838,11 @@ classDiagram
 | `cuisine` | `String` |
 | `ingredients` | `List<Ingredient>` |
 | `unmatched` | `List<Unmatched>` |
+| `needsThermomix` | `boolean` |
 
 | Member | Visibility | What it does |
 |---|---|---|
+| `RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein, String cuisine, List<Ingredient> ingredients, List<Unmatched> unmatched)` | public |  |
 | `RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein, String cuisine, List<Ingredient> ingredients)` | public |  |
 
 **Referenced by:** `DietDto`, `RecipeDietFacts`, `RecipeTagRepository`, `RecipeTagger`

@@ -8,8 +8,8 @@ Every class, record, interface and enum of the Java backend, one page per packag
 
 ```mermaid
 flowchart TD
-    api["api (107)"]
-    auth["auth (25)"]
+    api["api (108)"]
+    auth["auth (29)"]
     barcode["barcode (21)"]
     diet["diet (14)"]
     finance["finance (9)"]
@@ -21,16 +21,17 @@ flowchart TD
     stores["stores (53)"]
     suggestions["suggestions (12)"]
     tags["tags (29)"]
-    api -->|38| auth
+    api -->|43| auth
     api -->|13| barcode
-    api -->|12| diet
+    api -->|14| diet
     api -->|7| finance
     api -->|5| inventory
     api -->|34| mealplanner
     api -->|15| shopping
     api -->|9| stores
-    api -->|10| suggestions
+    api -->|11| suggestions
     api -->|6| tags
+    auth -->|1| tags
     barcode -->|2| finance
     barcode -->|2| inventory
     barcode -->|7| stores
@@ -53,8 +54,8 @@ Arrows point from the importing package to the imported one; the number is how m
 
 | Package | Types | What it holds |
 |---|---|---|
-| [`api`](api.md) | 107 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
-| [`auth`](auth.md) | 25 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
+| [`api`](api.md) | 108 | The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling. |
+| [`auth`](auth.md) | 29 | Logins, households and memberships; the `UserAdminRunner` command-line tool. |
 | [`barcode`](barcode.md) | 21 |  |
 | [`diet`](diet.md) | 14 | The diet filter: presets, rules and the per-recipe verdict (OK / ANPASSBAR / HIDDEN / UNCLEAR). |
 | [`finance`](finance.md) | 9 | Purchases and spending analytics. |
@@ -154,6 +155,11 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`Household`](auth.md#household) | auth | class | Plain data holder for one row of the household table. |
 | [`HouseholdController`](api.md#householdcontroller) | api | class | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](api.md#householddto) | api | record | A household as the API shows it. |
+| [`HouseholdEquipment`](auth.md#householdequipment) | auth | enum | The kitchen equipment a household can say it does not have. |
+| [`HouseholdEquipmentController`](api.md#householdequipmentcontroller) | api | class | What kitchen equipment the caller's household has. |
+| [`HouseholdEquipmentRepository`](auth.md#householdequipmentrepository) | auth | class | All SQL for household_unavailable_equipment lives here: one row = the household does NOT have that equipment. |
+| [`HouseholdEquipmentService`](auth.md#householdequipmentservice) | auth | class | Which kitchen equipment a household has. |
+| [`HouseholdEquipmentService.Status`](auth.md#householdequipmentservicestatus) | auth | record | One piece of equipment as a household sees it. |
 | [`HouseholdMemberController`](api.md#householdmembercontroller) | api | class | Who belongs to the caller's household, for the household page. |
 | [`HouseholdMemberController.MemberDto`](api.md#householdmembercontrollermemberdto) | api | record | One member. |
 | [`HouseholdMembership`](auth.md#householdmembership) | auth | record | A household together with the role one user has in it (one household_member row, joined to its household). |

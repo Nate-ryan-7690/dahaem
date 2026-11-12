@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import de.dahaem.auth.HouseholdEquipmentService;
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietRules;
 import de.dahaem.diet.DietStatus;
@@ -35,10 +36,12 @@ public class RecipeController {
     private final TagService tagService;
     private final DietFilterService dietFilter;
     private final RecipeSearchService searchService;
+    private final HouseholdEquipmentService equipment;
 
     public RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter,
-                            RecipeSearchService searchService) {
+                            RecipeSearchService searchService, HouseholdEquipmentService equipment) {
         this.searchService = searchService;
+        this.equipment = equipment;
         this.recipeService = recipeService;
         this.tagService = tagService;
         this.dietFilter = dietFilter;
@@ -66,8 +69,10 @@ public class RecipeController {
                                       @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
                                       @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
                                       @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
-                                      @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
-        DietRules rules = dietFilter.rules(diet, excludeTags, excludeItems, avoidTags, avoidItems, includeUnclear);
+                                      @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear,
+                                      Caller caller) {
+        DietRules rules = dietFilter.rules(diet, withHouseholdExclusions(excludeTags, caller), excludeItems, avoidTags,
+                avoidItems, includeUnclear);
         Map<Integer, List<String>> tags = tagService.tagNamesByRecipe();
         List<Recipe> recipes = recipeService.allRecipes();
         if (!rules.hasRules()) {
@@ -138,10 +143,12 @@ public class RecipeController {
                                 @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
                                 @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
                                 @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
-                                @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
+                                @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear,
+                                Caller caller) {
         RecipeQuery query = RecipeQuery.of(q, ingredient, tags, minTime, maxTime, servings, sort);
         PageRequest request = PageRequest.of(page, pageSize);
-        DietRules rules = dietFilter.rules(diet, excludeTags, excludeItems, avoidTags, avoidItems, includeUnclear);
+        DietRules rules = dietFilter.rules(diet, withHouseholdExclusions(excludeTags, caller), excludeItems, avoidTags,
+                avoidItems, includeUnclear);
         RecipeSearchService.Result result = searchService.search(query, rules, request);
         List<RecipeCardDto> items = result.items().stream()
                 .map(e -> RecipeCardDto.from(e.recipe(), e.tags(),
@@ -189,6 +196,21 @@ public class RecipeController {
         return RecipeDetailDto.from(recipe, recipeService.findAllIngredients(id), recipeService.findAllInstructions(id),
                 tagService.recipeTagsForRecipe(id), people, RecipeDetailDto.BASIS_MAX.equals(basis), dietDto,
                 recipeService.preferredServings(caller.householdId(), id).orElse(null));
+    }
+
+    /**
+     * The request's own excluded tags plus the recipe tags of the equipment the caller's household does not have (a
+     * household without a Thermomix never sees the recipes that need one). A hard rule on a tag that is not derived from
+     * the ingredients, so it never turns other recipes into "unclear".
+     */
+    private List<String> withHouseholdExclusions(List<String> excludeTags, Caller caller) {
+        List<String> household = equipment.excludedRecipeTags(caller.householdId());
+        if (household.isEmpty()) {
+            return excludeTags;
+        }
+        List<String> merged = new ArrayList<>(excludeTags == null ? List.of() : excludeTags);
+        merged.addAll(household);
+        return merged;
     }
 
     @GetMapping("/{id}/tags")

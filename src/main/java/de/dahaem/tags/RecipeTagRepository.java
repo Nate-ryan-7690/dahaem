@@ -66,6 +66,10 @@ public class RecipeTagRepository {
                 + "FROM recipe_ingredient ri LEFT JOIN inventory_item ii "
                 + "ON ii.inventory_item_id = ri.recipe_ingredient_item_id";
         List<RecipeFacts> recipes = new ArrayList<>();
+        java.util.Set<Integer> thermomix = new java.util.HashSet<>();
+        String thermomixSql = "SELECT DISTINCT recipe_instructions_recipe_id FROM recipe_instructions "
+                + "WHERE recipe_instructions_instruction LIKE '%Mixtopf%' OR recipe_instructions_instruction LIKE '%Varoma%' "
+                + "OR recipe_instructions_instruction LIKE '%Thermomix%'";
         String recipeSql = "SELECT recipe_id, recipe_name, recipe_prep_time, recipe_cook_time, recipe_calories, "
                 + "recipe_protein, " + cuisineColumn.map(c -> c).orElse("NULL") + " AS cuisine "
                 + "FROM recipe ORDER BY recipe_id";
@@ -79,12 +83,18 @@ public class RecipeTagRepository {
                             .add(ingredient(item, item == null ? Map.of() : animals.getOrDefault(item.id(), Map.of())));
                 }
             }
+            try (PreparedStatement ps = con.prepareStatement(thermomixSql); ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    thermomix.add(rs.getInt(1));
+                }
+            }
             try (PreparedStatement ps = con.prepareStatement(recipeSql); ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int id = rs.getInt(1);
                     recipes.add(new RecipeFacts(id, rs.getString(2), rs.getInt(3), rs.getInt(4),
                             (Integer) rs.getObject(5), (Integer) rs.getObject(6), rs.getString(7),
-                            ingredients.getOrDefault(id, List.of()), unmatched.getOrDefault(id, List.of())));
+                            ingredients.getOrDefault(id, List.of()), unmatched.getOrDefault(id, List.of()),
+                            thermomix.contains(id)));
                 }
             }
         } catch (SQLException e) {

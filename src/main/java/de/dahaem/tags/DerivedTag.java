@@ -9,6 +9,8 @@ public record DerivedTag(String name, String category) {
     public static final String NAEHRWERTE = "Nährwerte";
     public static final String KUECHE = "Küche";
     public static final String INHALT = "Inhalt";
+    /** The kitchen equipment a recipe needs. */
+    public static final String AUSSTATTUNG = "Ausstattung";
 
     public static final String VEGETARISCH = "vegetarisch";
     public static final String VEGAN = "vegan";
@@ -21,4 +23,6 @@ public record DerivedTag(String name, String category) {
     public static final String SCHNELL = "schnell";
     public static final String KALORIENARM = "kalorienarm";
     public static final String PROTEINREICH = "proteinreich";
+    /** A step of the recipe uses the Thermomix ("Mixtopf", "Varoma" or "Thermomix"). */
+    public static final String THERMOMIX = "Thermomix";
 }

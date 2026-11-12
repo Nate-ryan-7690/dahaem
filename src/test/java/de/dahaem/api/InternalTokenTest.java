@@ -55,7 +55,8 @@ class InternalTokenTest {
 
     @Test
     void correctTokenIsAcceptedWithoutSessionOrCsrf() throws Exception {
-        mvc.perform(get("/api/recipes").header(HEADER, "test-secret-token"))
+        // a call that names no user (the recipe list does: it needs X-Acting-User for the household's equipment)
+        mvc.perform(get("/api/stores").header(HEADER, "test-secret-token"))
                 .andExpect(status().isOk());
         // A state-changing call needs no CSRF token either; the 400 comes from validation, not security.
         mvc.perform(post("/api/meal-plans").header(HEADER, "test-secret-token")

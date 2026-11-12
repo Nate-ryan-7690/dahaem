@@ -4,7 +4,7 @@
 
 The HTTP layer: thin Spring controllers, DTOs, security (the internal token) and error handling.
 
-107 types in 75 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
+108 types in 76 source files (`src/main/java/de/dahaem/api`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -94,6 +94,9 @@ classDiagram
     }
     class api_HouseholdDto["HouseholdDto"] {
         <<record>>
+    }
+    class api_HouseholdEquipmentController["HouseholdEquipmentController"] {
+        <<controller>>
     }
     class api_HouseholdMemberController["HouseholdMemberController"] {
         <<controller>>
@@ -334,6 +337,7 @@ classDiagram
     api_DietDto_SoftHits --> api_DietDto_Hint
     api_HouseholdController ..> api_Caller
     api_HouseholdController ..> api_HouseholdDto
+    api_HouseholdEquipmentController ..> api_Caller
     api_HouseholdMemberController *-- api_HouseholdMemberController_MemberDto
     api_HouseholdMemberController ..> api_Caller
     api_IntakeController *-- api_IntakeController_IntakeRequest
@@ -379,9 +383,9 @@ classDiagram
     api_PurchaseController ..> api_CreatePurchaseRequest
     api_PurchaseController ..> api_SpendingDto
     api_RecipeCardDto --> api_DietDto
+    api_RecipeController ..> api_Caller
     api_RecipeController ..> api_RecipeSummaryDto
     api_RecipeController ..> api_RecipePageDto
-    api_RecipeController ..> api_Caller
     api_RecipeController ..> api_RecipeDetailDto
     api_RecipeController ..> api_TagDto
     api_RecipeController ..> api_AddTagRequest
@@ -414,8 +418,8 @@ classDiagram
     api_ShoppingListItemController ..> api_ShoppingListItemSelectionDto
     api_ShoppingListItemController ..> api_ShoppingListEdits
     api_StoreCatalogController ..> api_BrandPageDto
-    api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_Caller
+    api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_PantrySuggestionPageDto
     api_WebConfig --> api_CallerArgumentResolver
 ```
@@ -456,6 +460,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`GeneratedShoppingListDto`](#generatedshoppinglistdto) | record |  | Response of POST /api/meal-plans/{planId}/shopping-list: the id of the newly persisted list. |
 | [`HouseholdController`](#householdcontroller) | class | REST controller | The household's head count, so the app can scale portions to the people it feeds. |
 | [`HouseholdDto`](#householddto) | record |  | A household as the API shows it. |
+| [`HouseholdEquipmentController`](#householdequipmentcontroller) | class | REST controller | What kitchen equipment the caller's household has. |
 | [`HouseholdMemberController`](#householdmembercontroller) | class | REST controller | Who belongs to the caller's household, for the household page. |
 | [`HouseholdMemberController.MemberDto`](#householdmembercontrollermemberdto) | record |  | One member. |
 | [`IntakeController`](#intakecontroller) | class | REST controller | Putting groceries away by barcode number (typed, or from a list): stock, batches by expiry date, store items. |
@@ -1094,6 +1099,9 @@ classDiagram
     class api_HouseholdController["HouseholdController"] {
         <<controller>>
     }
+    class api_HouseholdEquipmentController["HouseholdEquipmentController"] {
+        <<controller>>
+    }
     class api_HouseholdMemberController["HouseholdMemberController"] {
         <<controller>>
     }
@@ -1126,6 +1134,7 @@ classDiagram
     }
     api_Caller --> auth_HouseholdRole
     api_HouseholdController ..> api_Caller
+    api_HouseholdEquipmentController ..> api_Caller
     api_HouseholdMemberController ..> api_Caller
     api_IntakeController ..> api_Caller
     api_InventoryController ..> api_Caller
@@ -1148,7 +1157,7 @@ classDiagram
 |---|---|---|
 | `void requireAdmin()` | public |  |
 
-**Referenced by:** `HouseholdController`, `HouseholdMemberController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `RecipeController`, `ShoppingListItemController`, `SuggestionController`
+**Referenced by:** `HouseholdController`, `HouseholdEquipmentController`, `HouseholdMemberController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `RecipeController`, `ShoppingListItemController`, `SuggestionController`
 
 ## CallerArgumentResolver
 
@@ -1793,6 +1802,40 @@ classDiagram
 | `HouseholdDto from(Household household)` | public static |  |
 
 **Referenced by:** `HouseholdController`
+
+## HouseholdEquipmentController
+
+*class · REST controller*
+
+What kitchen equipment the caller's household has. Recipes that need equipment it lacks are left out of its lists.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_HouseholdEquipmentController["HouseholdEquipmentController"] {
+        <<controller>>
+        -HouseholdEquipmentService equipment
+        +HouseholdEquipmentController(HouseholdEquipmentService equipment)
+        +list(Caller caller) List~HouseholdEquipmentService.Status~
+        +set(String code, JsonNode body, Caller caller) HouseholdEquipmentService.Status
+    }
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
+    api_HouseholdEquipmentController --> auth_HouseholdEquipmentService
+    api_HouseholdEquipmentController ..> api_Caller
+```
+
+| Field | Type |
+|---|---|
+| `equipment` | `HouseholdEquipmentService` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `HouseholdEquipmentController(HouseholdEquipmentService equipment)` | public |  |
+| `List<HouseholdEquipmentService.Status> list(Caller caller)` | public | Every kind of equipment the app knows (code, name) with whether the household has it (has, true until the household says otherwise). |
+| `HouseholdEquipmentService.Status set(String code, JsonNode body, Caller caller)` | public | Says whether the household has this equipment: {"has": false}. |
 
 ## HouseholdMemberController
 
@@ -3472,9 +3515,10 @@ classDiagram
         -TagService tagService
         -DietFilterService dietFilter
         -RecipeSearchService searchService
-        +RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService)
-        +all(List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) List~RecipeSummaryDto~
-        +search(String q, List~String~ ingredient, List~String~ tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) RecipePageDto
+        -HouseholdEquipmentService equipment
+        +RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService, HouseholdEquipmentService equipment)
+        +all(List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear, Caller caller) List~RecipeSummaryDto~
+        +search(String q, List~String~ ingredient, List~String~ tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear, Caller caller) RecipePageDto
         +byId(int id, Integer people, String basis, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear, Caller caller) RecipeDetailDto
         +tags(int id) List~TagDto~
         +addTag(int id, AddTagRequest request) TagDto
@@ -3484,13 +3528,14 @@ classDiagram
     class tags_TagService["TagService"]
     class diet_DietFilterService["DietFilterService"]
     class mealplanner_RecipeSearchService["RecipeSearchService"]
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"]
+    class api_Caller["Caller"] {
+        <<record>>
+    }
     class api_RecipeSummaryDto["RecipeSummaryDto"] {
         <<record>>
     }
     class api_RecipePageDto["RecipePageDto"] {
-        <<record>>
-    }
-    class api_Caller["Caller"] {
         <<record>>
     }
     class api_RecipeDetailDto["RecipeDetailDto"] {
@@ -3507,9 +3552,10 @@ classDiagram
     api_RecipeController --> tags_TagService
     api_RecipeController --> diet_DietFilterService
     api_RecipeController --> mealplanner_RecipeSearchService
+    api_RecipeController --> auth_HouseholdEquipmentService
+    api_RecipeController ..> api_Caller
     api_RecipeController ..> api_RecipeSummaryDto
     api_RecipeController ..> api_RecipePageDto
-    api_RecipeController ..> api_Caller
     api_RecipeController ..> api_RecipeDetailDto
     api_RecipeController ..> api_TagDto
     api_RecipeController ..> api_AddTagRequest
@@ -3522,12 +3568,13 @@ classDiagram
 | `tagService` | `TagService` |
 | `dietFilter` | `DietFilterService` |
 | `searchService` | `RecipeSearchService` |
+| `equipment` | `HouseholdEquipmentService` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService)` | public |  |
-| `List<RecipeSummaryDto> all(List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | All recipes by name. |
-| `RecipePageDto search(String q, List<String> ingredient, List<String> tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | GET /api/recipes/search: search the recipes, one page of cards plus the total. |
+| `RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService, HouseholdEquipmentService equipment)` | public |  |
+| `List<RecipeSummaryDto> all(List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear, Caller caller)` | public | All recipes by name. |
+| `RecipePageDto search(String q, List<String> ingredient, List<String> tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear, Caller caller)` | public | GET /api/recipes/search: search the recipes, one page of cards plus the total. |
 | `RecipeDetailDto byId(int id, Integer people, String basis, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear, Caller caller)` | public | The recipe with its ingredients and instructions. |
 | `List<TagDto> tags(int id)` | public |  |
 | `TagDto addTag(int id, AddTagRequest request)` | public | Tags the recipe, creating the tag first if no tag with that name exists. |
@@ -4113,6 +4160,8 @@ classDiagram
         +loginThrottle() LoginThrottle
         +loginService(AccountService accountService, LoginThrottle loginThrottle) LoginService
         +accountSelfService(AccountService accountService, LoginThrottle loginThrottle) AccountSelfService
+        +householdEquipmentRepository() HouseholdEquipmentRepository
+        +householdEquipmentService(HouseholdEquipmentRepository householdEquipmentRepository) HouseholdEquipmentService
         +invitationRepository() InvitationRepository
         +invitationService(InvitationRepository invitationRepository, AccountRepository accountRepository, AccountService accountService, LoginThrottle loginThrottle) InvitationService
         +storeCatalogService(StoreRepository storeRepository) StoreCatalogService
@@ -4163,7 +4212,7 @@ classDiagram
     api_ServiceConfig ..> barcode_ProductBarcodeRepository
     api_ServiceConfig ..> barcode_ProductDataSource
     api_ServiceConfig ..> barcode_BarcodeService
-    %% 18 more neighbours not drawn
+    %% 20 more neighbours not drawn
 ```
 
 | Member | Visibility | What it does |
@@ -4187,6 +4236,8 @@ classDiagram
 | `LoginThrottle loginThrottle()` | public |  |
 | `LoginService loginService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
 | `AccountSelfService accountSelfService(AccountService accountService, LoginThrottle loginThrottle)` | public |  |
+| `HouseholdEquipmentRepository householdEquipmentRepository()` | public |  |
+| `HouseholdEquipmentService householdEquipmentService(HouseholdEquipmentRepository householdEquipmentRepository)` | public |  |
 | `InvitationRepository invitationRepository()` | public |  |
 | `InvitationService invitationService(InvitationRepository invitationRepository, AccountRepository accountRepository, AccountService accountService, LoginThrottle loginThrottle)` | public |  |
 | `StoreCatalogService storeCatalogService(StoreRepository storeRepository)` | public |  |
@@ -4922,18 +4973,20 @@ classDiagram
         -SuggestionService suggestionService
         -PantrySuggestionService pantrySuggestions
         -DietFilterService dietFilter
-        +SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)
-        +bySavings() List~RecipeSuggestionDto~
+        -HouseholdEquipmentService equipment
+        +SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter, HouseholdEquipmentService equipment)
+        +bySavings(Caller caller) List~RecipeSuggestionDto~
         +byExpiring(int days, Caller caller) List~RecipeSuggestionDto~
         +pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear, Caller caller) PantrySuggestionPageDto
     }
     class suggestions_SuggestionService["SuggestionService"]
     class suggestions_PantrySuggestionService["PantrySuggestionService"]
     class diet_DietFilterService["DietFilterService"]
-    class api_RecipeSuggestionDto["RecipeSuggestionDto"] {
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"]
+    class api_Caller["Caller"] {
         <<record>>
     }
-    class api_Caller["Caller"] {
+    class api_RecipeSuggestionDto["RecipeSuggestionDto"] {
         <<record>>
     }
     class api_PantrySuggestionPageDto["PantrySuggestionPageDto"] {
@@ -4942,8 +4995,9 @@ classDiagram
     api_SuggestionController --> suggestions_SuggestionService
     api_SuggestionController --> suggestions_PantrySuggestionService
     api_SuggestionController --> diet_DietFilterService
-    api_SuggestionController ..> api_RecipeSuggestionDto
+    api_SuggestionController --> auth_HouseholdEquipmentService
     api_SuggestionController ..> api_Caller
+    api_SuggestionController ..> api_RecipeSuggestionDto
     api_SuggestionController ..> api_PantrySuggestionPageDto
 ```
 
@@ -4952,11 +5006,12 @@ classDiagram
 | `suggestionService` | `SuggestionService` |
 | `pantrySuggestions` | `PantrySuggestionService` |
 | `dietFilter` | `DietFilterService` |
+| `equipment` | `HouseholdEquipmentService` |
 
 | Member | Visibility | What it does |
 |---|---|---|
-| `SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter)` | public |  |
-| `List<RecipeSuggestionDto> bySavings()` | public | Recipes ranked by how many ingredients are currently on sale. |
+| `SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions, DietFilterService dietFilter, HouseholdEquipmentService equipment)` | public |  |
+| `List<RecipeSuggestionDto> bySavings(Caller caller)` | public | Recipes ranked by how many ingredients are currently on sale. |
 | `List<RecipeSuggestionDto> byExpiring(int days, Caller caller)` | public | Recipes ranked by how many ingredients are inventory items expiring within days days (default 7). |
 | `PantrySuggestionPageDto pantry(String q, Integer maxTime, String store, Integer minMatches, Integer days, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear, Caller caller)` | public | GET /api/suggestions/pantry: recipes that fit what the household has and what is on sale, one page of suggestions plus the total. |
 
