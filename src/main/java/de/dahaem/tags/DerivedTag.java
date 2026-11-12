@@ -23,6 +23,6 @@ public record DerivedTag(String name, String category) {
     public static final String SCHNELL = "schnell";
     public static final String KALORIENARM = "kalorienarm";
     public static final String PROTEINREICH = "proteinreich";
-    /** A step of the recipe uses the Thermomix ("Mixtopf", "Varoma" or "Thermomix"). */
+    /** A step of the recipe uses the Thermomix ("Mixtopf", "Varoma" or "Thermomix"), or its name says so ("Thermomix", "TM "). */
     public static final String THERMOMIX = "Thermomix";
 }

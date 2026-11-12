@@ -40,6 +40,18 @@ class RecipeTaggerTest {
         assertEquals(names(TAGGER.derive(plain)).contains("vegan"), names(TAGGER.derive(thermomix)).contains("vegan"));
     }
 
+    @Test
+    void aRecipeWhoseNameSaysThermomixGetsTheTagEvenWithoutAThermomixStep() {
+        for (String name : new String[]{"Rosy's Thermomix This recipe uses a Thermomix", "TM Luci New Clone", "Suppe im thermomix"}) {
+            RecipeFacts named = new RecipeFacts(1, name, 10, 20, null, null, null, List.of(veg("karotten", "vegetable")));
+            assertTrue(names(TAGGER.derive(named)).contains("Thermomix"), name);
+        }
+        for (String name : new String[]{"REG Luci New Clone", "Tomaten-Mix", "Pasta TM", "Tm Suppe", "TMX Gericht", "Katsu Bowl"}) {
+            RecipeFacts named = new RecipeFacts(1, name, 10, 20, null, null, null, List.of(veg("karotten", "vegetable")));
+            assertFalse(names(TAGGER.derive(named)).contains("Thermomix"), name);
+        }
+    }
+
     private static Set<String> names(RecipeTagger.Derivation d) {
         return d.tags().stream().map(DerivedTag::name).collect(Collectors.toSet());
     }

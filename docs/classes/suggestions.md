@@ -361,7 +361,9 @@ classDiagram
         -TagService tags
         -DietFilterService diet
         -Clock clock
+        -int minIngredients
         +PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock)
+        +PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock, int minIngredients)
         +suggest(int householdId, String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page) Result
         ~slice(List~Integer~ ids, PageRequest page) List~Integer~$
     }
@@ -413,10 +415,12 @@ classDiagram
 | `tags` | `TagService` |
 | `diet` | `DietFilterService` |
 | `clock` | `Clock` |
+| `minIngredients` | `int` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock)` | public |  |
+| `PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags, DietFilterService diet, Clock clock, int minIngredients)` | public | the imported data has placeholder recipes with one ingredient and no real steps, which "fit" perfectly ("1 of 1 ingredients in stock") and would crowd out the real ones |
 | `Result suggest(int householdId, String q, Integer maxTime, String store, Integer minMatches, Integer expiryDays, String sort, DietRules rules, PageRequest page)` | public | exactly as in the recipe search); null or no rules = no filtering Bad values are an IllegalArgumentException (the API answers 400). |
 | `List<Integer> slice(List<Integer> ids, PageRequest page)` | package static | The ids of the requested page; empty when the page is past the end. |
 

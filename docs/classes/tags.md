@@ -1219,6 +1219,7 @@ classDiagram
         -TagSettings settings
         +RecipeTagger(TagSettings settings)
         +derive(RecipeFacts recipe) Derivation
+        ~nameSaysThermomix(String name) boolean$
         ~isHighProtein(RecipeFacts recipe) boolean
         ~meatWithMilk(RecipeFacts recipe) boolean$
     }
@@ -1246,6 +1247,7 @@ classDiagram
 |---|---|---|
 | `RecipeTagger(TagSettings settings)` | public |  |
 | `Derivation derive(RecipeFacts recipe)` | public |  |
+| `boolean nameSaysThermomix(String name)` | package static | True when the recipe's NAME says it is a Thermomix recipe: the word "Thermomix" anywhere (any case) or the prefix "TM " (HelloFresh's naming for the Thermomix version of a recipe). |
 | `boolean isHighProtein(RecipeFacts recipe)` | package | "Proteinreich": at least the configured share of the energy from protein (EU "high protein", Regulation (EC) No 1924/2006: 20 %, protein counted as 4 kcal per gram) AND at least the configured grams per serving. |
 | `boolean meatWithMilk(RecipeFacts recipe)` | package static | A land animal (certain or possible) in one item and a milk product in another. |
 

@@ -4172,7 +4172,7 @@ classDiagram
         +accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder) AccountService
         +suggestionRepository() SuggestionRepository
         +suggestionService(SuggestionRepository suggestionRepository) SuggestionService
-        +pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone) PantrySuggestionService
+        +pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone, int minIngredients) PantrySuggestionService
         +dietFilterRepository() DietFilterRepository
         +dietPresets() DietPresets
         +dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds) DietFilterService
@@ -4248,7 +4248,7 @@ classDiagram
 | `AccountService accountService(AccountRepository accountRepository, PasswordEncoder passwordEncoder)` | public |  |
 | `SuggestionRepository suggestionRepository()` | public |  |
 | `SuggestionService suggestionService(SuggestionRepository suggestionRepository)` | public |  |
-| `PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone)` | public |  |
+| `PantrySuggestionService pantrySuggestionService(SuggestionRepository suggestionRepository, RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService, String zone, int minIngredients)` | public |  |
 | `DietFilterRepository dietFilterRepository()` | public |  |
 | `DietPresets dietPresets()` | public | Presets come from config/diet_presets.json (relative to the working directory, /app in the container). |
 | `DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds)` | public |  |
