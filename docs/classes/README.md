@@ -114,6 +114,7 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`BrandRef`](stores.md#brandref) | stores | record | A brand: its id and name. |
 | [`Caller`](api.md#caller) | api | record | Who is asking: the logged-in user the PHP front end names in X-Acting-User, and the household that user belongs to. |
 | [`CallerArgumentResolver`](api.md#callerargumentresolver) | api | class | Fills a controller parameter of type Caller: the acting user from X-Acting-User (believed only with the internal token, see ActingUser) and that user's household. |
+| [`CannotRemoveSelfException`](api.md#cannotremoveselfexception) | api | class | An admin tried to remove themselves from their household. |
 | [`CatalogChange`](stores.md#catalogchange) | stores | record | One difference found by the range comparator between the last pull and this one. |
 | [`CatalogChange.Type`](stores.md#catalogchangetype) | stores | enum |  |
 | [`CatalogItem`](stores.md#catalogitem) | stores | record | One inventory_item catalog row, with its normalized names cached for matching. |
@@ -347,7 +348,6 @@ Arrows point from the importing package to the imported one; the number is how m
 | [`SecurityConfig`](api.md#securityconfig) | api | class | Who may call the API: only the PHP front end, which proves it with the shared secret in the X-Internal-Token header on EVERY request (see InternalTokenFilter). |
 | [`SelectStoreItemRequest`](api.md#selectstoreitemrequest) | api | record | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](api.md#serviceconfig) | api | class | Wires the existing plain-Java repositories and services as Spring beans. |
-| [`SetHouseholdPeopleRequest`](api.md#sethouseholdpeoplerequest) | api | record | Body of PUT /api/households/{id}/people. |
 | [`ShoppingList`](shopping.md#shoppinglist) | shopping | record | A shopping list built from a set of recipes: one line per distinct (item, unit) need. |
 | [`ShoppingListController`](api.md#shoppinglistcontroller) | api | class |  |
 | [`ShoppingListDto`](api.md#shoppinglistdto) | api | record | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |

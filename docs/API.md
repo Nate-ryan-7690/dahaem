@@ -57,8 +57,10 @@ Every error has the same shape:
 | POST | [`/api/household/invitations`](#post-apihouseholdinvitations) | Makes an invitation into the caller's household (admins only; 403 NOT_ADMIN otherwise). |
 | DELETE | [`/api/household/invitations/{id}`](#delete-apihouseholdinvitationsid) | Revokes an invitation that can still be used (admins only). |
 | GET | [`/api/household/members`](#get-apihouseholdmembers) | The members of the caller's household, the oldest first: id, display name and role (ADMIN or MEMBER). |
+| DELETE | [`/api/household/members/{userId}`](#delete-apihouseholdmembersuserid) | Takes a member out of the caller's household (admins only; 403 NOT_ADMIN otherwise). |
 | GET | [`/api/households/{id}`](#get-apihouseholdsid) |  |
-| PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household. |
+| PUT | [`/api/households/{id}/name`](#put-apihouseholdsidname) | Renames the caller's household: {"name": "Familie M"} (1 to 100 characters). |
+| PUT | [`/api/households/{id}/people`](#put-apihouseholdsidpeople) | Sets the head count and returns the household: {"people": 4}. |
 | POST | [`/api/intake`](#post-apiintake) | Puts the lines away. |
 | GET | [`/api/inventory`](#get-apiinventory) | The batches (purchases) of an item in the order they are used, earliest expiry first: store, brand, purchase date, expiry date, packs and pack size bought, and what is left in the item's own unit (remaining, unit). |
 | GET | [`/api/inventory/expiring`](#get-apiinventoryexpiring) | Items expiring within the next days days (default 7). |
@@ -565,6 +567,22 @@ the caller's row.
 ]
 ```
 
+#### DELETE /api/household/members/{userId}
+
+Takes a member out of the caller's household (admins only; 403 NOT_ADMIN otherwise). The account is NOT deleted: it
+stays, belongs to no household afterwards and can no longer reach any household data (403 NO_HOUSEHOLD). 204; 404 if
+that user is not a member of the caller's household; 409 CANNOT_REMOVE_SELF for the caller's own id (so a household
+never loses its last admin this way).
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `userId` | `int` |
+
+**Answer** 204 `void`
+
+
 ### HouseholdController
 
 The household's head count, so the app can scale portions to the people it feeds. The household is named in the URL
@@ -590,9 +608,10 @@ and must be the acting user's own (anything else is a 404); any member of it may
 }
 ```
 
-#### PUT /api/households/{id}/people
+#### PUT /api/households/{id}/name
 
-Sets the head count and returns the household. 400 when people is missing or below 1, 404 for an unknown household.
+Renames the caller's household: {"name": "Familie M"} (1 to 100 characters). Admins only (403 NOT_ADMIN);
+404 for any household but the caller's own; 400 for an empty or too long name.
 
 **Path parameters**
 
@@ -600,12 +619,39 @@ Sets the head count and returns the household. 400 when people is missing or bel
 |---|---|
 | `id` | `int` |
 
-**Request body** `SetHouseholdPeopleRequest`
+**Request body** `JsonNode`
+
+```json
+"…"
+```
+
+**Answer** 200 `HouseholdDto`
 
 ```json
 {
-  "people": 0
+  "id": 0,
+  "name": "…",
+  "people": 0,
+  "createdDate": "2026-10-14"
 }
+```
+
+#### PUT /api/households/{id}/people
+
+Sets the head count and returns the household: {"people": 4}. {"people": null} takes the number away
+again (the household is then "not set" and meals follow the recipe or the default). 400 when people is missing,
+not a whole number or below 1; 404 for any household but the caller's own.
+
+**Path parameters**
+
+| Name | Type |
+|---|---|
+| `id` | `int` |
+
+**Request body** `JsonNode`
+
+```json
+"…"
 ```
 
 **Answer** 200 `HouseholdDto`
@@ -1464,7 +1510,8 @@ A list parameter is repeated (`?diet=halal&diet=vegan`) or comma separated (`exc
         "reason": "…"
       }
     ]
-  }
+  },
+  "householdPreferredServings": 0
 }
 ```
 
@@ -2809,7 +2856,8 @@ imageUrl, thumbnailUrl, imageSource, cuisine, ratingAvg,
 ratingCount, publishedDate) are as in RecipeSummaryDto; null when missing. tags are the recipe's tags, sorted by group then name:
 source is "manual" (added by a person) or "derived" (worked out from DAHÄM's data).
 diet is present only when diet rules were passed (see DietDto): the status, the hints and the
-recipe's unmatched ingredient lines.
+recipe's unmatched ingredient lines. householdPreferredServings is the caller's household's permanent
+"always for X people" number for this recipe (null when it has none); other households' numbers are never shown.
 
 | Property | Type |
 |---|---|
@@ -2835,6 +2883,7 @@ recipe's unmatched ingredient lines.
 | `publishedDate` | `LocalDate` |
 | `tags` | `List<Tag>` |
 | `diet` | `DietDto` |
+| `householdPreferredServings` | `Integer` |
 
 ```json
 { … }
@@ -2989,18 +3038,6 @@ A null (or omitted) storeItemId clears the line's selection.
 | Property | Type |
 |---|---|
 | `storeItemId` | `Integer` |
-
-```json
-{ … }
-```
-
-### SetHouseholdPeopleRequest
-
-Body of PUT /api/households/{id}/people. people is boxed so a missing field is a 400, not a 0.
-
-| Property | Type |
-|---|---|
-| `people` | `Integer` |
 
 ```json
 { … }

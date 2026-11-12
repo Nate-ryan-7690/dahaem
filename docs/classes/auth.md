@@ -144,8 +144,10 @@ classDiagram
         +findAllHouseholds() java.util.List~Household~
         +findFirstHousehold() Optional~Household~
         +findHousehold(int householdId) Optional~Household~
-        +updateHouseholdPeople(int householdId, int people) boolean
+        +updateHouseholdPeople(int householdId, Integer people) boolean
         +findMembershipForUser(int userId) Optional~HouseholdMembership~
+        +updateHouseholdName(int householdId, String name) boolean
+        +deleteMember(int householdId, int userId) boolean
         +findMembers(int householdId) java.util.List~Member~
     }
     class auth_AccountRepository_Member["AccountRepository.Member"] {
@@ -187,8 +189,10 @@ classDiagram
 | `java.util.List<Household> findAllHouseholds()` | public | Every household, oldest first. |
 | `Optional<Household> findFirstHousehold()` | public | The oldest household, i.e. |
 | `Optional<Household> findHousehold(int householdId)` | public | The household with this id, or empty when there is none. |
-| `boolean updateHouseholdPeople(int householdId, int people)` | public | Sets the household's head count. |
+| `boolean updateHouseholdPeople(int householdId, Integer people)` | public | Sets the household's head count (null = not set). |
 | `Optional<HouseholdMembership> findMembershipForUser(int userId)` | public | The household a user belongs to, with their role in it. |
+| `boolean updateHouseholdName(int householdId, String name)` | public | Renames a household. |
+| `boolean deleteMember(int householdId, int userId)` | public | Takes a user out of a household (the account stays). |
 | `java.util.List<Member> findMembers(int householdId)` | public | The members of a household, the oldest membership first. |
 
 **Referenced by:** `AccountService`, `InvitationService`, `ServiceConfig`
@@ -317,7 +321,10 @@ classDiagram
         +allHouseholds() java.util.List~Household~
         +members(int householdId) java.util.List~AccountRepository.Member~
         +findHousehold(int householdId) Optional~Household~
-        +setHouseholdPeople(int householdId, int people) Household
+        +setHouseholdPeople(int householdId, Integer people) Household
+        +int MAX_HOUSEHOLD_NAME$
+        +renameHousehold(int householdId, String name) Household
+        +removeMember(int householdId, int userId) boolean
     }
     class auth_AccountService_NewUser["AccountService.NewUser"] {
         <<record>>
@@ -384,6 +391,7 @@ classDiagram
 | `repository` | `AccountRepository` |
 | `passwordEncoder` | `PasswordEncoder` |
 | `dummyHash` | `String` |
+| `MAX_HOUSEHOLD_NAME` | `int` |
 
 | Member | Visibility | What it does |
 |---|---|---|
@@ -403,7 +411,9 @@ classDiagram
 | `java.util.List<Household> allHouseholds()` | public | Every household, oldest first. |
 | `java.util.List<AccountRepository.Member> members(int householdId)` | public | The members of a household, the oldest membership first. |
 | `Optional<Household> findHousehold(int householdId)` | public |  |
-| `Household setHouseholdPeople(int householdId, int people)` | public | Sets how many people the household feeds (household_people). |
+| `Household setHouseholdPeople(int householdId, Integer people)` | public | Sets how many people the household feeds (household_people); null takes the number away again ("not set"). |
+| `Household renameHousehold(int householdId, String name)` | public | Renames a household. |
+| `boolean removeMember(int householdId, int userId)` | public | Takes a user out of the household; the account itself stays (it just belongs to no household afterwards). |
 
 **Referenced by:** `AccountController`, `AccountSelfService`, `CallerArgumentResolver`, `HouseholdController`, `HouseholdMemberController`, `InvitationService`, `LoginService`, `MealPlanController`, `MealServingsScheduleConfig`, `PlannedMealController`, `ScheduledMealServings`, `ServiceConfig`
 

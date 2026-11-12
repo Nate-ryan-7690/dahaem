@@ -48,6 +48,7 @@ classDiagram
     class api_CallerArgumentResolver["CallerArgumentResolver"] {
         <<spring>>
     }
+    class api_CannotRemoveSelfException["CannotRemoveSelfException"]
     class api_ChangeEmailRequest["ChangeEmailRequest"] {
         <<record>>
     }
@@ -233,9 +234,6 @@ classDiagram
     class api_ServiceConfig["ServiceConfig"] {
         <<spring>>
     }
-    class api_SetHouseholdPeopleRequest["SetHouseholdPeopleRequest"] {
-        <<record>>
-    }
     class api_ShoppingListController["ShoppingListController"] {
         <<controller>>
     }
@@ -320,6 +318,7 @@ classDiagram
     api_ApiExceptionHandler ..> api_UnauthorizedException
     api_ApiExceptionHandler ..> api_NoHouseholdException
     api_ApiExceptionHandler ..> api_NotAdminException
+    api_ApiExceptionHandler ..> api_CannotRemoveSelfException
     api_AuditFilter --> api_InternalTokenFilter
     api_AuthController --> api_InternalTokenFilter
     api_AuthController ..> api_CurrentUserDto
@@ -335,7 +334,6 @@ classDiagram
     api_DietDto_SoftHits --> api_DietDto_Hint
     api_HouseholdController ..> api_Caller
     api_HouseholdController ..> api_HouseholdDto
-    api_HouseholdController ..> api_SetHouseholdPeopleRequest
     api_HouseholdMemberController *-- api_HouseholdMemberController_MemberDto
     api_HouseholdMemberController ..> api_Caller
     api_IntakeController *-- api_IntakeController_IntakeRequest
@@ -383,6 +381,7 @@ classDiagram
     api_RecipeCardDto --> api_DietDto
     api_RecipeController ..> api_RecipeSummaryDto
     api_RecipeController ..> api_RecipePageDto
+    api_RecipeController ..> api_Caller
     api_RecipeController ..> api_RecipeDetailDto
     api_RecipeController ..> api_TagDto
     api_RecipeController ..> api_AddTagRequest
@@ -440,6 +439,7 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`BrandPageDto`](#brandpagedto) | record |  | One page of GET /api/brands. |
 | [`Caller`](#caller) | record |  | Who is asking: the logged-in user the PHP front end names in X-Acting-User, and the household that user belongs to. |
 | [`CallerArgumentResolver`](#callerargumentresolver) | class | Spring component | Fills a controller parameter of type Caller: the acting user from X-Acting-User (believed only with the internal token, see ActingUser) and that user's household. |
+| [`CannotRemoveSelfException`](#cannotremoveselfexception) | class |  | An admin tried to remove themselves from their household. |
 | [`ChangeEmailRequest`](#changeemailrequest) | record |  | Body of PUT /api/account/email: the user's password and the new address. |
 | [`ChangePasswordRequest`](#changepasswordrequest) | record |  | Body of PUT /api/account/password. |
 | [`CreateMealPlanRequest`](#createmealplanrequest) | record |  | Body of POST /api/meal-plans, e.g. |
@@ -505,7 +505,6 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`SecurityConfig`](#securityconfig) | class | configuration | Who may call the API: only the PHP front end, which proves it with the shared secret in the X-Internal-Token header on EVERY request (see InternalTokenFilter). |
 | [`SelectStoreItemRequest`](#selectstoreitemrequest) | record |  | Body of PUT /api/shopping-lists/{listId}/items/{itemId}/store-item, e.g. |
 | [`ServiceConfig`](#serviceconfig) | class | configuration | Wires the existing plain-Java repositories and services as Spring beans. |
-| [`SetHouseholdPeopleRequest`](#sethouseholdpeoplerequest) | record |  | Body of PUT /api/households/{id}/people. |
 | [`ShoppingListController`](#shoppinglistcontroller) | class | REST controller |  |
 | [`ShoppingListDto`](#shoppinglistdto) | record |  | A shopping list built from recipes: one line per (item, unit), with every current store's option for it (cheapest till price first, but not pre-picked) and the store item the user has selected, if any. |
 | [`ShoppingListDto.Line`](#shoppinglistdtoline) | record |  |  |
@@ -725,6 +724,7 @@ classDiagram
         +noHousehold(NoHouseholdException e) ResponseEntity~ErrorResponse~
         +notAdmin(NotAdminException e) ResponseEntity~ErrorResponse~
         +invalidInvitation(InvalidInvitationException e) ResponseEntity~ErrorResponse~
+        +cannotRemoveSelf(CannotRemoveSelfException e) ResponseEntity~ErrorResponse~
         +invitationLimit(InvitationLimitException e) ResponseEntity~ErrorResponse~
         +emailTaken(EmailTakenException e) ResponseEntity~ErrorResponse~
         +invalidCredentials(InvalidCredentialsException e) ResponseEntity~ErrorResponse~
@@ -751,13 +751,13 @@ classDiagram
     class api_NoHouseholdException["NoHouseholdException"]
     class api_NotAdminException["NotAdminException"]
     class auth_InvalidInvitationException["InvalidInvitationException"]
+    class api_CannotRemoveSelfException["CannotRemoveSelfException"]
     class auth_InvitationLimitException["InvitationLimitException"]
     class auth_EmailTakenException["EmailTakenException"]
     class auth_InvalidCredentialsException["InvalidCredentialsException"]
     class auth_TooManyAttemptsException["TooManyAttemptsException"]
     class barcode_IntakeConflictException["IntakeConflictException"]
     class stores_UnknownStoreException["UnknownStoreException"]
-    class stores_UnknownBrandException["UnknownBrandException"]
     api_ApiExceptionHandler ..> api_ErrorResponse
     api_ApiExceptionHandler ..> api_NotFoundException
     api_ApiExceptionHandler ..> mealplanner_PastDayException
@@ -767,14 +767,14 @@ classDiagram
     api_ApiExceptionHandler ..> api_NoHouseholdException
     api_ApiExceptionHandler ..> api_NotAdminException
     api_ApiExceptionHandler ..> auth_InvalidInvitationException
+    api_ApiExceptionHandler ..> api_CannotRemoveSelfException
     api_ApiExceptionHandler ..> auth_InvitationLimitException
     api_ApiExceptionHandler ..> auth_EmailTakenException
     api_ApiExceptionHandler ..> auth_InvalidCredentialsException
     api_ApiExceptionHandler ..> auth_TooManyAttemptsException
     api_ApiExceptionHandler ..> barcode_IntakeConflictException
     api_ApiExceptionHandler ..> stores_UnknownStoreException
-    api_ApiExceptionHandler ..> stores_UnknownBrandException
-    %% 2 more neighbours not drawn
+    %% 3 more neighbours not drawn
 ```
 
 | Field | Type |
@@ -791,6 +791,7 @@ classDiagram
 | `ResponseEntity<ErrorResponse> noHousehold(NoHouseholdException e)` | public | The acting user belongs to no household. |
 | `ResponseEntity<ErrorResponse> notAdmin(NotAdminException e)` | public | The acting user is not an admin of their household. |
 | `ResponseEntity<ErrorResponse> invalidInvitation(InvalidInvitationException e)` | public | An invitation code that is wrong, used, revoked or expired (one answer for all of them). |
+| `ResponseEntity<ErrorResponse> cannotRemoveSelf(CannotRemoveSelfException e)` | public | An admin tried to remove themselves from the household. |
 | `ResponseEntity<ErrorResponse> invitationLimit(InvitationLimitException e)` | public | The household has too many open invitations: a conflict with its own code, INVITATION_LIMIT. |
 | `ResponseEntity<ErrorResponse> emailTaken(EmailTakenException e)` | public | The email address belongs to another account. |
 | `ResponseEntity<ErrorResponse> invalidCredentials(InvalidCredentialsException e)` | public | A wrong email or password (the same answer for both). |
@@ -1085,6 +1086,7 @@ classDiagram
         +int userId
         +int householdId
         +HouseholdRole role
+        +requireAdmin() void
     }
     class auth_HouseholdRole["HouseholdRole"] {
         <<enumeration>>
@@ -1113,6 +1115,9 @@ classDiagram
     class api_PurchaseController["PurchaseController"] {
         <<controller>>
     }
+    class api_RecipeController["RecipeController"] {
+        <<controller>>
+    }
     class api_ShoppingListItemController["ShoppingListItemController"] {
         <<controller>>
     }
@@ -1128,6 +1133,7 @@ classDiagram
     api_MealPlanController ..> api_Caller
     api_PlannedMealController ..> api_Caller
     api_PurchaseController ..> api_Caller
+    api_RecipeController ..> api_Caller
     api_ShoppingListItemController ..> api_Caller
     api_SuggestionController ..> api_Caller
 ```
@@ -1138,7 +1144,11 @@ classDiagram
 | `householdId` | `int` |
 | `role` | `HouseholdRole` |
 
-**Referenced by:** `HouseholdController`, `HouseholdMemberController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `ShoppingListItemController`, `SuggestionController`
+| Member | Visibility | What it does |
+|---|---|---|
+| `void requireAdmin()` | public |  |
+
+**Referenced by:** `HouseholdController`, `HouseholdMemberController`, `IntakeController`, `InventoryController`, `InvitationController`, `MealPlanController`, `PlannedMealController`, `PurchaseController`, `RecipeController`, `ShoppingListItemController`, `SuggestionController`
 
 ## CallerArgumentResolver
 
@@ -1183,6 +1193,28 @@ classDiagram
 | `Object resolveArgument(MethodParameter parameter, ModelAndViewContainer mavContainer, NativeWebRequest webRequest, WebDataBinderFactory binderFactory)` | public |  |
 
 **Referenced by:** `WebConfig`
+
+## CannotRemoveSelfException
+
+*class · extends RuntimeException*
+
+An admin tried to remove themselves from their household. A conflict (409) with its own code, CANNOT_REMOVE_SELF.
+
+```mermaid
+classDiagram
+    direction LR
+    class api_CannotRemoveSelfException["CannotRemoveSelfException"] {
+        +CannotRemoveSelfException()
+    }
+    class api_ApiExceptionHandler["ApiExceptionHandler"]
+    api_ApiExceptionHandler ..> api_CannotRemoveSelfException
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `CannotRemoveSelfException()` | public |  |
+
+**Referenced by:** `ApiExceptionHandler`
 
 ## ChangeEmailRequest
 
@@ -1698,7 +1730,8 @@ classDiagram
         -AccountService accountService
         +HouseholdController(AccountService accountService)
         +get(int id, Caller caller) HouseholdDto
-        +setPeople(int id, SetHouseholdPeopleRequest request, Caller caller) HouseholdDto
+        +setPeople(int id, JsonNode body, Caller caller) HouseholdDto
+        +rename(int id, JsonNode body, Caller caller) HouseholdDto
     }
     class auth_AccountService["AccountService"]
     class api_Caller["Caller"] {
@@ -1707,13 +1740,9 @@ classDiagram
     class api_HouseholdDto["HouseholdDto"] {
         <<record>>
     }
-    class api_SetHouseholdPeopleRequest["SetHouseholdPeopleRequest"] {
-        <<record>>
-    }
     api_HouseholdController --> auth_AccountService
     api_HouseholdController ..> api_Caller
     api_HouseholdController ..> api_HouseholdDto
-    api_HouseholdController ..> api_SetHouseholdPeopleRequest
 ```
 
 | Field | Type |
@@ -1724,7 +1753,8 @@ classDiagram
 |---|---|---|
 | `HouseholdController(AccountService accountService)` | public |  |
 | `HouseholdDto get(int id, Caller caller)` | public |  |
-| `HouseholdDto setPeople(int id, SetHouseholdPeopleRequest request, Caller caller)` | public | Sets the head count and returns the household. |
+| `HouseholdDto setPeople(int id, JsonNode body, Caller caller)` | public | Sets the head count and returns the household: {"people": 4}. |
+| `HouseholdDto rename(int id, JsonNode body, Caller caller)` | public | Renames the caller's household: {"name": "Familie M"} (1 to 100 characters). |
 
 ## HouseholdDto
 
@@ -1778,6 +1808,7 @@ classDiagram
         -AccountService accounts
         +HouseholdMemberController(AccountService accounts)
         +members(Caller caller) List~MemberDto~
+        +remove(int userId, Caller caller) void
     }
     class api_HouseholdMemberController_MemberDto["HouseholdMemberController.MemberDto"] {
         <<record>>
@@ -1799,6 +1830,7 @@ classDiagram
 |---|---|---|
 | `HouseholdMemberController(AccountService accounts)` | public |  |
 | `List<MemberDto> members(Caller caller)` | public | The members of the caller's household, the oldest first: id, display name and role (ADMIN or MEMBER). |
+| `void remove(int userId, Caller caller)` | public | Takes a member out of the caller's household (admins only; 403 NOT_ADMIN otherwise). |
 
 ## HouseholdMemberController.MemberDto
 
@@ -3443,7 +3475,7 @@ classDiagram
         +RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService)
         +all(List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) List~RecipeSummaryDto~
         +search(String q, List~String~ ingredient, List~String~ tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) RecipePageDto
-        +byId(int id, Integer people, String basis, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear) RecipeDetailDto
+        +byId(int id, Integer people, String basis, List~String~ diet, List~String~ excludeTags, List~Integer~ excludeItems, List~String~ avoidTags, List~Integer~ avoidItems, boolean includeUnclear, Caller caller) RecipeDetailDto
         +tags(int id) List~TagDto~
         +addTag(int id, AddTagRequest request) TagDto
         ~findRecipe(RecipeService recipeService, int id) Recipe$
@@ -3456,6 +3488,9 @@ classDiagram
         <<record>>
     }
     class api_RecipePageDto["RecipePageDto"] {
+        <<record>>
+    }
+    class api_Caller["Caller"] {
         <<record>>
     }
     class api_RecipeDetailDto["RecipeDetailDto"] {
@@ -3474,6 +3509,7 @@ classDiagram
     api_RecipeController --> mealplanner_RecipeSearchService
     api_RecipeController ..> api_RecipeSummaryDto
     api_RecipeController ..> api_RecipePageDto
+    api_RecipeController ..> api_Caller
     api_RecipeController ..> api_RecipeDetailDto
     api_RecipeController ..> api_TagDto
     api_RecipeController ..> api_AddTagRequest
@@ -3492,7 +3528,7 @@ classDiagram
 | `RecipeController(RecipeService recipeService, TagService tagService, DietFilterService dietFilter, RecipeSearchService searchService)` | public |  |
 | `List<RecipeSummaryDto> all(List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | All recipes by name. |
 | `RecipePageDto search(String q, List<String> ingredient, List<String> tags, Integer minTime, Integer maxTime, Integer servings, String sort, Integer page, Integer pageSize, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | GET /api/recipes/search: search the recipes, one page of cards plus the total. |
-| `RecipeDetailDto byId(int id, Integer people, String basis, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear)` | public | The recipe with its ingredients and instructions. |
+| `RecipeDetailDto byId(int id, Integer people, String basis, List<String> diet, List<String> excludeTags, List<Integer> excludeItems, List<String> avoidTags, List<Integer> avoidItems, boolean includeUnclear, Caller caller)` | public | The recipe with its ingredients and instructions. |
 | `List<TagDto> tags(int id)` | public |  |
 | `TagDto addTag(int id, AddTagRequest request)` | public | Tags the recipe, creating the tag first if no tag with that name exists. |
 | `Recipe findRecipe(RecipeService recipeService, int id)` | package static |  |
@@ -3514,7 +3550,8 @@ imageUrl, thumbnailUrl, imageSource, cuisine, ratingAvg,
 ratingCount, publishedDate) are as in RecipeSummaryDto; null when missing. tags are the recipe's tags, sorted by group then name:
 source is "manual" (added by a person) or "derived" (worked out from DAHÄM's data).
 diet is present only when diet rules were passed (see DietDto): the status, the hints and the
-recipe's unmatched ingredient lines.
+recipe's unmatched ingredient lines. householdPreferredServings is the caller's household's permanent
+"always for X people" number for this recipe (null when it has none); other households' numbers are never shown.
 
 ```mermaid
 classDiagram
@@ -3543,10 +3580,11 @@ classDiagram
         +LocalDate publishedDate
         +List~Tag~ tags
         +DietDto diet
+        +Integer householdPreferredServings
         +String BASIS_SERVINGS$
         +String BASIS_MAX$
         ~from(Recipe recipe, List~RecipeIngredient~ ingredients, List~RecipeInstruction~ instructions, List~TagRepository.RecipeTag~ tags, Integer people, boolean useMax) RecipeDetailDto$
-        ~from(Recipe recipe, List~RecipeIngredient~ ingredients, List~RecipeInstruction~ instructions, List~TagRepository.RecipeTag~ tags, Integer people, boolean useMax, DietDto diet) RecipeDetailDto$
+        ~from(Recipe recipe, List~RecipeIngredient~ ingredients, List~RecipeInstruction~ instructions, List~TagRepository.RecipeTag~ tags, Integer people, boolean useMax, DietDto diet, Integer householdPreferredServings) RecipeDetailDto$
     }
     class api_RecipeDetailDto_Tag["RecipeDetailDto.Tag"] {
         <<record>>
@@ -3606,13 +3644,14 @@ classDiagram
 | `publishedDate` | `LocalDate` |
 | `tags` | `List<Tag>` |
 | `diet` | `DietDto` |
+| `householdPreferredServings` | `Integer` |
 | `BASIS_SERVINGS` | `String` |
 | `BASIS_MAX` | `String` |
 
 | Member | Visibility | What it does |
 |---|---|---|
 | `RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients, List<RecipeInstruction> instructions, List<TagRepository.RecipeTag> tags, Integer people, boolean useMax)` | package static | The recipe with ingredient quantities scaled to people (null for unscaled); people must be at least 1. |
-| `RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients, List<RecipeInstruction> instructions, List<TagRepository.RecipeTag> tags, Integer people, boolean useMax, DietDto diet)` | package static |  |
+| `RecipeDetailDto from(Recipe recipe, List<RecipeIngredient> ingredients, List<RecipeInstruction> instructions, List<TagRepository.RecipeTag> tags, Integer people, boolean useMax, DietDto diet, Integer householdPreferredServings)` | package static |  |
 
 **Referenced by:** `RecipeController`
 
@@ -4163,31 +4202,6 @@ classDiagram
 | `DietPresets dietPresets()` | public | Presets come from config/diet_presets.json (relative to the working directory, /app in the container). |
 | `DietFilterService dietFilterService(DietFilterRepository dietFilterRepository, DietPresets dietPresets, long cacheSeconds)` | public |  |
 | `RecipeSearchService recipeSearchService(RecipeRepository recipeRepository, TagService tagService, DietFilterService dietFilterService)` | public |  |
-
-## SetHouseholdPeopleRequest
-
-*record*
-
-Body of PUT /api/households/{id}/people. people is boxed so a missing field is a 400, not a 0.
-
-```mermaid
-classDiagram
-    direction LR
-    class api_SetHouseholdPeopleRequest["SetHouseholdPeopleRequest"] {
-        <<record>>
-        +Integer people
-    }
-    class api_HouseholdController["HouseholdController"] {
-        <<controller>>
-    }
-    api_HouseholdController ..> api_SetHouseholdPeopleRequest
-```
-
-| Component | Type |
-|---|---|
-| `people` | `Integer` |
-
-**Referenced by:** `HouseholdController`
 
 ## ShoppingListController
 
