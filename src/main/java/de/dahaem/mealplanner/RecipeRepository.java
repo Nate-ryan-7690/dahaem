@@ -320,6 +320,22 @@ public class RecipeRepository {
 
     }
 
+    /** This household's permanent preferred servings of a recipe, or empty if it has none. */
+    public Optional<Integer> findPreferredServings(int householdId, int recipeId) {
+        String sql = "SELECT household_recipe_servings_servings FROM household_recipe_servings "
+                + "WHERE household_recipe_servings_household_id = ? AND household_recipe_servings_recipe_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, householdId);
+            ps.setInt(2, recipeId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(rs.getInt(1)) : Optional.empty();
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not read the preferred servings of recipe " + recipeId, e);
+        }
+    }
+
     /**
      * Sets this household's permanent preferred servings of a recipe ("this meal is always for X people"); null clears
      * it. The other households' preferences are not touched, and neither is recipe_servings, the number the stored

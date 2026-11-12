@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -173,6 +174,43 @@ class AccountServiceTest {
         assertThrows(IllegalStateException.class,
                 () -> service.createUserInNewHousehold("ANNA@example.de", "Other Anna", PASSWORD, "Familie A", TODAY));
         assertEquals(1, service.allHouseholds().size(), "nothing was left behind by the refused attempts");
+    }
+
+    @Test
+    void theHeadCountCanBeTakenAwayAgain() {
+        int id = service.createUser("anna@example.de", "Anna", PASSWORD, "Zuhause", TODAY).membership().household().getId();
+        service.setHouseholdPeople(id, 4);
+
+        assertNull(service.setHouseholdPeople(id, null).getPeople());
+        assertNull(service.findHousehold(id).orElseThrow().getPeople());
+    }
+
+    @Test
+    void aHouseholdCanBeRenamedWithAValidName() {
+        int id = service.createUser("anna@example.de", "Anna", PASSWORD, "Zuhause", TODAY).membership().household().getId();
+
+        assertEquals("Familie M", service.renameHousehold(id, "  Familie M ").getName());
+        assertEquals("Familie M", service.findHousehold(id).orElseThrow().getName());
+        assertThrows(IllegalArgumentException.class, () -> service.renameHousehold(id, " "));
+        assertThrows(IllegalArgumentException.class, () -> service.renameHousehold(id, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.renameHousehold(id, "x".repeat(AccountService.MAX_HOUSEHOLD_NAME + 1)));
+        assertThrows(java.util.NoSuchElementException.class, () -> service.renameHousehold(id + 99, "Other"));
+    }
+
+    @Test
+    void aMemberCanBeTakenOutOfTheHouseholdButKeepsTheAccount() {
+        CreatedAccount anna = service.createUser("anna@example.de", "Anna", PASSWORD, "Zuhause", TODAY);
+        CreatedAccount ben = service.createUser("ben@example.de", "Ben", PASSWORD, null, TODAY);
+        int household = anna.membership().household().getId();
+
+        assertTrue(service.removeMember(household, ben.user().getId()));
+
+        assertTrue(service.membershipFor(ben.user().getId()).isEmpty(), "Ben belongs to no household any more");
+        assertTrue(service.findByEmail("ben@example.de").isPresent(), "the account stays");
+        assertEquals(1, service.members(household).size());
+        assertFalse(service.removeMember(household, ben.user().getId()), "he is no member any more");
+        assertFalse(service.removeMember(household + 99, anna.user().getId()), "a user of another household is no member here");
     }
 
     @Test

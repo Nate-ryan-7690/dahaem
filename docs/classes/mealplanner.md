@@ -1068,6 +1068,7 @@ classDiagram
         +findMatchingIds(RecipeQuery q) List~Integer~
         +findByIds(List~Integer~ ids) List~Recipe~
         +findById(int id) Optional~Recipe~
+        +findPreferredServings(int householdId, int recipeId) Optional~Integer~
         +setPreferredServings(int householdId, int recipeId, Integer servings) boolean
     }
     class mealplanner_RecipeSearchService["RecipeSearchService"]
@@ -1108,6 +1109,7 @@ classDiagram
 | `List<Integer> findMatchingIds(RecipeQuery q)` | public | The ids of every recipe matching the query, in the query's sort order (for paging after the diet filter). |
 | `List<Recipe> findByIds(List<Integer> ids)` | public | The recipes with these ids, in the order of ids; an id without a recipe is skipped. |
 | `Optional<Recipe> findById(int id)` | public |  |
+| `Optional<Integer> findPreferredServings(int householdId, int recipeId)` | public | This household's permanent preferred servings of a recipe, or empty if it has none. |
 | `boolean setPreferredServings(int householdId, int recipeId, Integer servings)` | public | Sets this household's permanent preferred servings of a recipe ("this meal is always for X people"); null clears it. |
 
 **Referenced by:** `PantrySuggestionService`, `RecipeSearchService`, `RecipeService`, `ServiceConfig`
@@ -1290,6 +1292,7 @@ classDiagram
         +findById(int id) java.util.Optional~Recipe~
         +findAllIngredients(int recipeId) List~RecipeIngredient~
         +findAllInstructions(int recipeId) List~RecipeInstruction~
+        +preferredServings(int householdId, int recipeId) java.util.Optional~Integer~
         +setPreferredServings(int householdId, int recipeId, Integer servings) boolean
     }
     class mealplanner_RecipeRepository["RecipeRepository"]
@@ -1334,6 +1337,7 @@ classDiagram
 | `java.util.Optional<Recipe> findById(int id)` | public | One recipe by id, or empty when there is none (a single-row query, not the whole table). |
 | `List<RecipeIngredient> findAllIngredients(int recipeId)` | public |  |
 | `List<RecipeInstruction> findAllInstructions(int recipeId)` | public |  |
+| `java.util.Optional<Integer> preferredServings(int householdId, int recipeId)` | public | The household's permanent preferred servings of a recipe, or empty if it has none. |
 | `boolean setPreferredServings(int householdId, int recipeId, Integer servings)` | public | Sets the household's permanent preferred servings of a recipe; null clears it. |
 
 **Referenced by:** `MealPlanController`, `PlannedMealController`, `RecipeController`, `ServiceConfig`, `ShoppingListController`

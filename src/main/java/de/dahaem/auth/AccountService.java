@@ -258,15 +258,15 @@ public class AccountService {
     }
 
     /**
-     * Sets how many people the household feeds (household_people). Any account of the household may do
-     * this; the caller (PHP) decides who is allowed to call it.
+     * Sets how many people the household feeds (household_people); null takes the number away again ("not set").
+     * Any account of the household may do this.
      *
      * @return the household as it is now
      * @throws IllegalArgumentException if people is below 1
      * @throws NoSuchElementException   if there is no such household
      */
-    public Household setHouseholdPeople(int householdId, int people) {
-        if (!Portions.isValidPeople(people)) {
+    public Household setHouseholdPeople(int householdId, Integer people) {
+        if (people != null && !Portions.isValidPeople(people)) {
             throw new IllegalArgumentException(Portions.INVALID_PEOPLE_MESSAGE);
         }
         if (!repository.updateHouseholdPeople(householdId, people)) {
@@ -274,6 +274,36 @@ public class AccountService {
         }
         return repository.findHousehold(householdId)
                 .orElseThrow(() -> new NoSuchElementException("No household with id " + householdId));
+    }
+
+    public static final int MAX_HOUSEHOLD_NAME = 100;
+
+    /**
+     * Renames a household.
+     *
+     * @return the household as it is now
+     * @throws IllegalArgumentException if the name is blank or longer than {@value #MAX_HOUSEHOLD_NAME} characters
+     * @throws NoSuchElementException   if there is no such household
+     */
+    public Household renameHousehold(int householdId, String name) {
+        String clean = name == null ? "" : name.trim();
+        if (clean.isEmpty() || clean.length() > MAX_HOUSEHOLD_NAME) {
+            throw new IllegalArgumentException("'name' must be 1 to " + MAX_HOUSEHOLD_NAME + " characters");
+        }
+        if (!repository.updateHouseholdName(householdId, clean)) {
+            throw new NoSuchElementException("No household with id " + householdId);
+        }
+        return repository.findHousehold(householdId)
+                .orElseThrow(() -> new NoSuchElementException("No household with id " + householdId));
+    }
+
+    /**
+     * Takes a user out of the household; the account itself stays (it just belongs to no household afterwards).
+     *
+     * @return false if the user is not a member of this household
+     */
+    public boolean removeMember(int householdId, int userId) {
+        return repository.deleteMember(householdId, userId);
     }
 
     private static void validatePassword(String rawPassword) {

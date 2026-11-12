@@ -1,13 +1,16 @@
 package de.dahaem.api;
 
 import de.dahaem.tags.TagFixtures;
+import de.dahaem.testsupport.ActingUserTestConfig;
 import de.dahaem.testsupport.TestDatabase;
+import de.dahaem.testsupport.TestHousehold;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -27,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(ActingUserTestConfig.class)
 @WithMockUser
 class RecipeSearchApiTest {
 
@@ -42,6 +46,7 @@ class RecipeSearchApiTest {
     @BeforeAll
     static void createDatabase() {
         TestDatabase.reset();
+        TestHousehold.createAndActAs("Zuhause", null);
         carrot = TagFixtures.item("karotten", "vegetable", null);
         pork = TagFixtures.item("schweinefilet", "meat", "fresh meat");
         TagFixtures.animal(pork, "Schwein");

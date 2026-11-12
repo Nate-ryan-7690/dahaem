@@ -8,4 +8,11 @@ import de.dahaem.auth.HouseholdRole;
  * from the request itself.
  */
 public record Caller(int userId, int householdId, HouseholdRole role) {
+
+    /** @throws NotAdminException (403 NOT_ADMIN) unless the caller is an admin of their household */
+    public void requireAdmin() {
+        if (role != HouseholdRole.ADMIN) {
+            throw new NotAdminException();
+        }
+    }
 }

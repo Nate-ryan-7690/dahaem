@@ -176,12 +176,12 @@ public class AccountRepository {
         }
     }
 
-    /** Sets the household's head count. Returns false when no household has this id. */
-    public boolean updateHouseholdPeople(int householdId, int people) {
+    /** Sets the household's head count (null = not set). Returns false when no household has this id. */
+    public boolean updateHouseholdPeople(int householdId, Integer people) {
         String sql = "UPDATE household SET household_people = ? WHERE household_id = ?";
         try (Connection con = Database.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, people);
+            ps.setObject(1, people);
             ps.setInt(2, householdId);
             // Count matched rows, not changed rows: setting the same number again must not look like "not found".
             return ps.executeUpdate() > 0 || findHousehold(householdId).isPresent();
@@ -216,6 +216,32 @@ public class AccountRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException("Could not load household for user " + userId, e);
+        }
+    }
+
+    /** Renames a household. Returns false when no household has this id. */
+    public boolean updateHouseholdName(int householdId, String name) {
+        String sql = "UPDATE household SET household_name = ? WHERE household_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ps.setInt(2, householdId);
+            return ps.executeUpdate() > 0 || findHousehold(householdId).isPresent();
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not rename household " + householdId, e);
+        }
+    }
+
+    /** Takes a user out of a household (the account stays). Returns false when the user is not a member of it. */
+    public boolean deleteMember(int householdId, int userId) {
+        String sql = "DELETE FROM household_member WHERE household_id = ? AND user_id = ?";
+        try (Connection con = Database.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, householdId);
+            ps.setInt(2, userId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new RuntimeException("Could not remove user " + userId + " from household " + householdId, e);
         }
     }
 

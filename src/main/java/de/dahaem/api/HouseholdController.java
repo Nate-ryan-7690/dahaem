@@ -1,5 +1,6 @@
 package de.dahaem.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import de.dahaem.auth.AccountService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,16 +33,46 @@ public class HouseholdController {
                 .orElseThrow(() -> new NotFoundException("No household with id " + id));
     }
 
-    /** Sets the head count and returns the household. 400 when people is missing or below 1, 404 for an unknown household. */
+    /**
+     * Sets the head count and returns the household: {@code {"people": 4}}. {@code {"people": null}} takes the number away
+     * again (the household is then "not set" and meals follow the recipe or the default). 400 when people is missing,
+     * not a whole number or below 1; 404 for any household but the caller's own.
+     */
     @PutMapping("/{id}/people")
-    public HouseholdDto setPeople(@PathVariable("id") int id, @RequestBody SetHouseholdPeopleRequest request,
-                                  Caller caller) {
+    public HouseholdDto setPeople(@PathVariable("id") int id, @RequestBody JsonNode body, Caller caller) {
         requireOwn(id, caller);
-        if (request.people() == null) {
-            throw new BadRequestException("'people' is required (a whole number, at least 1)");
+        if (!body.isObject() || !body.has("people")) {
+            throw new BadRequestException("'people' is required (a whole number, at least 1, or null to clear it)");
+        }
+        JsonNode node = body.get("people");
+        Integer people;
+        if (node.isNull()) {
+            people = null;
+        } else if (node.isInt()) {
+            people = node.intValue();
+        } else {
+            throw new BadRequestException("'people' must be a whole number or null");
         }
         try {
-            return HouseholdDto.from(accountService.setHouseholdPeople(id, request.people()));
+            return HouseholdDto.from(accountService.setHouseholdPeople(id, people));
+        } catch (NoSuchElementException e) {
+            throw new NotFoundException(e.getMessage());
+        }
+    }
+
+    /**
+     * Renames the caller's household: {@code {"name": "Familie M"}} (1 to 100 characters). Admins only (403 NOT_ADMIN);
+     * 404 for any household but the caller's own; 400 for an empty or too long name.
+     */
+    @PutMapping("/{id}/name")
+    public HouseholdDto rename(@PathVariable("id") int id, @RequestBody JsonNode body, Caller caller) {
+        requireOwn(id, caller);
+        caller.requireAdmin();
+        if (!body.isObject() || !body.hasNonNull("name") || !body.get("name").isTextual()) {
+            throw new BadRequestException("'name' is required (text, 1 to " + AccountService.MAX_HOUSEHOLD_NAME + " characters)");
+        }
+        try {
+            return HouseholdDto.from(accountService.renameHousehold(id, body.get("name").asText()));
         } catch (NoSuchElementException e) {
             throw new NotFoundException(e.getMessage());
         }

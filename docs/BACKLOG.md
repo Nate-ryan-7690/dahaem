@@ -684,6 +684,7 @@ migration and NOT NULL at the end; only Nate creates a second household (operato
   add the column when receipts get an API or a second household imports its own.
 - [x] API for the household/account pages: `GET /api/household/members` (name, role, `you`; the email only for admins and for your own row) and a
   dedicated `409 INVITATION_LIMIT` for the 20-open-invitations limit (was a generic 400).
+- [x] Household API extras (the frontend's wishes 8-10): `GET /api/recipes/{id}` carries `householdPreferredServings` (the caller's household's number or null; the call now needs `X-Acting-User`), `PUT /api/households/{id}/people` accepts `{"people": null}` to unset the head count, `PUT /api/households/{id}/name` renames (admin only), `DELETE /api/household/members/{userId}` takes a member out of the household (admin only, not yourself: 409 `CANNOT_REMOVE_SELF`; the account stays and has no household afterwards).
 - [x] PR 5: operator command for a second household: `UserAdminRunner create-household-user <email> <displayName> <householdName>` starts
   a NEW household with that user as its ADMIN (plain `create-user` still joins the oldest one). Everyone else joins it with an
   invitation. With this the household work is complete; the open items above (frozen columns, NOT NULL, receipts) stay Nate's call.
