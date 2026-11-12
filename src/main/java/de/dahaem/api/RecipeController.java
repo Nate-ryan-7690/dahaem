@@ -171,7 +171,8 @@ public class RecipeController {
                                 @RequestParam(name = "excludeItems", required = false) List<Integer> excludeItems,
                                 @RequestParam(name = "avoidTags", required = false) List<String> avoidTags,
                                 @RequestParam(name = "avoidItems", required = false) List<Integer> avoidItems,
-                                @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear) {
+                                @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear,
+                                Caller caller) {
         if (people != null && !Portions.isValidPeople(people)) {
             throw new BadRequestException(Portions.INVALID_PEOPLE_MESSAGE);
         }
@@ -186,7 +187,8 @@ public class RecipeController {
             dietDto = DietDto.from(judged.verdict(), judged.facts().unmatched());
         }
         return RecipeDetailDto.from(recipe, recipeService.findAllIngredients(id), recipeService.findAllInstructions(id),
-                tagService.recipeTagsForRecipe(id), people, RecipeDetailDto.BASIS_MAX.equals(basis), dietDto);
+                tagService.recipeTagsForRecipe(id), people, RecipeDetailDto.BASIS_MAX.equals(basis), dietDto,
+                recipeService.preferredServings(caller.householdId(), id).orElse(null));
     }
 
     @GetMapping("/{id}/tags")

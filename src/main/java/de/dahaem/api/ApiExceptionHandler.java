@@ -84,6 +84,12 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "INVALID_INVITATION", e.getMessage());
     }
 
+    /** An admin tried to remove themselves from the household. */
+    @ExceptionHandler(CannotRemoveSelfException.class)
+    public ResponseEntity<ErrorResponse> cannotRemoveSelf(CannotRemoveSelfException e) {
+        return error(HttpStatus.CONFLICT, "CANNOT_REMOVE_SELF", e.getMessage());
+    }
+
     /** The household has too many open invitations: a conflict with its own code, INVITATION_LIMIT. */
     @ExceptionHandler(InvitationLimitException.class)
     public ResponseEntity<ErrorResponse> invitationLimit(InvitationLimitException e) {

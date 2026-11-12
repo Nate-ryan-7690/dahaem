@@ -302,6 +302,61 @@ class HouseholdSeparationApiTest {
         inviteCode(userB, null);
     }
 
+    @Test
+    void theRecipeDetailShowsOnlyTheCallersHouseholdPreference() throws Exception {
+        mvc.perform(as(put("/api/recipes/{id}/preferred-servings", soup), userA).content("{\"servings\": 6}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(as(get("/api/recipes/{id}", soup), userA))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.householdPreferredServings").value(6));
+        mvc.perform(as(get("/api/recipes/{id}", soup), userB))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.householdPreferredServings").value(nullValue()));
+        mvc.perform(get("/api/recipes/{id}", soup).header("X-Internal-Token", TOKEN))
+                .andExpect(status().isBadRequest());   // the acting user is needed, like on every personal call
+    }
+
+    @Test
+    void theHeadCountCanBeUnsetAndOnlyAnAdminRenamesTheHousehold() throws Exception {
+        int member = TestHousehold.createUser(householdA, "member2@example.test", "MEMBER");
+
+        mvc.perform(as(put("/api/households/{id}/people", householdA), member).content("{\"people\": null}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.people").doesNotExist());   // any member may
+        mvc.perform(as(put("/api/households/{id}/name", householdA), member).content("{\"name\": \"Neu\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("NOT_ADMIN"));
+        mvc.perform(as(put("/api/households/{id}/name", householdA), userA).content("{\"name\": \"  Familie A \"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Familie A"));
+        mvc.perform(as(put("/api/households/{id}/name", householdA), userA).content("{\"name\": \" \"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(put("/api/households/{id}/name", householdA), userA).content("{}"))
+                .andExpect(status().isBadRequest());
+        // the other household's admin cannot rename household A: it is not found for them
+        mvc.perform(as(put("/api/households/{id}/name", householdA), userB).content("{\"name\": \"Hijack\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(as(get("/api/households/{id}", householdA), userA)).andExpect(jsonPath("$.name").value("Familie A"));
+    }
+
+    @Test
+    void anAdminTakesAMemberOutOfTheHouseholdButNotItselfAndNotSomeoneElsesMember() throws Exception {
+        int member = TestHousehold.createUser(householdA, "leaving@example.test", "MEMBER");
+        int other = TestHousehold.createUser(householdA, "other-member@example.test", "MEMBER");
+
+        mvc.perform(as(delete("/api/household/members/{id}", userA), member)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("NOT_ADMIN"));
+        mvc.perform(as(delete("/api/household/members/{id}", userA), userA)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANNOT_REMOVE_SELF"));
+        mvc.perform(as(delete("/api/household/members/{id}", member), userB)).andExpect(status().isNotFound());
+        mvc.perform(as(delete("/api/household/members/{id}", 99999), userA)).andExpect(status().isNotFound());
+
+        mvc.perform(as(delete("/api/household/members/{id}", member), userA)).andExpect(status().isNoContent());
+
+        mvc.perform(as(get("/api/household/members"), userA)).andExpect(jsonPath("$", hasSize(2)));
+        // the removed account still exists but reaches no household data any more
+        mvc.perform(as(get("/api/household/members"), member)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("NO_HOUSEHOLD"));
+        mvc.perform(as(delete("/api/household/members/{id}", member), userA)).andExpect(status().isNotFound());
+        mvc.perform(as(get("/api/household/members"), other)).andExpect(status().isOk());
+    }
+
     private String inviteCode(int user, String note) throws Exception {
         String body = mvc.perform(as(post("/api/household/invitations"), user)
                         .content(note == null ? "{}" : "{\"note\": \"" + note + "\"}"))

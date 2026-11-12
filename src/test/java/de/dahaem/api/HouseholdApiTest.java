@@ -98,11 +98,23 @@ class HouseholdApiTest {
     }
 
     @Test
+    void theHeadCountCanBeTakenAwayAgainWithNull() throws Exception {
+        int householdId = new AccountRepository().findFirstHousehold().orElseThrow().getId();
+        String path = "/api/households/" + householdId + "/people";
+
+        mvc.perform(put(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"people\": 3}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.people").value(3));
+        mvc.perform(put(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"people\": null}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.people").doesNotExist());
+        mvc.perform(get("/api/households/" + householdId)).andExpect(jsonPath("$.people").doesNotExist());
+    }
+
+    @Test
     void householdHeadCountRejectsBadInputAndUnknownHouseholds() throws Exception {
         int householdId = new AccountRepository().findFirstHousehold().orElseThrow().getId();
 
-        for (String body : new String[] {"{\"people\": 0}", "{\"people\": -2}", "{}", "{\"people\": null}",
-                "{\"people\": \"many\"}"}) {
+        for (String body : new String[] {"{\"people\": 0}", "{\"people\": -2}", "{}",
+                "{\"people\": \"many\"}", "{\"people\": 2.5}"}) {
             mvc.perform(put("/api/households/" + householdId + "/people").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body))

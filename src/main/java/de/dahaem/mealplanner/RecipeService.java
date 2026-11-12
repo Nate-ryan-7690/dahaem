@@ -26,6 +26,11 @@ public class RecipeService {
     public List<RecipeInstruction> findAllInstructions(int recipeId)
         {return repository.findAllInstructions(recipeId);}
 
+    /** The household's permanent preferred servings of a recipe, or empty if it has none. */
+    public java.util.Optional<Integer> preferredServings(int householdId, int recipeId) {
+        return repository.findPreferredServings(householdId, recipeId);
+    }
+
     /**
      * Sets the household's permanent preferred servings of a recipe; null clears it. Returns false when there is no
      * such recipe.
