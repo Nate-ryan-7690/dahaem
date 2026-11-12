@@ -45,14 +45,26 @@ public class PantrySuggestionService {
     private final TagService tags;
     private final DietFilterService diet;
     private final Clock clock;
+    private final int minIngredients;
 
     public PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags,
                                    DietFilterService diet, Clock clock) {
+        this(suggestions, recipes, tags, diet, clock, 1);
+    }
+
+    /**
+     * @param minIngredients a recipe needs at least this many ingredients (without the "to taste" ones) to be suggested:
+     *                       the imported data has placeholder recipes with one ingredient and no real steps, which "fit"
+     *                       perfectly ("1 of 1 ingredients in stock") and would crowd out the real ones
+     */
+    public PantrySuggestionService(SuggestionRepository suggestions, RecipeRepository recipes, TagService tags,
+                                   DietFilterService diet, Clock clock, int minIngredients) {
         this.suggestions = suggestions;
         this.recipes = recipes;
         this.tags = tags;
         this.diet = diet;
         this.clock = clock;
+        this.minIngredients = Math.max(1, minIngredients);
     }
 
     /**
@@ -107,8 +119,9 @@ public class PantrySuggestionService {
         LocalDate today = LocalDate.now(clock);
         LocalDate expiryLimit = today.plusDays(days);
 
-        List<PantryCoverage> fitting = PantryRanking.filter(
-                suggestions.coverageByRecipe(householdId, expiryLimit, today, storeName), min, storeName != null);
+        List<PantryCoverage> enough = suggestions.coverageByRecipe(householdId, expiryLimit, today, storeName).stream()
+                .filter(c -> c.needed() >= minIngredients).toList();
+        List<PantryCoverage> fitting = PantryRanking.filter(enough, min, storeName != null);
         List<Integer> orderedIds = orderedIds(fitting, order, query);
 
         // Diet rules are the household's, so they apply before anything is counted or cut: a recipe it does not eat

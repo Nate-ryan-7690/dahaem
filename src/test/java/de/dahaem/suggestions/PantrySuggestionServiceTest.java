@@ -151,6 +151,26 @@ class PantrySuggestionServiceTest {
     }
 
     @Test
+    void recipesWithTooFewIngredientsAreNotSuggestedWhenAMinimumIsSet() throws SQLException {
+        seedRecipe(1, "Platzhalter");     // one ingredient, all in stock: a perfect "fit" that is no real recipe
+        seedRecipe(2, "Echtes Rezept");   // three ingredients, all in stock
+        seedItem(10, "Salt", 5, null);
+        seedItem(11, "Rice", 5, null);
+        seedItem(12, "Carrot", 5, null);
+        seedIngredient(10, 1, false);
+        seedIngredient(10, 2, false);
+        seedIngredient(11, 2, false);
+        seedIngredient(12, 2, false);
+        PantrySuggestionService strict = new PantrySuggestionService(repository, new RecipeRepository(),
+                new TagService(new TagRepository()), dietFilter, Clock.systemDefaultZone(), 3);
+
+        assertEquals(List.of("Echtes Rezept"), strict.suggest(household, null, null, null, null, null, null, noRules,
+                PageRequest.of(1, 24)).items().stream().map(e -> e.recipe().getName()).sorted().toList());
+        assertEquals(2, service.suggest(household, null, null, null, null, null, null, noRules, PageRequest.of(1, 24)).total(),
+                "without a minimum both are suggested, as before");
+    }
+
+    @Test
     void recipesThatNeitherUseTheStockNorAreOnSaleDoNotShow() throws SQLException {
         seedRecipe(1, "Nothing");
         seedItem(10, "Pasta", 0, null);

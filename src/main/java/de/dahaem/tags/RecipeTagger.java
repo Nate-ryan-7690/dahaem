@@ -83,10 +83,19 @@ public class RecipeTagger {
         if (recipe.cuisine() != null && !recipe.cuisine().isBlank()) {
             tags.add(new DerivedTag(recipe.cuisine().trim(), DerivedTag.KUECHE));
         }
-        if (recipe.needsThermomix()) {
+        if (recipe.needsThermomix() || nameSaysThermomix(recipe.name())) {
             tags.add(new DerivedTag(DerivedTag.THERMOMIX, DerivedTag.AUSSTATTUNG));
         }
         return new Derivation(tags, dietKnown);
+    }
+
+    /**
+     * True when the recipe's NAME says it is a Thermomix recipe: the word "Thermomix" anywhere (any case) or the prefix "TM "
+     * (HelloFresh's naming for the Thermomix version of a recipe). Most Thermomix recipes are found by their steps already;
+     * this catches the ones whose steps do not say it.
+     */
+    static boolean nameSaysThermomix(String name) {
+        return name != null && (name.toLowerCase(java.util.Locale.ROOT).contains("thermomix") || name.startsWith("TM "));
     }
 
     /**

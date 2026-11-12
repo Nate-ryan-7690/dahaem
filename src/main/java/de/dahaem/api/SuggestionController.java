@@ -100,7 +100,8 @@ public class SuggestionController {
      * with {@code GET /api/recipes/search}.
      * <p>An ingredient counts as in stock when the household has any of it and it has not expired; the amount is not
      * compared with the amount the recipe needs yet. Stock past its date is shown as {@code EXPIRED} and counts as
-     * still to buy. This replaces the whole-list {@code /by-savings} for pages: that call is unchanged.
+     * still to buy. Recipes with fewer than 3 ingredients (placeholders in the imported data) are not suggested
+     * ({@code dahaem.pantry.min-ingredients}). This replaces the whole-list {@code /by-savings} for pages: that call is unchanged.
      */
     @GetMapping("/pantry")
     public PantrySuggestionPageDto pantry(@RequestParam(name = "q", required = false) String q,
