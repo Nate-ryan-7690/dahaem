@@ -141,7 +141,6 @@ classDiagram
         +findAll(int householdId) List~Purchase~
         +spendingTotal(int householdId) double
         +spendingBetween(int householdId, LocalDate from, LocalDate to) double
-        +findInventoryItemIdForStoreItem(Connection con, int storeItemId) Integer
         +findBatchesOfItem(int householdId, int inventoryItemId) List~BatchRow~
         +findStoreItemStock(Connection con, int storeItemId) StoreItemStock
         +applyPurchaseToInventory(Connection con, int householdId, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate) void
@@ -186,7 +185,6 @@ classDiagram
 | `List<Purchase> findAll(int householdId)` | public | The purchases of one household, newest first. |
 | `double spendingTotal(int householdId)` | public | Sum of price paid across every purchase of the household. |
 | `double spendingBetween(int householdId, LocalDate from, LocalDate to)` | public | Sum of price paid for the household's purchases dated between from and to, inclusive. |
-| `Integer findInventoryItemIdForStoreItem(Connection con, int storeItemId)` | public | The inventory_item this store_item is linked to (store_item.store_item_item_id), or null if the store_item is unknown. |
 | `List<BatchRow> findBatchesOfItem(int householdId, int inventoryItemId)` | public | Every purchase of an inventory item by this household, earliest expiry first (older purchase first on a tie). |
 | `StoreItemStock findStoreItemStock(Connection con, int storeItemId)` | public | The stock facts of a store item, or null if there is no such store item. |
 | `void applyPurchaseToInventory(Connection con, int householdId, int inventoryItemId, int quantityDelta, LocalDate purchaseExpirationDate)` | public | Adds quantityDelta to the household's stock of the item and pulls its earliest expiry date down to purchaseExpirationDate if that is earlier than what is already stored (or nothing is stored yet). |
