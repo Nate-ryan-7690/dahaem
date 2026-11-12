@@ -4,7 +4,7 @@
 
 Logins, households and memberships; the `UserAdminRunner` command-line tool.
 
-25 types in 18 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
+29 types in 21 source files (`src/main/java/de/dahaem/auth`). Back to the [class index](README.md).
 
 ## Overview
 
@@ -26,6 +26,14 @@ classDiagram
     }
     class auth_EmailTakenException["EmailTakenException"]
     class auth_Household["Household"]
+    class auth_HouseholdEquipment["HouseholdEquipment"] {
+        <<enumeration>>
+    }
+    class auth_HouseholdEquipmentRepository["HouseholdEquipmentRepository"]
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"]
+    class auth_HouseholdEquipmentService_Status["HouseholdEquipmentService.Status"] {
+        <<record>>
+    }
     class auth_HouseholdMembership["HouseholdMembership"] {
         <<record>>
     }
@@ -71,6 +79,8 @@ classDiagram
     auth_AccountService ..> auth_Household
     auth_CreatedAccount --> auth_AppUser
     auth_CreatedAccount --> auth_HouseholdMembership
+    auth_HouseholdEquipmentService *-- auth_HouseholdEquipmentService_Status
+    auth_HouseholdEquipmentService --> auth_HouseholdEquipmentRepository
     auth_HouseholdMembership --> auth_Household
     auth_HouseholdMembership --> auth_HouseholdRole
     auth_InvitationRepository *-- auth_InvitationRepository_Invite
@@ -102,6 +112,10 @@ Arrows: `-->` has a field or record component of that type, `..>` takes it in it
 | [`CreatedAccount`](#createdaccount) | record |  | Result of AccountService.createUser: the new user, the household they were added to, and whether that household was created for them (true for the very first user). |
 | [`EmailTakenException`](#emailtakenexception) | class |  | The email address already belongs to another account. |
 | [`Household`](#household) | class |  | Plain data holder for one row of the household table. |
+| [`HouseholdEquipment`](#householdequipment) | enum |  | The kitchen equipment a household can say it does not have. |
+| [`HouseholdEquipmentRepository`](#householdequipmentrepository) | class |  | All SQL for household_unavailable_equipment lives here: one row = the household does NOT have that equipment. |
+| [`HouseholdEquipmentService`](#householdequipmentservice) | class |  | Which kitchen equipment a household has. |
+| [`HouseholdEquipmentService.Status`](#householdequipmentservicestatus) | record |  | One piece of equipment as a household sees it. |
 | [`HouseholdMembership`](#householdmembership) | record |  | A household together with the role one user has in it (one household_member row, joined to its household). |
 | [`HouseholdRole`](#householdrole) | enum |  | What a user may do in their household. |
 | [`InvalidCredentialsException`](#invalidcredentialsexception) | class |  | The email or the password is wrong. |
@@ -622,6 +636,156 @@ classDiagram
 | `String toString()` | public |  |
 
 **Referenced by:** `AccountRepository`, `AccountService`, `HouseholdDto`, `HouseholdMembership`
+
+## HouseholdEquipment
+
+*enum*
+
+The kitchen equipment a household can say it does not have. A recipe that needs equipment carries a derived tag of the
+group "Ausstattung" (see DerivedTag); a household without it does not get those recipes in the lists, the search and
+the suggestions.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_HouseholdEquipment["HouseholdEquipment"] {
+        <<enumeration>>
+        THERMOMIX
+        -String code
+        -String displayName
+        -String recipeTag
+        ~HouseholdEquipment(String code, String displayName, String recipeTag)
+        +code() String
+        +displayName() String
+        +recipeTag() String
+        +byCode(String code) Optional~HouseholdEquipment~$
+    }
+```
+
+**Values:** `THERMOMIX`
+
+| Field | Type |
+|---|---|
+| `code` | `String` |
+| `displayName` | `String` |
+| `recipeTag` | `String` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `HouseholdEquipment(String code, String displayName, String recipeTag)` | package |  |
+| `String code()` | public | The short name used in the API and the database. |
+| `String displayName()` | public | The name shown to people. |
+| `String recipeTag()` | public | The name of the recipe tag that marks a recipe as needing this equipment. |
+| `Optional<HouseholdEquipment> byCode(String code)` | public static |  |
+
+## HouseholdEquipmentRepository
+
+*class*
+
+All SQL for household_unavailable_equipment lives here: one row = the household does NOT have that equipment.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_HouseholdEquipmentRepository["HouseholdEquipmentRepository"] {
+        +findMissing(int householdId) Set~String~
+        +setHas(int householdId, String code, boolean has) void
+    }
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"]
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    api_ServiceConfig ..> auth_HouseholdEquipmentRepository
+    auth_HouseholdEquipmentService --> auth_HouseholdEquipmentRepository
+```
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `Set<String> findMissing(int householdId)` | public | The equipment codes the household does not have. |
+| `void setHas(int householdId, String code, boolean has)` | public | Says whether the household has the equipment: no row = has it. |
+
+**Referenced by:** `HouseholdEquipmentService`, `ServiceConfig`
+
+## HouseholdEquipmentService
+
+*class*
+
+Which kitchen equipment a household has. Everything is assumed to be there until the household says it is not
+(HouseholdEquipmentRepository). No SQL here, no UI here.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"] {
+        -HouseholdEquipmentRepository repository
+        +HouseholdEquipmentService(HouseholdEquipmentRepository repository)
+        +list(int householdId) List~Status~
+        +set(int householdId, String code, boolean has) Status
+        +excludedRecipeTags(int householdId) List~String~
+    }
+    class auth_HouseholdEquipmentService_Status["HouseholdEquipmentService.Status"] {
+        <<record>>
+    }
+    class auth_HouseholdEquipmentRepository["HouseholdEquipmentRepository"]
+    class api_HouseholdEquipmentController["HouseholdEquipmentController"] {
+        <<controller>>
+    }
+    class api_RecipeController["RecipeController"] {
+        <<controller>>
+    }
+    class api_SuggestionController["SuggestionController"] {
+        <<controller>>
+    }
+    class api_ServiceConfig["ServiceConfig"] {
+        <<spring>>
+    }
+    auth_HouseholdEquipmentService *-- auth_HouseholdEquipmentService_Status
+    auth_HouseholdEquipmentService --> auth_HouseholdEquipmentRepository
+    api_HouseholdEquipmentController --> auth_HouseholdEquipmentService
+    api_RecipeController --> auth_HouseholdEquipmentService
+    api_ServiceConfig ..> auth_HouseholdEquipmentService
+    api_SuggestionController --> auth_HouseholdEquipmentService
+```
+
+| Field | Type |
+|---|---|
+| `repository` | `HouseholdEquipmentRepository` |
+
+| Member | Visibility | What it does |
+|---|---|---|
+| `HouseholdEquipmentService(HouseholdEquipmentRepository repository)` | public |  |
+| `List<Status> list(int householdId)` | public | Every known equipment with whether the household has it. |
+| `Status set(int householdId, String code, boolean has)` | public | Says whether the household has the equipment and returns its new state. |
+| `List<String> excludedRecipeTags(int householdId)` | public | The names of the recipe tags a household does NOT want to see: those of the equipment it does not have. |
+
+**Referenced by:** `HouseholdEquipmentController`, `RecipeController`, `ServiceConfig`, `SuggestionController`
+
+## HouseholdEquipmentService.Status
+
+*record*
+
+One piece of equipment as a household sees it.
+
+```mermaid
+classDiagram
+    direction LR
+    class auth_HouseholdEquipmentService_Status["HouseholdEquipmentService.Status"] {
+        <<record>>
+        +String code
+        +String name
+        +boolean has
+    }
+    class auth_HouseholdEquipmentService["HouseholdEquipmentService"]
+    auth_HouseholdEquipmentService *-- auth_HouseholdEquipmentService_Status
+```
+
+| Component | Type |
+|---|---|
+| `code` | `String` |
+| `name` | `String` |
+| `has` | `boolean` |
+
+**Referenced by:** `HouseholdEquipmentService`
 
 ## HouseholdMembership
 
