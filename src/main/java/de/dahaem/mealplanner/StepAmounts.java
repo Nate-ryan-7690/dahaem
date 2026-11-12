@@ -347,13 +347,39 @@ public final class StepAmounts {
     }
 
     private static Amount amount(String low, String high, String unit) {
-        BigDecimal lowValue = parseNumber(low);
-        BigDecimal highValue = high == null ? null : parseNumber(high);
+        BigDecimal lowValue = parseNumber(low, unit);
+        BigDecimal highValue = high == null ? null : parseNumber(high, unit);
         if (lowValue == null || (high != null && highValue == null)) {
             return null;
         }
         return new Amount(lowValue, highValue, unit);
     }
+
+    // A German thousands number: "1.200", "12.500", "1.200.000" (never "0.500" and never "1.20").
+    private static final Pattern THOUSANDS = Pattern.compile("[1-9]\\d{0,2}(?:\\.\\d{3})+");
+
+    /**
+     * Parses one number that stands before {@code unit}. Before g and ml a dot followed by exactly three digits is the
+     * German thousands separator ("1.200 g Wasser" is 1200 g, not 1.2 g); everywhere else a dot is a decimal point
+     * ("1.5 EL"). A kilogram or litre amount like "1.500 kg" stays a decimal (1.5 kg): HelloFresh writes those with a comma.
+     */
+    static BigDecimal parseNumber(String raw, String unit) {
+        String s = raw.replace(" ", "");
+        if (("g".equals(unit) || "ml".equals(unit)) && THOUSANDS.matcher(s).matches()) {
+            return new BigDecimal(s.replace(".", ""));
+        }
+        return parseNumber(raw);
+    }
+
+    /**
+     * The text of a step without the marks the import left behind: a backslash straight after a letter and before a space,
+     * punctuation or the end ("Salz\ und Pfeffer\", from "Salz\*") is the pantry mark "*" that lost its asterisk.
+     */
+    public static String cleanEscapes(String text) {
+        return text == null ? null : STRAY_BACKSLASH.matcher(text).replaceAll("*");
+    }
+
+    private static final Pattern STRAY_BACKSLASH = Pattern.compile("(?<=\\p{L})\\\\(?=[\\s,.;:!?)]|$)");
 
     /** Parses one number as HelloFresh writes it; null when it isn't a plain amount. */
     static BigDecimal parseNumber(String raw) {
@@ -440,12 +466,12 @@ public final class StepAmounts {
             if (PACK_SIZE_UNITS.contains(m.group(5)) && PACK_SIZE_BEFORE.matcher(preceding).find()) {
                 continue;   // "1 Dose (400 g)" is a pack size, not an amount
             }
-            BigDecimal low = parseNumber(m.group(1));
-            BigDecimal high = m.group(3) == null ? null : parseNumber(m.group(3));
+            String unit = m.group(5);
+            BigDecimal low = parseNumber(m.group(1), unit);
+            BigDecimal high = m.group(3) == null ? null : parseNumber(m.group(3), unit);
             if (low == null || (m.group(3) != null && high == null)) {
                 continue;
             }
-            String unit = m.group(5);
             BigDecimal scaledLow = Portions.scaleRounded(low, ctx.people(), ctx.scaleFrom());
             String replacement = formatNumber(scaledLow, unit);
             if (high != null) {

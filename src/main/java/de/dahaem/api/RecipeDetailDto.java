@@ -89,9 +89,10 @@ public record RecipeDetailDto(int id, String name, int servings, Integer serving
                               String source) {
 
         static Instruction from(RecipeInstruction instruction, Recipe recipe, Integer people, boolean useMax) {
-            String scaled = StepAmounts.render(instruction.getInstruction(), recipe.getServings(),
+            String text = StepAmounts.cleanEscapes(instruction.getInstruction());
+            String scaled = StepAmounts.render(text, recipe.getServings(),
                     recipe.getServingsMax(), people, useMax);
-            return new Instruction(instruction.getStepNumber(), instruction.getInstruction(), scaled,
+            return new Instruction(instruction.getStepNumber(), text, scaled,
                     instruction.getNotes(), instruction.getSource());
         }
     }

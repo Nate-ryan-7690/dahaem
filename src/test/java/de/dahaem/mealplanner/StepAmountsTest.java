@@ -77,6 +77,34 @@ class StepAmountsTest {
     }
 
     @Test
+    void aDotBeforeThreeDigitsIsAThousandsSeparatorForGramsAndMillilitres() {
+        // "1.200 g Wasser" is 1200 g: for 4 people (a 2-serving recipe) it doubles, it is not 1.2 g
+        assertEquals("Gib 2400 g Wasser dazu.", two("Gib 1.200 g Wasser dazu.", 4));
+        assertEquals("Gib 600 g Wasser dazu.", two("Gib 1.200 g Wasser dazu.", 1));
+        assertEquals("Gib 1500 ml Brühe dazu.", two("Gib 1.000 ml Brühe dazu.", 3));
+        assertEquals("Gib 2400 – 3000 g Wasser dazu.", two("Gib 1.200 – 1.500 g Wasser dazu.", 4));
+        // inside a bracket, too
+        assertEquals("Gib 1800 g Wasser dazu.", two("Gib 1.200 g [1.800 g | 2.400 g] Wasser dazu.", 3));
+        // everywhere else a dot stays a decimal point
+        assertEquals("Gib 3 EL Öl* dazu.", two("Gib 1.5 EL Öl* dazu.", 4));
+        assertEquals("Gib 3 kg Mehl dazu.", two("Gib 1.500 kg Mehl dazu.", 4));
+        assertEquals(0, new BigDecimal("1200").compareTo(StepAmounts.parseNumber("1.200", "g")));
+        assertEquals(0, new BigDecimal("1.2").compareTo(StepAmounts.parseNumber("1.200", "kg")));
+        assertEquals(0, new BigDecimal("0.5").compareTo(StepAmounts.parseNumber("0.500", "g")), "a leading 0 is a decimal");
+        assertEquals(0, new BigDecimal("1.25").compareTo(StepAmounts.parseNumber("1.25", "g")), "two digits is a decimal");
+    }
+
+    @Test
+    void aStrayBackslashAfterAWordBecomesThePantryMarkAgain() {
+        assertEquals("Mit Salz* und Pfeffer* abschmecken.", StepAmounts.cleanEscapes("Mit Salz\\ und Pfeffer\\ abschmecken."));
+        assertEquals("2 EL Öl*, Salz* und Pfeffer*", StepAmounts.cleanEscapes("2 EL Öl\\, Salz\\ und Pfeffer\\"));
+        assertEquals("Mit Salz*", StepAmounts.cleanEscapes("Mit Salz\\"));
+        assertEquals("a\\b und 5\\ cm", StepAmounts.cleanEscapes("a\\b und 5\\ cm"), "only after a letter and before a gap or punctuation");
+        assertEquals("Nur Text.", StepAmounts.cleanEscapes("Nur Text."));
+        assertEquals(null, StepAmounts.cleanEscapes(null));
+    }
+
+    @Test
     void dotDecimalsInside() {
         assertEquals("Gib 1½ EL Essig dazu.", two("Gib 1 EL [1.5 EL | 2 EL] Essig dazu.", 3));
     }
