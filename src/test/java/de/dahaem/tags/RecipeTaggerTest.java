@@ -28,6 +28,18 @@ class RecipeTaggerTest {
         return new RecipeFacts(1, "Test", prep, cook, kcal, protein, cuisine, List.of(ingredients));
     }
 
+    @Test
+    void aRecipeThatUsesTheThermomixGetsTheEquipmentTagAndOtherRecipesDoNot() {
+        RecipeFacts thermomix = new RecipeFacts(1, "Test", 10, 20, null, null, null,
+                List.of(veg("karotten", "vegetable")), List.of(), true);
+        RecipeFacts plain = recipe(10, 20, null, null, null, veg("karotten", "vegetable"));
+
+        assertTrue(TAGGER.derive(thermomix).tags().contains(new DerivedTag("Thermomix", "Ausstattung")));
+        assertFalse(names(TAGGER.derive(plain)).contains("Thermomix"));
+        // the equipment says nothing about the diet: the vegetarian / vegan tags do not change
+        assertEquals(names(TAGGER.derive(plain)).contains("vegan"), names(TAGGER.derive(thermomix)).contains("vegan"));
+    }
+
     private static Set<String> names(RecipeTagger.Derivation d) {
         return d.tags().stream().map(DerivedTag::name).collect(Collectors.toSet());
     }

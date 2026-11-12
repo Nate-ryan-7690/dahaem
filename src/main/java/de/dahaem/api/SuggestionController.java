@@ -1,9 +1,13 @@
 package de.dahaem.api;
 
+import de.dahaem.auth.HouseholdEquipmentService;
 import de.dahaem.diet.DietFilterService;
 import de.dahaem.diet.DietRules;
+import de.dahaem.diet.DietStatus;
+import de.dahaem.diet.DietVerdict;
 import de.dahaem.shared.PageRequest;
 import de.dahaem.suggestions.PantrySuggestionService;
+import de.dahaem.suggestions.RecipeSuggestion;
 import de.dahaem.suggestions.SuggestionService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Surfaces ranked recipe suggestions; it never picks a recipe on the user's behalf,
@@ -23,18 +28,36 @@ public class SuggestionController {
     private final SuggestionService suggestionService;
     private final PantrySuggestionService pantrySuggestions;
     private final DietFilterService dietFilter;
+    private final HouseholdEquipmentService equipment;
 
     public SuggestionController(SuggestionService suggestionService, PantrySuggestionService pantrySuggestions,
-                                DietFilterService dietFilter) {
+                                DietFilterService dietFilter, HouseholdEquipmentService equipment) {
         this.suggestionService = suggestionService;
         this.pantrySuggestions = pantrySuggestions;
         this.dietFilter = dietFilter;
+        this.equipment = equipment;
+    }
+
+    /** The recipe tags of the equipment the caller's household does not have: those recipes are never suggested. */
+    private List<RecipeSuggestion> withoutRecipesNeedingMissingEquipment(List<RecipeSuggestion> suggestions, Caller caller) {
+        List<String> excluded = equipment.excludedRecipeTags(caller.householdId());
+        if (excluded.isEmpty() || suggestions.isEmpty()) {
+            return suggestions;
+        }
+        DietRules rules = dietFilter.rules(null, excluded, null, null, null, false);
+        Map<Integer, DietVerdict> verdicts = dietFilter.judgeAll(rules,
+                suggestions.stream().map(RecipeSuggestion::getRecipeId).toList());
+        return suggestions.stream().filter(s -> {
+            DietVerdict verdict = verdicts.get(s.getRecipeId());
+            return verdict == null || verdict.status() != DietStatus.HIDDEN;
+        }).toList();
     }
 
     /** Recipes ranked by how many ingredients are currently on sale. */
     @GetMapping("/by-savings")
-    public List<RecipeSuggestionDto> bySavings() {
-        return suggestionService.suggestByDiscount().stream().map(RecipeSuggestionDto::from).toList();
+    public List<RecipeSuggestionDto> bySavings(Caller caller) {
+        return withoutRecipesNeedingMissingEquipment(suggestionService.suggestByDiscount(), caller).stream()
+                .map(RecipeSuggestionDto::from).toList();
     }
 
     /** Recipes ranked by how many ingredients are inventory items expiring within {@code days} days (default 7). */
@@ -44,7 +67,8 @@ public class SuggestionController {
         if (days < 1) {
             throw new BadRequestException("'days' must be 1 or greater");
         }
-        return suggestionService.suggestByExpiring(caller.householdId(), days).stream().map(RecipeSuggestionDto::from).toList();
+        return withoutRecipesNeedingMissingEquipment(suggestionService.suggestByExpiring(caller.householdId(), days), caller)
+                .stream().map(RecipeSuggestionDto::from).toList();
     }
 
     /**
@@ -95,6 +119,11 @@ public class SuggestionController {
                                           @RequestParam(name = "includeUnclear", defaultValue = "false") boolean includeUnclear,
                                           Caller caller) {
         PageRequest request = PageRequest.of(page, pageSize);
+        List<String> householdExcluded = equipment.excludedRecipeTags(caller.householdId());
+        if (!householdExcluded.isEmpty()) {
+            excludeTags = new java.util.ArrayList<>(excludeTags == null ? List.of() : excludeTags);
+            excludeTags.addAll(householdExcluded);
+        }
         DietRules rules = dietFilter.rules(diet, excludeTags, excludeItems, avoidTags, avoidItems, includeUnclear);
         PantrySuggestionService.Result result = pantrySuggestions.suggest(caller.householdId(), q, maxTime, store, minMatches, days, sort,
                 rules, request);

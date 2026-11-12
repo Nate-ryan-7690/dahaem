@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Two households in one database, with the real token rule (the PHP front end names the user in X-Acting-User): each sees
  * and changes only its own meal plans, whatever ids or parameters a request carries.
  */
-@SpringBootTest(properties = "dahaem.internal-token=test-secret-token")
+@SpringBootTest(properties = {"dahaem.internal-token=test-secret-token", "dahaem.diet.cache-seconds=0"})
 @AutoConfigureMockMvc
 class HouseholdSeparationApiTest {
 
@@ -356,6 +356,46 @@ class HouseholdSeparationApiTest {
                 .andExpect(jsonPath("$.code").value("NO_HOUSEHOLD"));
         mvc.perform(as(delete("/api/household/members/{id}", member), userA)).andExpect(status().isNotFound());
         mvc.perform(as(get("/api/household/members"), other)).andExpect(status().isOk());
+    }
+
+    @Test
+    void aHouseholdWithoutAThermomixNeverSeesTheRecipesThatNeedOne() throws Exception {
+        int thermo = TagFixtures.recipe("Thermo Eintopf", 10, 20, null, null);
+        TagFixtures.tag(thermo, "Thermomix", "Ausstattung", "derived");
+
+        mvc.perform(as(get("/api/household/equipment"), userA))
+                .andExpect(jsonPath("$[0].code").value("thermomix")).andExpect(jsonPath("$[0].has").value(true));
+        mvc.perform(as(get("/api/recipes/search").param("q", "Thermo"), userA))
+                .andExpect(jsonPath("$.total").value(1));
+
+        mvc.perform(as(put("/api/household/equipment/{code}", "thermomix"), userA).content("{\"has\": false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.has").value(false));
+        mvc.perform(as(get("/api/recipes/search").param("q", "Thermo"), userA))
+                .andExpect(jsonPath("$.total").value(0));
+        mvc.perform(as(get("/api/recipes"), userA))
+                .andExpect(jsonPath("$[?(@.name == 'Thermo Eintopf')]", hasSize(0)))
+                .andExpect(jsonPath("$[?(@.name == 'Suppe')]", hasSize(1)));
+        mvc.perform(as(get("/api/recipes/{id}", thermo), userA)).andExpect(status().isOk());   // by id it is still there
+        // household B has not said anything: it still sees it
+        mvc.perform(as(get("/api/recipes/search").param("q", "Thermo"), userB))
+                .andExpect(jsonPath("$.total").value(1));
+        mvc.perform(as(get("/api/household/equipment"), userB)).andExpect(jsonPath("$[0].has").value(true));
+
+        mvc.perform(as(put("/api/household/equipment/{code}", "thermomix"), userA).content("{\"has\": true}"))
+                .andExpect(status().isOk());
+        mvc.perform(as(get("/api/recipes/search").param("q", "Thermo"), userA))
+                .andExpect(jsonPath("$.total").value(1));
+    }
+
+    @Test
+    void theEquipmentCallsRefuseUnknownCodesAndBadBodies() throws Exception {
+        mvc.perform(as(put("/api/household/equipment/{code}", "airfryer"), userA).content("{\"has\": false}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(as(put("/api/household/equipment/{code}", "thermomix"), userA).content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(as(put("/api/household/equipment/{code}", "thermomix"), userA).content("{\"has\": \"no\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/household/equipment").header("X-Internal-Token", TOKEN)).andExpect(status().isBadRequest());
     }
 
     private String inviteCode(int user, String note) throws Exception {

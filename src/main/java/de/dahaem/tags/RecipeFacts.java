@@ -7,14 +7,21 @@ import java.util.Set;
  * What the tagger needs to know about one recipe. Nutrition is per serving, times are minutes;
  * {@code cuisine} is null when the recipe has none (or the column does not exist yet).
  * {@code unmatched} are the recipe's rows in recipe_unmatched_ingredient (lines the importer could not match,
- * or one 'unchecked' row): any of them makes the recipe "unklar".
+ * or one 'unchecked' row): any of them makes the recipe "unklar". {@code needsThermomix} is true when a step of the
+ * recipe uses the Thermomix (the words "Mixtopf", "Varoma" or "Thermomix").
  */
 public record RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein,
-                          String cuisine, List<Ingredient> ingredients, List<Unmatched> unmatched) {
+                          String cuisine, List<Ingredient> ingredients, List<Unmatched> unmatched,
+                          boolean needsThermomix) {
+
+    public RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein,
+                       String cuisine, List<Ingredient> ingredients, List<Unmatched> unmatched) {
+        this(id, name, prepMinutes, cookMinutes, calories, protein, cuisine, ingredients, unmatched, false);
+    }
 
     public RecipeFacts(int id, String name, int prepMinutes, int cookMinutes, Integer calories, Integer protein,
                        String cuisine, List<Ingredient> ingredients) {
-        this(id, name, prepMinutes, cookMinutes, calories, protein, cuisine, ingredients, List.of());
+        this(id, name, prepMinutes, cookMinutes, calories, protein, cuisine, ingredients, List.of(), false);
     }
 
     /**

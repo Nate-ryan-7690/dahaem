@@ -50,6 +50,32 @@ class RecipeTagServiceTest {
     }
 
     @Test
+    void aRecipeWithAThermomixStepGetsTheThermomixTagAndTheOthersDoNot() {
+        int thermo = TagFixtures.recipe("Katsu Bowl", 15, 40, 750, 38);
+        TagFixtures.ingredient(thermo, carrot);
+        TagFixtures.run("INSERT INTO recipe_instructions (recipe_instructions_recipe_id, recipe_instructions_step_number, "
+                + "recipe_instructions_instruction, recipe_instructions_source) VALUES (?, 1, ?, 'test')", thermo,
+                "Ingwer in den Mixtopf geben, 3 Sek./Stufe 8 zerkleinern.");
+        int varoma = TagFixtures.recipe("Gedünsteter Fisch", 15, 40, 750, 38);
+        TagFixtures.ingredient(varoma, carrot);
+        TagFixtures.run("INSERT INTO recipe_instructions (recipe_instructions_recipe_id, recipe_instructions_step_number, "
+                + "recipe_instructions_instruction, recipe_instructions_source) VALUES (?, 1, ?, 'test')", varoma,
+                "Fisch in den Varoma legen und 18 Min. garen.");
+        int pan = TagFixtures.recipe("Pfannengemüse", 15, 40, 750, 38);
+        TagFixtures.ingredient(pan, carrot);
+        TagFixtures.run("INSERT INTO recipe_instructions (recipe_instructions_recipe_id, recipe_instructions_step_number, "
+                + "recipe_instructions_instruction, recipe_instructions_source) VALUES (?, 1, ?, 'test')", pan,
+                "Karotten in einer Pfanne anbraten.");
+
+        service.commit(service.plan());
+
+        assertTrue(tags(thermo, "derived").contains("Thermomix"));
+        assertTrue(tags(varoma, "derived").contains("Thermomix"));
+        assertFalse(tags(pan, "derived").contains("Thermomix"));
+        assertEquals(1, TagFixtures.count("SELECT COUNT(*) FROM tag WHERE tag_name = 'Thermomix' AND tag_category = 'Ausstattung'"));
+    }
+
+    @Test
     void mixedMinceGivesRindAndSchwein() {
         int bolognese = TagFixtures.recipe("Bolognese", 15, 40, 750, 38);   // 38 g x 4 / 750 kcal = 20.3 % of the energy: proteinreich
         TagFixtures.ingredient(bolognese, mince);

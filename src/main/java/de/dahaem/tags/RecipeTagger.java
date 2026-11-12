@@ -83,6 +83,9 @@ public class RecipeTagger {
         if (recipe.cuisine() != null && !recipe.cuisine().isBlank()) {
             tags.add(new DerivedTag(recipe.cuisine().trim(), DerivedTag.KUECHE));
         }
+        if (recipe.needsThermomix()) {
+            tags.add(new DerivedTag(DerivedTag.THERMOMIX, DerivedTag.AUSSTATTUNG));
+        }
         return new Derivation(tags, dietKnown);
     }
 
