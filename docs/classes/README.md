@@ -34,7 +34,7 @@ flowchart TD
     barcode -->|2| finance
     barcode -->|2| inventory
     barcode -->|7| stores
-    diet -->|12| tags
+    diet -->|11| tags
     finance -->|3| inventory
     finance -->|1| stores
     mealplanner -->|5| diet

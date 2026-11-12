@@ -12,6 +12,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+import static de.dahaem.testsupport.TestSql.count;
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -87,21 +89,5 @@ class ShoppingListSchemaMigrationTest {
             }
         }
         return out;
-    }
-
-    private static int count(String sql) throws SQLException {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            rs.next();
-            return rs.getInt(1);
-        }
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 }

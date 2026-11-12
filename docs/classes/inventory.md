@@ -53,7 +53,6 @@ classDiagram
         +findById(int householdId, int id) Optional~Item~
         +findCatalogueItem(int id) Optional~Item~
         +findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit) int
-        +updateQuantity(int householdId, int id, int newQuantity) void
         +findByIdForUpdate(Connection con, int householdId, int id) Optional~Item~
         +setStock(Connection con, int householdId, int id, int quantity, LocalDate earliestExpDate) void
     }
@@ -92,7 +91,6 @@ classDiagram
 | `Optional<Item> findById(int householdId, int id)` | public | The catalogue item with the stock of this household, or empty if there is no such item. |
 | `Optional<Item> findCatalogueItem(int id)` | public | The catalogue item WITHOUT any household's stock: quantity 0 and no expiry date. |
 | `int findOrCreateGenericItem(Connection con, String nameEnglish, String nameDeutsch, String category, String unit)` | public | Find-or-create a generic inventory_item by (name_english, category), on the caller's transaction (see PurchaseRepository.openTransaction()/StoreRepository.openTransaction()). |
-| `void updateQuantity(int householdId, int id, int newQuantity)` | public | Sets the quantity of this household's stock of an item (the expiry date stays as it is). |
 | `Optional<Item> findByIdForUpdate(Connection con, int householdId, int id)` | public | The item with this household's stock, locked for the caller's transaction (see PurchaseRepository.openTransaction()). |
 | `void setStock(Connection con, int householdId, int id, int quantity, LocalDate earliestExpDate)` | public | Sets this household's stock of an item and its earliest expiry date together (null date = none known). |
 

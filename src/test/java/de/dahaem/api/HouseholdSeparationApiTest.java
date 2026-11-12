@@ -19,6 +19,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -541,12 +542,6 @@ class HouseholdSeparationApiTest {
                 .andExpect(jsonPath("$.replayed").value(true));
         mvc.perform(as(get("/api/inventory"), userB))
                 .andExpect(jsonPath("$[?(@.id == 5001)].quantity").value(1000));
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 
     private static int id(String sql) throws SQLException {

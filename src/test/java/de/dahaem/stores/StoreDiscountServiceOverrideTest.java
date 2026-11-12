@@ -1,6 +1,5 @@
 package de.dahaem.stores;
 
-import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,14 +8,13 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+import static de.dahaem.testsupport.TestSql.count;
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -111,20 +109,6 @@ class StoreDiscountServiceOverrideTest {
         String row = lines.get(1);
         assertTrue(row.startsWith(store + "\t") && row.contains("Mystery Bundle") && row.contains("\tLidl\tAGGREGATOR\tmystery-500g\t")
                 && row.contains("aktionspreis.de/prospekt/lidl-angebote") && row.contains("\t500 g\t2.49\t" + LocalDate.now()), row);
-    }
-
-    private static int count(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            rs.next();
-            return rs.getInt(1);
-        }
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 
 }

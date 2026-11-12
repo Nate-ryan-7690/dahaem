@@ -1,6 +1,5 @@
 package de.dahaem.diet;
 
-import de.dahaem.tags.CatalogItem;
 import de.dahaem.tags.RecipeFacts;
 
 import java.util.List;

@@ -6,7 +6,6 @@ import de.dahaem.diet.DietPresets;
 import de.dahaem.diet.DietRules;
 import de.dahaem.diet.DietStatus;
 import de.dahaem.mealplanner.RecipeRepository;
-import de.dahaem.shared.Database;
 import de.dahaem.shared.PageRequest;
 import de.dahaem.tags.TagFixtures;
 import de.dahaem.tags.TagRepository;
@@ -18,13 +17,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -358,11 +356,5 @@ class PantrySuggestionServiceTest {
         exec("INSERT INTO store_discount (store_discount_id, store_discount_store_item_id, " +
                 "store_discount_start_date, store_discount_end_date, store_discount_price, store_discount_notes) " +
                 "VALUES (" + id + ", " + storeItemId + ", '" + start + "', '" + end + "', " + price + ", NULL)");
-    }
-
-    private void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 }

@@ -1,7 +1,6 @@
 package de.dahaem.barcode;
 
 import de.dahaem.inventory.InventoryRepository;
-import de.dahaem.shared.Database;
 import de.dahaem.stores.StoreRepository;
 import de.dahaem.stores.UnknownBrandException;
 import de.dahaem.testsupport.TestDatabase;
@@ -10,13 +9,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import static de.dahaem.testsupport.TestSql.count;
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -224,22 +222,6 @@ class BarcodeServiceTest {
     }
 
     // ---------- helpers ----------
-
-    private static int count(String sql) throws SQLException {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            rs.next();
-            return rs.getInt(1);
-        }
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
-    }
 
     /** A data source that answers what the test says and counts how often it was asked. */
     private static class FakeSource implements ProductDataSource {

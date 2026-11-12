@@ -8,14 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -193,12 +190,6 @@ class SuggestionServiceTest {
         exec("INSERT INTO store_discount (store_discount_id, store_discount_store_item_id, " +
                 "store_discount_start_date, store_discount_end_date, store_discount_price, store_discount_notes) " +
                 "VALUES (" + id + ", " + storeItemId + ", '" + start + "', '" + end + "', 1.00, NULL)");
-    }
-
-    private void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 
 }
