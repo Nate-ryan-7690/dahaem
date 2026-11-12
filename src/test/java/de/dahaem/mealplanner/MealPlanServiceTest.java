@@ -8,14 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,12 +61,6 @@ class MealPlanServiceTest {
                 && r.getRecipeName().equals("Suppe") && r.getMealTime().equals("dinner")));
         assertTrue(recipes.stream().anyMatch(r -> r.getRecipeId() == 2
                 && r.getRecipeName().equals("Eintopf") && r.getMealTime().equals("lunch")));
-    }
-
-    private void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 
 }

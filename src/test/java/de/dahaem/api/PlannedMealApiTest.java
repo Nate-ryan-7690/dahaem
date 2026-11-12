@@ -22,6 +22,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -314,12 +315,6 @@ class PlannedMealApiTest {
         mvc.perform(post("/api/meal-plans/meals").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated());
         return id("SELECT MAX(meal_plan_recipe_entry_id) FROM meal_plan_recipe");
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 
     private static int id(String sql) throws SQLException {

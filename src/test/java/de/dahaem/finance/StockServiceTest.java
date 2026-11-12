@@ -16,6 +16,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -150,13 +151,6 @@ class StockServiceTest {
              ResultSet rs = st.executeQuery(sql)) {
             rs.next();
             return rs.getInt(1);
-        }
-    }
-
-    private void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement()) {
-            st.execute(sql);
         }
     }
 }

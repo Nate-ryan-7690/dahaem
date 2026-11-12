@@ -4,7 +4,6 @@ import de.dahaem.inventory.InventoryRepository;
 import de.dahaem.mealplanner.MealPlanRepository;
 import de.dahaem.mealplanner.MealPlanService;
 import de.dahaem.mealplanner.PlannedMeal;
-import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestClock;
 import de.dahaem.testsupport.TestDatabase;
 import de.dahaem.testsupport.TestHousehold;
@@ -12,13 +11,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.Map;
 
+import static de.dahaem.testsupport.TestSql.count;
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -209,19 +207,5 @@ class ShoppingListByServingsTest {
     private static int onionOnList(int listId) throws SQLException {
         return count("SELECT shopping_list_item_quantity_needed FROM shopping_list_item WHERE shopping_list_id = "
                 + listId + " AND shopping_list_item_inventory_item_id = 1");
-    }
-
-    private static int count(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            rs.next();
-            return rs.getInt(1);
-        }
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 }

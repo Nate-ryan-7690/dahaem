@@ -124,17 +124,6 @@ public class PurchaseRepository {
         }
     }
 
-    /** The inventory_item this store_item is linked to (store_item.store_item_item_id), or null if the store_item is unknown. */
-    public Integer findInventoryItemIdForStoreItem(Connection con, int storeItemId) throws SQLException {
-        String sql = "SELECT store_item_item_id FROM store_item WHERE store_item_id = ?";
-        try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, storeItemId);
-            try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getInt(1) : null;
-            }
-        }
-    }
-
     /** One purchase of an item with the facts a batch listing needs; {@code remaining} is null = nothing used yet. */
     public record BatchRow(int purchaseId, int storeItemId, String storeName, String brandName, LocalDate purchaseDate,
                            LocalDate expirationDate, int quantityPurchased, int packSize, String packUnit,

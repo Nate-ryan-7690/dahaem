@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -511,11 +512,5 @@ class ReceiptImportTest {
 
     private static int count(String sql) throws SQLException {
         return Integer.parseInt(strings(sql).get(0));
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 }

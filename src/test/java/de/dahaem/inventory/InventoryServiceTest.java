@@ -8,14 +8,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,12 +113,6 @@ class InventoryServiceTest {
         assertTrue(expiring.stream().anyMatch(i -> i.getId() == 4), "an already-expired item counts as within the window");
         assertTrue(expiring.stream().noneMatch(i -> i.getId() == 1), "items without an expiry date must be ignored");
         assertTrue(expiring.stream().noneMatch(i -> i.getId() == 3), "an item expiring after the limit must be excluded");
-    }
-
-    private void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 
 }

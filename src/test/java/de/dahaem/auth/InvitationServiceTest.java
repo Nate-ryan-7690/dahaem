@@ -1,6 +1,5 @@
 package de.dahaem.auth;
 
-import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestClock;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
@@ -9,15 +8,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static de.dahaem.testsupport.TestSql.count;
+import static de.dahaem.testsupport.TestSql.text;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -194,20 +192,4 @@ class InvitationServiceTest {
     }
 
     // ---------- helpers ----------
-
-    private static int count(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            rs.next();
-            return rs.getInt(1);
-        }
-    }
-
-    private static String text(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement();
-             ResultSet rs = st.executeQuery(sql)) {
-            rs.next();
-            return rs.getString(1);
-        }
-    }
 }

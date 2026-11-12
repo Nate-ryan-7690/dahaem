@@ -1,17 +1,15 @@
 package de.dahaem.stores;
 
-import de.dahaem.shared.Database;
 import de.dahaem.testsupport.TestDatabase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -68,12 +66,5 @@ class StoreCatalogServiceTest {
         assertTrue(repository.findStoreByName("Aldii").isEmpty());
         assertEquals("Barilla", repository.findBrandByName("BARILLA").orElseThrow().name());
         assertTrue(repository.findBrandByName("Barilaa").isEmpty());
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection();
-             Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 }

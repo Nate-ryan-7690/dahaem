@@ -177,22 +177,6 @@ public class InventoryRepository {
         }
     }
 
-    /** Sets the quantity of this household's stock of an item (the expiry date stays as it is). */
-    public void updateQuantity(int householdId, int id, int newQuantity) {
-        String sql = "INSERT INTO household_stock (household_stock_household_id, household_stock_item_id, "
-                + "household_stock_quantity) VALUES (?, ?, ?) "
-                + "ON DUPLICATE KEY UPDATE household_stock_quantity = VALUES(household_stock_quantity)";
-        try (Connection con = Database.getConnection();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, householdId);
-            ps.setInt(2, id);
-            ps.setInt(3, newQuantity);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException("Could not update quantity for item " + id, e);
-        }
-    }
-
     /** The item with this household's stock, locked for the caller's transaction (see PurchaseRepository.openTransaction()). */
     public Optional<Item> findByIdForUpdate(Connection con, int householdId, int id) throws SQLException {
         String sql = "SELECT " + ITEM_COLUMNS + " " + STOCK_JOIN + " WHERE ii.inventory_item_id = ? FOR UPDATE";

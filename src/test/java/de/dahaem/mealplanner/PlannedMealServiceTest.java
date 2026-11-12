@@ -1,6 +1,5 @@
 package de.dahaem.mealplanner;
 
-import de.dahaem.shared.Database;
 import de.dahaem.tags.TagFixtures;
 import de.dahaem.testsupport.TestClock;
 import de.dahaem.testsupport.TestDatabase;
@@ -9,13 +8,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
+import static de.dahaem.testsupport.TestSql.exec;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -381,11 +379,5 @@ class PlannedMealServiceTest {
 
     private Integer own(PlannedMeal meal) {
         return service.findMeal(meal.getEntryId()).orElseThrow().getOwnServings();
-    }
-
-    private static void exec(String sql) throws SQLException {
-        try (Connection con = Database.getConnection(); Statement st = con.createStatement()) {
-            st.execute(sql);
-        }
     }
 }
